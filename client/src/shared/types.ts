@@ -1,7 +1,10 @@
+import type { ModuleGraph } from "./modules";
+
 export interface Entry {
   id: string;
   name: string;
   children?: Entry[];
+  exported?: boolean;
 }
 
 export interface Project {
@@ -22,6 +25,9 @@ export interface WorkspaceApi {
   create(): Promise<Project | null>;
   read(path: string): Promise<string>;
   save(request: SaveRequest): Promise<void>;
+  graph(path: string, code: string): Promise<ModuleGraph>;
+  toggleExport(path: string): Promise<void>;
+  link(source: string, target: string): Promise<string>;
   add(parent: string, name: string, folder: boolean): Promise<string>;
   move(from: string, to: string): Promise<void>;
   trash(path: string): Promise<void>;

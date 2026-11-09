@@ -76,6 +76,13 @@ function registerIpc() {
   handle("project:current", () => project.project());
   handle("project:read", (relative: string) => project.read(relative));
   handle("project:save", (request: SaveRequest) => project.save(request));
+  handle("project:graph", (path: string, code: string) =>
+    project.graph(path, code),
+  );
+  handle("project:toggle-export", (path: string) => project.toggleExport(path));
+  handle("project:link", (source: string, target: string) =>
+    project.link(source, target),
+  );
   handle("project:add", (parent: string, name: string, folder: boolean) =>
     project.add(parent, name, folder),
   );

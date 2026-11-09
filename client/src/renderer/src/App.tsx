@@ -13,8 +13,11 @@ import {
   HardDrive,
   Loader2,
   MoreHorizontal,
+  Package,
   PanelLeftClose,
   PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
   Pencil,
   Play,
   Plus,
@@ -24,7 +27,9 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { readControls } from "../../shared/controls";
+import { hasExports } from "../../shared/modules";
 import {
   type Entry,
   isWithin,
@@ -32,8 +37,10 @@ import {
   type Project,
   parentPath,
 } from "../../shared/types";
+import { ControlsPanel } from "./ControlsPanel";
 import { Dialog } from "./Dialog";
 import { Explorer } from "./Explorer";
+import { FileTabs } from "./FileTabs";
 import { type Player, StrudelEditor } from "./StrudelEditor";
 
 interface Document {
@@ -50,6 +57,28 @@ type Modal =
   | { kind: "help" };
 
 const api = window.workspace;
+function findEntry(entries: Entry[], path: string): Entry | undefined {
+  for (const entry of entries) {
+    if (entry.id === path) return entry;
+    if (entry.children) {
+      const found = findEntry(entry.children, path);
+      if (found) return found;
+    }
+  }
+}
+function markExports(
+  entries: Entry[],
+  path: string,
+  exported: boolean,
+): Entry[] {
+  return entries.map((entry) =>
+    entry.id === path
+      ? { ...entry, exported }
+      : entry.children
+        ? { ...entry, children: markExports(entry.children, path, exported) }
+        : entry,
+  );
+}
 const message = (error: unknown) =>
   String(error instanceof Error ? error.message : error).replace(
     /^Error invoking remote method '[^']+': Error: /,
@@ -60,6 +89,8 @@ export function App() {
   const [editorVersion, setEditorVersion] = useState(0);
   const [project, setProject] = useState<Project | null>(null);
   const [document, setDocument] = useState<Document | null>(null);
+  const [tabs, setTabs] = useState<string[]>([]);
+  const tabsRef = useRef<string[]>([]);
   const documentRef = useRef<Document | null>(null);
   const saving = useRef<Promise<void> | null>(null);
   const player = useRef<Player | null>(null);
@@ -74,6 +105,7 @@ export function App() {
   const [selection, setSelection] = useState<Entry | null>(null);
   const [search, setSearch] = useState("");
   const [sidebar, setSidebar] = useState(true);
+  const [controlsVisible, setControlsVisible] = useState(true);
   const [projectMenu, setProjectMenu] = useState(false);
   const [context, setContext] = useState<{
     entry: Entry;
@@ -85,10 +117,20 @@ export function App() {
   const [modalError, setModalError] = useState<string | null>(null);
   const [position, setPosition] = useState([1, 1]);
 
-  const updateDocument = useCallback((next: Document | null) => {
-    documentRef.current = next;
-    setDocument(next);
+  const updateTabs = useCallback((next: string[]) => {
+    tabsRef.current = next;
+    setTabs(next);
   }, []);
+
+  const updateDocument = useCallback(
+    (next: Document | null) => {
+      documentRef.current = next;
+      setDocument(next);
+      if (next && !tabsRef.current.includes(next.path))
+        updateTabs([...tabsRef.current, next.path]);
+    },
+    [updateTabs],
+  );
 
   const flush = useCallback(async () => {
     if (saving.current) return saving.current;
@@ -108,6 +150,18 @@ export function App() {
           const current = documentRef.current;
           if (current?.path === snapshot.path)
             updateDocument({ ...current, saved: snapshot.code });
+          setProject((currentProject) =>
+            currentProject
+              ? {
+                  ...currentProject,
+                  entries: markExports(
+                    currentProject.entries,
+                    snapshot.path,
+                    hasExports(snapshot.code),
+                  ),
+                }
+              : currentProject,
+          );
         } catch (error) {
           setSavedStatus("Not saved");
           throw error;
@@ -138,20 +192,47 @@ export function App() {
     }
   }, []);
 
+  const activateFile = useCallback(
+    async (path: string) => {
+      await flush();
+      const code = await api.read(path);
+      await player.current?.stop();
+      setPlayback({ started: false, pending: false });
+      setPosition([1, 1]);
+      updateDocument({ path, code, saved: code });
+      setSavedStatus("Saved locally");
+    },
+    [flush, updateDocument],
+  );
+
   const openFile = useCallback(
     async (path: string) => {
       if (documentRef.current?.path === path) return;
+      await run(() => activateFile(path));
+    },
+    [activateFile, run],
+  );
+
+  const closeTab = useCallback(
+    async (path: string) => {
       await run(async () => {
-        await flush();
-        const code = await api.read(path);
-        await player.current?.stop();
-        setPlayback({ started: false, pending: false });
-        setPosition([1, 1]);
-        updateDocument({ path, code, saved: code });
-        setSavedStatus("Saved locally");
+        const index = tabsRef.current.indexOf(path);
+        if (index < 0) return;
+        const remaining = tabsRef.current.filter((item) => item !== path);
+        if (documentRef.current?.path === path) {
+          await flush();
+          const next = remaining[Math.min(index, remaining.length - 1)];
+          if (next) await activateFile(next);
+          else {
+            await player.current?.stop();
+            updateDocument(null);
+            setPlayback({ started: false, pending: false });
+          }
+        }
+        updateTabs(remaining);
       });
     },
-    [flush, run, updateDocument],
+    [activateFile, flush, run, updateDocument, updateTabs],
   );
 
   useEffect(() => {
@@ -213,7 +294,9 @@ export function App() {
       if (!(event.metaKey || event.ctrlKey)) return;
       if (event.key === "w") {
         event.preventDefault();
-        api.close();
+        event.stopPropagation();
+        if (documentRef.current) void closeTab(documentRef.current.path);
+        else api.close();
       }
       if (event.key === "s") {
         event.preventDefault();
@@ -236,7 +319,7 @@ export function App() {
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [flush, play, stop]);
+  }, [closeTab, flush, play, stop]);
 
   useEffect(() => {
     if (!context && !projectMenu) return;
@@ -274,9 +357,44 @@ export function App() {
     setProject(await api.current());
   }
 
+  async function syncDocument() {
+    const current = documentRef.current;
+    if (!current) return;
+    const code = await api.read(current.path);
+    if (code !== current.code) player.current?.replaceCode(code);
+    updateDocument({ ...current, code, saved: code });
+    setSavedStatus("Saved locally");
+  }
+
+  async function toggleExport(file: string) {
+    setContext(null);
+    await run(async () => {
+      await flush();
+      await api.toggleExport(file);
+      await syncDocument();
+      await refresh();
+    });
+  }
+
+  async function linkSnippet(source: string) {
+    await run(async () => {
+      const target = documentRef.current?.path;
+      if (!target) return;
+      await flush();
+      await api.link(source, target);
+      await syncDocument();
+      await refresh();
+    });
+  }
+
   async function move(from: string, to: string) {
     await flush();
     await api.move(from, to);
+    updateTabs(
+      tabsRef.current.map((file) =>
+        isWithin(file, from) ? to + file.slice(from.length) : file,
+      ),
+    );
     const current = documentRef.current;
     if (current && isWithin(current.path, from)) {
       updateDocument({
@@ -285,6 +403,7 @@ export function App() {
       });
     }
     setSelection(null);
+    await syncDocument();
     await refresh();
   }
 
@@ -294,6 +413,7 @@ export function App() {
       const next = await (create ? api.create() : api.open());
       if (!next) return;
       await player.current?.stop();
+      updateTabs([]);
       updateDocument(null);
       setPlayback({ started: false, pending: false });
       setProject(next);
@@ -342,6 +462,10 @@ export function App() {
       } else if (modal.kind === "delete") {
         await flush();
         await api.trash(modal.entry.id);
+        const remaining = tabsRef.current.filter(
+          (file) => !isWithin(file, modal.entry.id),
+        );
+        updateTabs(remaining);
         if (
           documentRef.current &&
           isWithin(documentRef.current.path, modal.entry.id)
@@ -349,6 +473,7 @@ export function App() {
           await player.current?.stop();
           updateDocument(null);
           setPlayback({ started: false, pending: false });
+          if (remaining.length) await activateFile(remaining[0]);
         }
         setSelection(null);
         await refresh();
@@ -374,9 +499,15 @@ export function App() {
       entry.children ? [entry, ...folders(entry.children)] : [],
     );
   const shortcut = navigator.platform.includes("Mac") ? "⌘" : "Ctrl";
+  const controlState = useMemo(
+    () => readControls(document?.code ?? ""),
+    [document?.code],
+  );
 
   return (
-    <div className={`app ${sidebar ? "" : "sidebar-hidden"}`}>
+    <div
+      className={`app ${sidebar ? "" : "sidebar-hidden"} ${controlsVisible ? "" : "controls-hidden"}`}
+    >
       <div className="titlebar">
         <div className="titlebar-sidebar">
           <span className="app-name">
@@ -397,8 +528,35 @@ export function App() {
           </button>
         </div>
         <div className="titlebar-main">
-          <span>Music workspace</span>
-          <span className="prototype-label">LOCAL</span>
+          <FileTabs
+            tabs={tabs.map((path) => ({
+              path,
+              exported:
+                path === document?.path
+                  ? hasExports(document.code)
+                  : Boolean(findEntry(project?.entries ?? [], path)?.exported),
+              dirty:
+                path === document?.path && document.code !== document.saved,
+            }))}
+            active={document?.path ?? null}
+            disabled={busy}
+            onSelect={(path) => void openFile(path)}
+            onClose={(path) => void closeTab(path)}
+          />
+          <button
+            type="button"
+            className="icon-button"
+            title="Toggle controls"
+            aria-label="Toggle controls"
+            aria-expanded={controlsVisible}
+            onClick={() => setControlsVisible(!controlsVisible)}
+          >
+            {controlsVisible ? (
+              <PanelRightClose size={17} />
+            ) : (
+              <PanelRightOpen size={17} />
+            )}
+          </button>
         </div>
       </div>
 
@@ -513,7 +671,15 @@ export function App() {
             </div>
           </div>
           <Explorer
-            entries={project?.entries ?? []}
+            entries={
+              document
+                ? markExports(
+                    project?.entries ?? [],
+                    document.path,
+                    hasExports(document.code),
+                  )
+                : (project?.entries ?? [])
+            }
             selected={document?.path ?? null}
             search={search}
             disabled={busy}
@@ -566,12 +732,24 @@ export function App() {
         </aside>
       )}
 
-      <main className="workspace">
+      <main
+        className="workspace"
+        id="snippet-panel"
+        role="tabpanel"
+        aria-labelledby={
+          document ? `tab-${encodeURIComponent(document.path)}` : undefined
+        }
+        aria-label={document ? undefined : "Snippet editor"}
+      >
         <header className="editor-toolbar">
           <div className="file-heading">
             {document ? (
               <>
-                <FileCode2 size={17} />
+                {hasExports(document.code) ? (
+                  <Package size={17} />
+                ) : (
+                  <FileCode2 size={17} />
+                )}
                 <div>
                   <strong>{filename}</strong>
                   <span>
@@ -614,9 +792,23 @@ export function App() {
             <button
               type="button"
               className="icon-button"
-              title="Editor shortcuts"
-              aria-label="Editor shortcuts"
-              onClick={() => showModal({ kind: "help" })}
+              title="Snippet actions"
+              aria-label="Snippet actions"
+              disabled={!document || busy}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (!document) return;
+                const rect = event.currentTarget.getBoundingClientRect();
+                setContext({
+                  entry: {
+                    id: document.path,
+                    name: filename ?? document.path,
+                    exported: hasExports(document.code),
+                  },
+                  x: rect.right - 220,
+                  y: rect.bottom + 8,
+                });
+              }}
             >
               <MoreHorizontal size={18} />
             </button>
@@ -649,6 +841,9 @@ export function App() {
           <StrudelEditor
             key={`${project?.root}/${document.path}/${editorVersion}`}
             initialCode={document.code}
+            path={document.path}
+            disabled={busy}
+            onLink={(source) => void linkSnippet(source)}
             onChange={(code) => {
               const current = documentRef.current;
               if (current) {
@@ -732,11 +927,39 @@ export function App() {
         </footer>
       </main>
 
+      {controlsVisible && (
+        <ControlsPanel
+          key={`${project?.root}/${document?.path}/${editorVersion}`}
+          controls={controlState.controls}
+          valid={controlState.valid}
+          hasDocument={Boolean(document)}
+          disabled={busy}
+          onChange={(name, value) => player.current?.changeControl(name, value)}
+          onIgnore={(name) => player.current?.ignoreControl(name)}
+        />
+      )}
+
       {context && (
         <div
           className="menu context-menu"
           style={{ left: context.x, top: context.y }}
         >
+          {!context.entry.children && (
+            <>
+              <button
+                type="button"
+                onClick={() => void toggleExport(context.entry.id)}
+              >
+                {context.entry.exported ? (
+                  <FileCode2 size={14} />
+                ) : (
+                  <Package size={14} />
+                )}
+                {context.entry.exported ? "Remove exports" : "Make exportable"}
+              </button>
+              <div className="menu-divider" />
+            </>
+          )}
           {context.entry.children && (
             <>
               <button

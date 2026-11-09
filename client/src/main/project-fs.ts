@@ -1,6 +1,17 @@
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
 import path from "node:path";
+import {
+  addImport,
+  editSource,
+  hasExports,
+  importsOf,
+  loadGraph,
+  makeExportable,
+  relativeImport,
+  resolveImport,
+  toggleExports,
+} from "../shared/modules";
 import type { Entry, Project, SaveRequest } from "../shared/types";
 
 const ignored = new Set(["node_modules", "out", "release"]);
@@ -76,7 +87,9 @@ export class ProjectFs {
         name: item.name,
         ...(item.isDirectory()
           ? { children: await this.readDirectory(id) }
-          : {}),
+          : hasExports(await this.read(id).catch(() => ""))
+            ? { exported: true }
+            : {}),
       });
     }
     return entries.sort((a, b) => {
@@ -139,6 +152,84 @@ export class ProjectFs {
     return relative;
   }
 
+  async graph(entry: string, code: string) {
+    await this.resolve(entry);
+    return loadGraph(entry, (file) =>
+      file === entry ? Promise.resolve(code) : this.read(file),
+    );
+  }
+
+  private async applyEdits(
+    changes: SaveRequest[],
+    finish?: () => Promise<void>,
+  ) {
+    // Preflight every file before writing either side of a link/refactor.
+    for (const change of changes) {
+      if ((await this.read(change.path)) !== change.expected) {
+        throw new Error(
+          `${change.path}: changed on disk; retry after reloading.`,
+        );
+      }
+    }
+    const applied: SaveRequest[] = [];
+    try {
+      for (const change of changes) {
+        if (change.content === change.expected) continue;
+        await this.save(change);
+        applied.push(change);
+      }
+      await finish?.();
+    } catch (error) {
+      const failures: string[] = [];
+      for (const change of applied.reverse()) {
+        try {
+          await this.save({
+            path: change.path,
+            expected: change.content,
+            content: change.expected,
+          });
+        } catch {
+          failures.push(change.path);
+        }
+      }
+      if (failures.length)
+        throw new Error(
+          `${String(error)}. Could not restore externally changed files: ${failures.join(", ")}`,
+        );
+      throw error;
+    }
+  }
+
+  async toggleExport(file: string) {
+    const code = await this.read(file);
+    await this.save({
+      path: file,
+      expected: code,
+      content: toggleExports(code, file),
+    });
+  }
+
+  async link(source: string, target: string) {
+    if (source === target) throw new Error("A snippet cannot import itself.");
+    const sourceCode = await this.read(source);
+    const targetCode = await this.read(target);
+    const exported = makeExportable(sourceCode, source);
+    const imported = addImport(targetCode, target, source);
+    // Reject cycles and unresolved imports without partially changing files.
+    await loadGraph(target, (file) =>
+      file === source
+        ? Promise.resolve(exported)
+        : file === target
+          ? Promise.resolve(imported.code)
+          : this.read(file),
+    );
+    await this.applyEdits([
+      { path: source, expected: sourceCode, content: exported },
+      { path: target, expected: targetCode, content: imported.code },
+    ]);
+    return imported.name;
+  }
+
   async move(from: string, to: string): Promise<void> {
     if (!from || !to) throw new Error("The project root cannot be moved.");
     if (from === to) return;
@@ -158,7 +249,41 @@ export class ProjectFs {
       });
     if (exists)
       throw new Error("A file or folder with this name already exists.");
-    await fs.rename(source, destination);
+    const relocate = (file: string) =>
+      file === from || file.startsWith(`${from}/`)
+        ? to + file.slice(from.length)
+        : file;
+    const changes: SaveRequest[] = [];
+    const visit = async (entries: Entry[]) => {
+      for (const entry of entries) {
+        if (entry.children) {
+          await visit(entry.children);
+          continue;
+        }
+        const code = await this.read(entry.id);
+        const edits = importsOf(code, entry.id).flatMap((node) => {
+          const imported = resolveImport(entry.id, String(node.source.value));
+          const nextImporter = relocate(entry.id);
+          const nextImported = relocate(imported);
+          if (nextImporter === entry.id && nextImported === imported) return [];
+          return [
+            {
+              start: node.source.start,
+              end: node.source.end,
+              text: `'${relativeImport(nextImporter, nextImported).replaceAll("'", "\\'")}'`,
+            },
+          ];
+        });
+        if (edits.length)
+          changes.push({
+            path: entry.id,
+            expected: code,
+            content: editSource(code, edits),
+          });
+      }
+    };
+    await visit(await this.readDirectory(""));
+    await this.applyEdits(changes, () => fs.rename(source, destination));
   }
 
   async trash(

@@ -7,6 +7,9 @@ const api: WorkspaceApi = {
   create: () => ipcRenderer.invoke("project:create"),
   read: (path) => ipcRenderer.invoke("project:read", path),
   save: (request) => ipcRenderer.invoke("project:save", request),
+  graph: (path, code) => ipcRenderer.invoke("project:graph", path, code),
+  toggleExport: (path) => ipcRenderer.invoke("project:toggle-export", path),
+  link: (source, target) => ipcRenderer.invoke("project:link", source, target),
   add: (parent, name, folder) =>
     ipcRenderer.invoke("project:add", parent, name, folder),
   move: (from, to) => ipcRenderer.invoke("project:move", from, to),

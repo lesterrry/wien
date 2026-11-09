@@ -5,9 +5,11 @@ import {
   Folder,
   FolderOpen,
   MoreHorizontal,
+  Package,
 } from "lucide-react";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { type NodeRendererProps, Tree, type TreeApi } from "react-arborist";
+import { useDragDropManager } from "react-dnd";
 import type { Entry } from "../../shared/types";
 
 const ExplorerActions = createContext<{
@@ -18,12 +20,19 @@ const ExplorerActions = createContext<{
 
 function Row({ node, style, dragHandle }: NodeRendererProps<Entry>) {
   const { disabled, onOpen, onMenu } = useContext(ExplorerActions);
-  const Icon = node.isLeaf ? FileCode2 : node.isOpen ? FolderOpen : Folder;
+  const Icon = node.isLeaf
+    ? node.data.exported
+      ? Package
+      : FileCode2
+    : node.isOpen
+      ? FolderOpen
+      : Folder;
   return (
     <div
       style={style}
       ref={dragHandle}
       className={`tree-row ${node.isSelected ? "selected" : ""}`}
+      data-exported={node.isLeaf ? Boolean(node.data.exported) : undefined}
     >
       {node.isEditing ? (
         <div className="tree-label">
@@ -61,6 +70,13 @@ function Row({ node, style, dragHandle }: NodeRendererProps<Entry>) {
             else onOpen(node.id);
           }}
           disabled={disabled}
+          title={
+            node.isLeaf
+              ? node.data.exported
+                ? "Exported snippet · drag into the editor to import"
+                : "Snippet · drag into the editor to export and import"
+              : undefined
+          }
         >
           {node.isInternal ? (
             node.isOpen ? (
@@ -118,6 +134,7 @@ export function Explorer({
 }) {
   const container = useRef<HTMLDivElement>(null);
   const tree = useRef<TreeApi<Entry>>(null);
+  const dndManager = useDragDropManager();
   const [size, setSize] = useState({ width: 240, height: 500 });
   useEffect(() => {
     if (!container.current) return;
@@ -136,6 +153,7 @@ export function Explorer({
       <div className="explorer-tree" ref={container}>
         <Tree<Entry>
           ref={tree}
+          dndManager={dndManager}
           data={entries}
           width={size.width}
           height={size.height}

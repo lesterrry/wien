@@ -2,7 +2,7 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Wien: Run desktop",
+      "label": "Wien: Run",
       "type": "shell",
       "command": "just run",
       "options": {
@@ -13,7 +13,6 @@
         "kind": "build",
         "isDefault": true
       },
-      "isBackground": true,
       "presentation": {
         "reveal": "always",
         "panel": "dedicated"

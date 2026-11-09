@@ -4,6 +4,7 @@ directories:
   output: release
 files:
   - out/**/*
+  - "!out/tests/**"
   - package.json
 mac:
   category: public.app-category.music

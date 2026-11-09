@@ -16,6 +16,7 @@ declare module "@strudel/codemirror" {
       transpiler: unknown;
       prebake: () => Promise<unknown>;
       beforeStart?: () => Promise<unknown>;
+      beforeEval?: () => Promise<unknown>;
       onUpdateState: (state: ReplState) => void;
     });
     editor: EditorView;
@@ -24,7 +25,7 @@ declare module "@strudel/codemirror" {
       state: ReplState;
       scheduler: { now(): number; cps: number };
     };
-    evaluate(): Promise<void>;
+    evaluate(autostart?: boolean): Promise<void>;
     stop(): Promise<void>;
     clear(): void;
     setTheme(theme: string): void;
@@ -40,7 +41,14 @@ declare module "@strudel/core" {
 declare module "@strudel/mini";
 declare module "@strudel/tonal";
 declare module "@strudel/transpiler" {
-  export const transpiler: unknown;
+  export function transpiler(
+    code: string,
+    options?: { emitWidgets?: boolean },
+  ): {
+    output: string;
+    miniLocations?: number[][];
+    widgets?: unknown[];
+  };
 }
 declare module "@strudel/webaudio" {
   export function getAudioContext(): AudioContext;

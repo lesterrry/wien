@@ -21,7 +21,16 @@ try {
     if (event.type() !== "debug")
       console.log("renderer:", event.text().slice(0, 350));
   });
+  const projectRoot = path.join(temporary, "projects", "First session");
   await page.getByLabel("Strudel code editor").waitFor();
+  assert.match(
+    await page.getByLabel("Strudel code editor").textContent(),
+    /import glass from '\.\/instruments\/glass.strudel'/,
+  );
+  await page
+    .locator('.tree-row[data-exported="true"]')
+    .filter({ hasText: "glass.strudel" })
+    .waitFor();
   await page.screenshot({ path: path.join(temporary, "workspace.png") });
   console.log("Screenshot:", path.join(temporary, "workspace.png"));
 
@@ -59,12 +68,19 @@ try {
 
   const code = page.getByLabel("Strudel code editor");
   async function replaceCode(value) {
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector(".cm-content")
+          ?.getAttribute("contenteditable") === "true",
+    );
     await code.click();
     await code.press(process.platform === "darwin" ? "Meta+a" : "Control+a");
     await page.keyboard.insertText(value);
     await page.waitForFunction(
       (expected) =>
-        document.querySelector(".cm-content")?.textContent === expected,
+        document.querySelector(".cm-content")?.textContent ===
+        expected.replaceAll("\n", ""),
       value,
     );
   }
@@ -77,6 +93,309 @@ try {
   await page.getByText("Couldn’t run this code").waitFor({ state: "hidden" });
   await page.getByRole("button", { name: "Stop playback" }).click();
   await page.getByText("Ready when you are").waitFor();
+
+  console.log("Checking numeric controls and reactive audio");
+  await replaceCode(`var gain = 0.2;
+let cutoff = 800;
+const speed = (2 / 2);
+note("c3*8").s("sine").gain(gain).lpf(cutoff).fast(speed)`);
+  const gainValue = page.getByLabel("gain value", { exact: true });
+  const gainKnob = page.getByRole("spinbutton", {
+    name: "gain knob",
+    exact: true,
+  });
+  await gainKnob.waitFor();
+  assert.equal(await page.locator(".number-knob").count(), 3);
+  assert.equal(await gainKnob.getAttribute("aria-valuemin"), null);
+  assert.equal(await gainKnob.getAttribute("aria-valuemax"), null);
+  for (let i = 0; i < 5; i++) await gainKnob.press("ArrowDown");
+  assert.match(await code.textContent(), /var gain = 0.15/);
+  assert.equal(await page.evaluate(() => window.getIsStarted()), false);
+  await page.getByRole("button", { name: /^Play/ }).click();
+  await page.getByText("Playing", { exact: true }).waitFor();
+  await page.waitForFunction(() => window.getTime() > 0.3);
+  const cycleBefore = await page.evaluate(() => window.getTime());
+  for (let i = 0; i < 15; i++) await gainKnob.press("ArrowDown");
+  await page.waitForFunction(() =>
+    window
+      .getPattern()
+      .queryArc(0, 1)
+      .every((hap) => hap.value.gain === 0),
+  );
+  assert(
+    (await page.evaluate(() => window.getTime())) >= cycleBefore,
+    "Knobs must not reset transport time",
+  );
+  async function audioPeak() {
+    return page.evaluate(async () => {
+      let peak = 0;
+      for (let i = 0; i < 12; i++) {
+        const meter = window.__meters[0];
+        const samples = new Float32Array(meter.fftSize);
+        meter.getFloatTimeDomainData(samples);
+        for (const sample of samples) peak = Math.max(peak, Math.abs(sample));
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      return peak;
+    });
+  }
+  // Let notes scheduled before the change finish their release.
+  await page.waitForTimeout(1600);
+  let quietPeak = await audioPeak();
+  for (let attempt = 0; quietPeak >= 0.00001 && attempt < 10; attempt++) {
+    quietPeak = await audioPeak();
+  }
+  console.log("Muted audio peak:", quietPeak);
+  assert(
+    quietPeak < 0.00001,
+    "Setting gain to zero must mute real audio without Update",
+  );
+  for (let i = 0; i < 20; i++) await gainKnob.press("ArrowUp");
+  await page.waitForFunction(() =>
+    window
+      .getPattern()
+      .queryArc(0, 1)
+      .every((hap) => hap.value.gain === 0.2),
+  );
+  assert(
+    (await audioPeak()) > 0.0001,
+    "Changing gain must restore real audio without Update",
+  );
+  const knobBounds = await gainKnob.boundingBox();
+  const knobX = knobBounds.x + knobBounds.width / 2;
+  const knobY = knobBounds.y + knobBounds.height / 2;
+  await page.mouse.move(knobX, knobY);
+  await page.mouse.down();
+  await page.mouse.move(knobX, knobY - 35, { steps: 20 });
+  await page.mouse.up();
+  await page.waitForFunction(() =>
+    window
+      .getPattern()
+      .queryArc(0, 1)
+      .every((hap) => Math.abs(hap.value.gain - 0.55) < 0.00001),
+  );
+  assert.match(await code.textContent(), /gain = 0.55/);
+  assert.equal(await gainValue.textContent(), "0.55");
+  assert.equal(
+    await gainKnob.evaluate((node) => getComputedStyle(node).outlineStyle),
+    "none",
+  );
+  assert.equal(await page.locator(".controls-panel input").count(), 0);
+  await page
+    .getByRole("button", { name: "Hide speed control", exact: true })
+    .click();
+  assert.equal(
+    await page
+      .getByRole("spinbutton", { name: "speed knob", exact: true })
+      .count(),
+    0,
+  );
+  assert.match(await code.textContent(), /\/\/@ignoreconst speed/);
+  await code.click();
+  await code.press(process.platform === "darwin" ? "Meta+z" : "Control+z");
+  await page
+    .getByRole("spinbutton", { name: "speed knob", exact: true })
+    .waitFor();
+  await page.screenshot({ path: path.join(temporary, "controls.png") });
+  console.log("Controls screenshot:", path.join(temporary, "controls.png"));
+  await page.getByRole("button", { name: "Stop playback" }).click();
+  await replaceCode(`var gain = 0.123456789;
+let cutoff = -123456.75;
+note("c3*8").s("sine").gain(gain)`);
+  assert.equal(await gainValue.textContent(), "0.12346");
+  await gainKnob.press("Shift+ArrowUp");
+  assert.match(await code.textContent(), /gain = 0.12446/);
+  const cutoffValue = page.getByLabel("cutoff value", { exact: true });
+  assert.equal(await cutoffValue.textContent(), "-123456.75");
+  await page.getByRole("button", { name: "Toggle controls" }).click();
+  assert.equal(await page.locator(".controls-panel").count(), 0);
+  await page.getByRole("button", { name: "Toggle controls" }).click();
+  await cutoffValue.waitFor();
+  assert.equal(await page.evaluate(() => window.getIsStarted()), false);
+  await replaceCode('note("c3 e3 g3").s("triangle").gain(0.2)');
+  assert.equal(await page.locator(".number-knob").count(), 0);
+
+  console.log("Checking file tabs");
+  const rootTab = page.getByRole("tab", {
+    name: "first-light.strudel",
+    exact: true,
+  });
+  await page
+    .getByRole("button", { name: "glass.strudel", exact: true })
+    .click();
+  const glassTab = page.getByRole("tab", {
+    name: "instruments/glass.strudel",
+    exact: true,
+  });
+  await glassTab.waitFor();
+  assert.equal(await glassTab.getAttribute("aria-selected"), "true");
+  assert.equal(await page.getByRole("tab").count(), 2);
+  await rootTab.click();
+  await page
+    .getByRole("button", { name: "glass.strudel", exact: true })
+    .click();
+  assert.equal(await page.getByRole("tab").count(), 2);
+  const originalGlass = await fs.readFile(
+    path.join(projectRoot, "instruments/glass.strudel"),
+    "utf8",
+  );
+  const editedGlass = `${originalGlass}\n// Saved when closing a tab\n`;
+  await replaceCode(editedGlass);
+  await page.keyboard.press(
+    process.platform === "darwin" ? "Meta+w" : "Control+w",
+  );
+  await glassTab.waitFor({ state: "hidden" });
+  assert.equal(await rootTab.getAttribute("aria-selected"), "true");
+  assert.equal(
+    await fs.readFile(
+      path.join(projectRoot, "instruments/glass.strudel"),
+      "utf8",
+    ),
+    editedGlass,
+  );
+  for (const file of [
+    "glass.strudel",
+    "soft-steps.strudel",
+    "low-tide.strudel",
+  ]) {
+    await page.getByRole("button", { name: file, exact: true }).click();
+  }
+  await rootTab.click();
+  const tabBounds = await rootTab.boundingBox();
+  const toolbarBounds = await page.locator(".editor-toolbar").boundingBox();
+  assert(
+    tabBounds.y + tabBounds.height < toolbarBounds.y,
+    "Tabs must have a gap above the editor",
+  );
+  assert.equal(await page.getByText("LOCAL", { exact: true }).count(), 0);
+  await page.getByRole("complementary", { name: "Snippet controls" }).waitFor();
+  await page.screenshot({ path: path.join(temporary, "tabs.png") });
+  for (const file of [
+    "instruments/glass.strudel",
+    "sketches/soft-steps.strudel",
+    "sketches/low-tide.strudel",
+  ]) {
+    await page
+      .getByRole("button", { name: `Close ${file}`, exact: true })
+      .click();
+  }
+  assert.equal(await rootTab.getAttribute("aria-selected"), "true");
+  assert.equal(await page.getByRole("tab").count(), 1);
+
+  console.log("Checking exports and explorer-to-editor linking");
+  const originalRoot = await code.textContent();
+  await page.getByLabel("Snippet actions", { exact: true }).click();
+  await page
+    .getByRole("button", { name: "Make exportable", exact: true })
+    .click();
+  await page.waitForFunction(() =>
+    document
+      .querySelector(".cm-content")
+      ?.textContent.startsWith("export default "),
+  );
+  await page
+    .locator('.tree-row[data-exported="true"]')
+    .filter({ hasText: "first-light.strudel" })
+    .waitFor();
+  await page.getByLabel("Snippet actions", { exact: true }).click();
+  await page
+    .getByRole("button", { name: "Remove exports", exact: true })
+    .click();
+  await page.waitForFunction(
+    (expected) =>
+      document.querySelector(".cm-content")?.textContent === expected,
+    originalRoot,
+  );
+
+  const glassFile = page.getByRole("button", {
+    name: "glass.strudel",
+    exact: true,
+  });
+  await menu("glass.strudel");
+  await page
+    .getByRole("button", { name: "Remove exports", exact: true })
+    .click();
+  await page
+    .locator('.tree-row[data-exported="false"]')
+    .filter({ hasText: "glass.strudel" })
+    .waitFor();
+  await glassFile.dragTo(code, { targetPosition: { x: 160, y: 15 } });
+  await page.waitForFunction(() =>
+    document
+      .querySelector(".cm-content")
+      ?.textContent.includes("import glass from './instruments/glass.strudel'"),
+  );
+  await page
+    .locator('.tree-row[data-exported="true"]')
+    .filter({ hasText: "glass.strudel" })
+    .waitFor();
+  const linkedRoot = await code.textContent();
+  assert.equal(
+    linkedRoot,
+    `import glass from './instruments/glass.strudel'${originalRoot}`,
+  );
+  assert.match(
+    await fs.readFile(
+      path.join(projectRoot, "instruments/glass.strudel"),
+      "utf8",
+    ),
+    /export default note/,
+  );
+  await glassFile.dragTo(code, { targetPosition: { x: 160, y: 15 } });
+  await page.getByRole("button", { name: /^Play/ }).waitFor();
+  assert.equal(await code.textContent(), linkedRoot);
+
+  await replaceCode(
+    "import glass from './instruments/glass.strudel'\nsetcpm(108 / 4)\nglass",
+  );
+  await page.getByRole("button", { name: /^Play/ }).click();
+  await page.getByText("Playing", { exact: true }).waitFor();
+  const importedSignal = await page.evaluate(async () => {
+    const meter = window.__meters[0];
+    let peak = 0;
+    for (let i = 0; i < 25; i++) {
+      const data = new Float32Array(meter.fftSize);
+      meter.getFloatTimeDomainData(data);
+      for (const sample of data) peak = Math.max(peak, Math.abs(sample));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    return peak;
+  });
+  assert(
+    importedSignal > 0.0001,
+    `Imported pattern produced no audio: ${importedSignal}`,
+  );
+  const glassPath = path.join(projectRoot, "instruments/glass.strudel");
+  const glassCode = await fs.readFile(glassPath, "utf8");
+  await fs.writeFile(glassPath, "export default note(");
+  await page.getByRole("button", { name: /^Update/ }).click();
+  await page.getByText("Couldn’t run this code").waitFor();
+  assert.match(
+    await page.locator(".evaluation-error").textContent(),
+    /instruments\/glass.strudel/,
+  );
+  await page.getByText("The previous version is still playing.").waitFor();
+  await fs.writeFile(glassPath, glassCode);
+  await page.getByRole("button", { name: /^Update/ }).click();
+  await page.getByText("Couldn’t run this code").waitFor({ state: "hidden" });
+  await page.getByRole("button", { name: "Stop playback" }).click();
+
+  // Move inside the explorer stays a folder move, and rewrites the open import.
+  await glassFile.dragTo(
+    page.getByRole("button", { name: "sketches", exact: true }),
+  );
+  await page.waitForFunction(() =>
+    document
+      .querySelector(".cm-content")
+      ?.textContent.includes("'./sketches/glass.strudel'"),
+  );
+  await fs.access(path.join(projectRoot, "sketches/glass.strudel"));
+  await assert.rejects(fs.access(glassPath));
+  await page.getByRole("button", { name: /^Play/ }).click();
+  await page.getByText("Playing", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Stop playback" }).click();
+  await replaceCode(originalRoot);
+  await page.screenshot({ path: path.join(temporary, "linked-workspace.png") });
 
   await page.getByRole("button", { name: "New folder", exact: true }).click();
   await page.getByLabel("Folder name", { exact: true }).fill("smoke-folder");
@@ -93,13 +412,17 @@ try {
     .waitFor();
   await replaceCode('note("d3").s("sine")');
   await page.getByText("Saved locally", { exact: true }).waitFor();
-  const projectRoot = path.join(temporary, "projects", "First session");
   assert.equal(
     await fs.readFile(path.join(projectRoot, "smoke.strudel"), "utf8"),
     'note("d3").s("sine")',
   );
 
   async function menu(name) {
+    await page.waitForFunction(
+      (label) =>
+        !document.querySelector(`button[aria-label="${label}"]`)?.disabled,
+      `Actions for ${name}`,
+    );
     await page
       .getByRole("button", { name: `Actions for ${name}`, exact: true })
       .click({ force: true });
@@ -162,7 +485,7 @@ try {
   );
   await Promise.all([
     page.waitForEvent("close"),
-    page.keyboard.press(process.platform === "darwin" ? "Meta+w" : "Control+w"),
+    page.evaluate(() => window.workspace.close()),
   ]);
   assert.equal(
     await fs.readFile(path.join(projectRoot, "first-light.strudel"), "utf8"),
@@ -170,7 +493,7 @@ try {
   );
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: playback, audio signal, syntax error recovery, autosave, create, rename, move, Trash, reload persistence, save on close.",
+    "PASS: reactive numeric controls, real audio updates, ignore/undo, tabs, save on tab close, exports, drag-to-import, imported audio, dependency errors, drag folder moves, playback, audio signal, syntax error recovery, autosave, create, rename, move, Trash, reload persistence, save on close.",
   );
 } catch (error) {
   console.error(error);
