@@ -1,0 +1,96 @@
+.iconButton {
+  composes: iconButton from "../../styles/common.module.css";
+}
+
+.explorerTree {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.explorerTree [role="tree"]:focus-visible {
+  outline: none;
+}
+
+.treeRow {
+  display: flex;
+  align-items: center;
+  border-radius: 5px;
+  padding-right: 4px;
+  color: var(--color-secondary);
+}
+
+.treeRow:hover {
+  background: var(--color-surface-raised);
+}
+
+.treeRow.selected {
+  background: var(--color-active);
+  color: var(--color-primary);
+}
+
+.treeLabel {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  text-align: left;
+  padding: 0 4px;
+  font-size: 12px;
+}
+
+.treeLabel > svg:first-child {
+  color: var(--color-muted);
+}
+
+.treeChevron {
+  width: 12px;
+  flex-shrink: 0;
+}
+
+.treeName {
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.treeLabel input {
+  background: var(--color-background);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 3px;
+  color: var(--color-primary);
+  width: 100%;
+  min-width: 0;
+  padding: 2px 4px;
+}
+
+.fileIcon {
+  color: var(--color-secondary);
+}
+
+.folderIcon {
+  color: var(--color-secondary);
+}
+
+.rowMenu {
+  width: 23px;
+  height: 23px;
+  opacity: 0;
+  flex-shrink: 0;
+}
+
+.treeRow:hover .rowMenu,
+.treeRow:focus-within .rowMenu {
+  opacity: 1;
+}
+
+.treeEmpty {
+  position: absolute;
+  inset: 20px 15px auto;
+  color: var(--color-muted);
+  font-size: 12px;
+  line-height: 1.8;
+  pointer-events: none;
+}

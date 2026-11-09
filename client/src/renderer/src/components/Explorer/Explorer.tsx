@@ -1,3 +1,4 @@
+import classNames from "classnames";
 import {
   ChevronDown,
   ChevronRight,
@@ -10,7 +11,8 @@ import {
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { type NodeRendererProps, Tree, type TreeApi } from "react-arborist";
 import { useDragDropManager } from "react-dnd";
-import type { Entry } from "../../shared/types";
+import type { Entry } from "../../../../shared/types";
+import styles from "./Explorer.module.css";
 
 const ExplorerActions = createContext<{
   disabled: boolean;
@@ -31,12 +33,14 @@ function Row({ node, style, dragHandle }: NodeRendererProps<Entry>) {
     <div
       style={style}
       ref={dragHandle}
-      className={`tree-row ${node.isSelected ? "selected" : ""}`}
+      className={classNames(styles.treeRow, {
+        [styles.selected]: node.isSelected,
+      })}
       data-exported={node.isLeaf ? Boolean(node.data.exported) : undefined}
     >
       {node.isEditing ? (
-        <div className="tree-label">
-          <span className="tree-chevron" />
+        <div className={styles.treeLabel}>
+          <span className={styles.treeChevron} />
           <Icon size={15} />
           <input
             aria-label="Rename item"
@@ -63,7 +67,7 @@ function Row({ node, style, dragHandle }: NodeRendererProps<Entry>) {
             node.select();
             onMenu(node.data, event.clientX, event.clientY);
           }}
-          className="tree-label"
+          className={styles.treeLabel}
           onClick={() => {
             node.select();
             if (node.isInternal) node.toggle();
@@ -85,18 +89,18 @@ function Row({ node, style, dragHandle }: NodeRendererProps<Entry>) {
               <ChevronRight size={12} />
             )
           ) : (
-            <span className="tree-chevron" />
+            <span className={styles.treeChevron} />
           )}
           <Icon
             size={15}
-            className={node.isLeaf ? "file-icon" : "folder-icon"}
+            className={node.isLeaf ? styles.fileIcon : styles.folderIcon}
           />
-          <span className="tree-name">{node.data.name}</span>
+          <span className={styles.treeName}>{node.data.name}</span>
         </button>
       )}
       <button
         type="button"
-        className="icon-button row-menu"
+        className={classNames(styles.iconButton, styles.rowMenu)}
         aria-label={`Actions for ${node.data.name}`}
         disabled={disabled}
         onClick={(event) => {
@@ -150,7 +154,7 @@ export function Explorer({
 
   return (
     <ExplorerActions.Provider value={{ disabled, onOpen, onMenu }}>
-      <div className="explorer-tree" ref={container}>
+      <div className={styles.explorerTree} ref={container}>
         <Tree<Entry>
           ref={tree}
           dndManager={dndManager}
@@ -185,7 +189,7 @@ export function Explorer({
           {Row}
         </Tree>
         {entries.length === 0 && (
-          <div className="tree-empty">
+          <div className={styles.treeEmpty}>
             A fresh start.
             <br />
             Add your first snippet above.

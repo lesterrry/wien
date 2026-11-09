@@ -1,4 +1,5 @@
 import type { ReplState } from "@strudel/codemirror";
+import classNames from "classnames";
 import {
   ArrowDownToLine,
   ArrowRight,
@@ -28,20 +29,21 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { readControls } from "../../shared/controls";
-import { hasExports } from "../../shared/modules";
+import { readControls } from "../../../../shared/controls";
+import { hasExports } from "../../../../shared/modules";
 import {
   type Entry,
   isWithin,
   joinPath,
   type Project,
   parentPath,
-} from "../../shared/types";
-import { ControlsPanel } from "./ControlsPanel";
-import { Dialog } from "./Dialog";
-import { Explorer } from "./Explorer";
-import { FileTabs } from "./FileTabs";
-import { type Player, StrudelEditor } from "./StrudelEditor";
+} from "../../../../shared/types";
+import { ControlsPanel } from "../ControlsPanel/ControlsPanel";
+import { Dialog } from "../Dialog/Dialog";
+import { Explorer } from "../Explorer/Explorer";
+import { FileTabs } from "../FileTabs/FileTabs";
+import { type Player, StrudelEditor } from "../StrudelEditor/StrudelEditor";
+import styles from "./App.module.css";
 
 interface Document {
   path: string;
@@ -506,15 +508,18 @@ export function App() {
 
   return (
     <div
-      className={`app ${sidebar ? "" : "sidebar-hidden"} ${controlsVisible ? "" : "controls-hidden"}`}
+      className={classNames(styles.app, {
+        [styles.sidebarHidden]: !sidebar,
+        [styles.controlsHidden]: !controlsVisible,
+      })}
     >
-      <div className="titlebar">
-        <div className="titlebar-sidebar">
-          <span className="app-name">
-            wien<span className="wordmark-dot">.</span>
+      <div className={styles.titlebar}>
+        <div className={styles.titlebarSidebar}>
+          <span className={styles.appName}>
+            wien<span className={styles.wordmarkDot}>.</span>
           </span>
           <button
-            className="icon-button"
+            className={styles.iconButton}
             type="button"
             title={`Toggle sidebar (${shortcut} B)`}
             aria-label="Toggle sidebar"
@@ -527,7 +532,7 @@ export function App() {
             )}
           </button>
         </div>
-        <div className="titlebar-main">
+        <div className={styles.titlebarMain}>
           <FileTabs
             tabs={tabs.map((path) => ({
               path,
@@ -545,7 +550,7 @@ export function App() {
           />
           <button
             type="button"
-            className="icon-button"
+            className={styles.iconButton}
             title="Toggle controls"
             aria-label="Toggle controls"
             aria-expanded={controlsVisible}
@@ -561,10 +566,10 @@ export function App() {
       </div>
 
       {sidebar && (
-        <aside className="sidebar">
-          <div className="project-picker-wrap">
+        <aside className={styles.sidebar}>
+          <div className={styles.projectPickerWrap}>
             <button
-              className="project-picker"
+              className={styles.projectPicker}
               type="button"
               onClick={(event) => {
                 event.stopPropagation();
@@ -572,7 +577,7 @@ export function App() {
               }}
               disabled={busy}
             >
-              <span className="project-avatar">
+              <span className={styles.projectAvatar}>
                 <Code2 size={18} />
               </span>
               <span>
@@ -582,7 +587,7 @@ export function App() {
               <ChevronDown size={14} />
             </button>
             {projectMenu && (
-              <div className="menu project-menu">
+              <div className={classNames(styles.menu, styles.projectMenu)}>
                 <button type="button" onClick={() => void switchProject(true)}>
                   <Plus size={15} />
                   New project
@@ -591,7 +596,7 @@ export function App() {
                   <FolderOpen size={15} />
                   Open project…
                 </button>
-                <div className="menu-divider" />
+                <div className={styles.menuDivider} />
                 <button
                   type="button"
                   onClick={() =>
@@ -604,7 +609,7 @@ export function App() {
               </div>
             )}
           </div>
-          <label className="search-box">
+          <label className={styles.searchBox}>
             <Search size={14} />
             <input
               aria-label="Find a snippet"
@@ -614,7 +619,7 @@ export function App() {
             />
             {search && (
               <button
-                className="icon-button"
+                className={styles.iconButton}
                 type="button"
                 aria-label="Clear search"
                 onClick={() => setSearch("")}
@@ -623,11 +628,11 @@ export function App() {
               </button>
             )}
           </label>
-          <div className="section-heading">
+          <div className={styles.sectionHeading}>
             <span>Files</span>
             <div>
               <button
-                className="icon-button"
+                className={styles.iconButton}
                 type="button"
                 title="Refresh files"
                 aria-label="Refresh files"
@@ -637,7 +642,7 @@ export function App() {
                 <RefreshCw size={13} />
               </button>
               <button
-                className="icon-button"
+                className={styles.iconButton}
                 type="button"
                 title="New snippet"
                 aria-label="New snippet"
@@ -653,7 +658,7 @@ export function App() {
                 <FilePlus2 size={15} />
               </button>
               <button
-                className="icon-button"
+                className={styles.iconButton}
                 type="button"
                 title="New folder"
                 aria-label="New folder"
@@ -705,10 +710,10 @@ export function App() {
               })
             }
           />
-          <div className="sidebar-bottom">
+          <div className={styles.sidebarBottom}>
             <button
               type="button"
-              className="local-project"
+              className={styles.localProject}
               onClick={() =>
                 void api.reveal().catch((error) => setError(message(error)))
               }
@@ -722,7 +727,7 @@ export function App() {
             </button>
             <button
               type="button"
-              className="help-button"
+              className={styles.helpButton}
               onClick={() => showModal({ kind: "help" })}
             >
               <CircleHelp size={14} />
@@ -733,7 +738,7 @@ export function App() {
       )}
 
       <main
-        className="workspace"
+        className={styles.workspace}
         id="snippet-panel"
         role="tabpanel"
         aria-labelledby={
@@ -741,8 +746,12 @@ export function App() {
         }
         aria-label={document ? undefined : "Snippet editor"}
       >
-        <header className="editor-toolbar">
-          <div className="file-heading">
+        <header
+          className={styles.editorToolbar}
+          role="toolbar"
+          aria-label="Snippet toolbar"
+        >
+          <div className={styles.fileHeading}>
             {document ? (
               <>
                 {hasExports(document.code) ? (
@@ -761,13 +770,13 @@ export function App() {
                 </div>
               </>
             ) : (
-              <span className="muted">Your next idea starts here</span>
+              <span className={styles.muted}>Your next idea starts here</span>
             )}
           </div>
-          <div className="transport">
+          <div className={styles.transport}>
             <button
               type="button"
-              className="icon-button stop-button"
+              className={classNames(styles.iconButton, styles.stopButton)}
               title={`Stop (${shortcut} .)`}
               aria-label="Stop playback"
               disabled={!playback.started}
@@ -777,12 +786,12 @@ export function App() {
             </button>
             <button
               type="button"
-              className="play-button"
+              className={styles.playButton}
               disabled={!document || playback.pending || busy}
               onClick={play}
             >
               {playback.pending ? (
-                <Loader2 size={14} className="spin" />
+                <Loader2 size={14} className={styles.spin} />
               ) : (
                 <Play size={13} fill="currentColor" />
               )}
@@ -791,7 +800,7 @@ export function App() {
             </button>
             <button
               type="button"
-              className="icon-button"
+              className={styles.iconButton}
               title="Snippet actions"
               aria-label="Snippet actions"
               disabled={!document || busy}
@@ -816,12 +825,12 @@ export function App() {
         </header>
 
         {error && (
-          <div role="alert" className="error-banner">
+          <div role="alert" className={styles.errorBanner}>
             <span>{error}</span>
             {savedStatus === "Not saved" && (
               <button
                 type="button"
-                className="secondary-button"
+                className={styles.secondaryButton}
                 onClick={() => showModal({ kind: "reload" })}
               >
                 Reload file…
@@ -829,7 +838,7 @@ export function App() {
             )}
             <button
               type="button"
-              className="icon-button"
+              className={styles.iconButton}
               aria-label="Dismiss error"
               onClick={() => setError(null)}
             >
@@ -858,8 +867,8 @@ export function App() {
             onPosition={(line, column) => setPosition([line, column])}
           />
         ) : (
-          <div className="empty-state">
-            <div className="empty-icon">
+          <div className={styles.emptyState}>
+            <div className={styles.emptyIcon}>
               <Code2 size={30} strokeWidth={1.2} />
             </div>
             <h1>Make room for a little music.</h1>
@@ -870,7 +879,7 @@ export function App() {
             </p>
             <button
               type="button"
-              className="primary-button"
+              className={styles.primaryButton}
               onClick={() =>
                 showModal({ kind: "create", parent: "", folder: false })
               }
@@ -881,7 +890,7 @@ export function App() {
           </div>
         )}
         {playback.error && (
-          <div className="evaluation-error" role="alert">
+          <div className={styles.evaluationError} role="alert">
             <strong>Couldn’t run this code</strong>
             <span>{playback.error.message}</span>
             {playback.started && (
@@ -889,29 +898,35 @@ export function App() {
             )}
           </div>
         )}
-        <div className="playback-strip">
+        <div className={styles.playbackStrip}>
           <div
-            className={`playback-state ${playback.started ? "playing" : ""}`}
+            className={classNames(styles.playbackState, {
+              [styles.playing]: playback.started,
+            })}
           >
-            <span className="status-dot" />
+            <span className={styles.statusDot} />
             <span>{playback.started ? "Playing" : "Ready when you are"}</span>
             {playback.started && (
-              <span className="playing-file">{filename}</span>
+              <span className={styles.playingFile}>{filename}</span>
             )}
           </div>
-          <span className="keyboard-hint">
+          <span className={styles.keyboardHint}>
             {playback.started
               ? "Edit, then update to hear your changes"
               : "A few notes can go a long way"}
             <kbd>{shortcut} ↵</kbd>
           </span>
         </div>
-        <footer className="statusbar">
-          <span className={savedStatus === "Not saved" ? "save-error" : ""}>
+        <footer className={styles.statusbar}>
+          <span
+            className={classNames({
+              [styles.saveError]: savedStatus === "Not saved",
+            })}
+          >
             {savedStatus === "Saving…" ? (
-              <Loader2 size={12} className="spin" />
+              <Loader2 size={12} className={styles.spin} />
             ) : dirty ? (
-              <span className="unsaved-dot" />
+              <span className={styles.unsavedDot} />
             ) : (
               <Check size={12} />
             )}
@@ -922,7 +937,7 @@ export function App() {
               Ln {position[0]}, Col {position[1]}
             </span>
             <span>UTF-8</span>
-            <span className="strudel-badge">Strudel</span>
+            <span className={styles.strudelBadge}>Strudel</span>
           </div>
         </footer>
       </main>
@@ -941,7 +956,7 @@ export function App() {
 
       {context && (
         <div
-          className="menu context-menu"
+          className={classNames(styles.menu, styles.contextMenu)}
           style={{ left: context.x, top: context.y }}
         >
           {!context.entry.children && (
@@ -957,7 +972,7 @@ export function App() {
                 )}
                 {context.entry.exported ? "Remove exports" : "Make exportable"}
               </button>
-              <div className="menu-divider" />
+              <div className={styles.menuDivider} />
             </>
           )}
           {context.entry.children && (
@@ -988,7 +1003,7 @@ export function App() {
                 <FolderPlus size={14} />
                 New folder
               </button>
-              <div className="menu-divider" />
+              <div className={styles.menuDivider} />
             </>
           )}
           <button
@@ -1007,7 +1022,7 @@ export function App() {
           </button>
           <button
             type="button"
-            className="danger-text"
+            className={styles.dangerText}
             onClick={() => showModal({ kind: "delete", entry: context.entry })}
           >
             <Trash2 size={14} />
@@ -1038,7 +1053,7 @@ export function App() {
           }}
         >
           {modal.kind === "help" ? (
-            <div className="help-content">
+            <div className={styles.helpContent}>
               <p>
                 Write Strudel code, play it, and follow the sound. Your snippets
                 are plain files on your computer.
@@ -1059,14 +1074,14 @@ export function App() {
                 <span>Toggle sidebar</span>
                 <kbd>{shortcut} B</kbd>
               </div>
-              <p className="muted">
+              <p className={styles.muted}>
                 Drag snippets into folders to organize them. Starter sounds use
                 built-in synthesizers and work offline. Opening another snippet
                 stops playback.
               </p>
               <button
                 type="button"
-                className="primary-button"
+                className={styles.primaryButton}
                 onClick={() => setModal(null)}
               >
                 Let’s make something
@@ -1075,6 +1090,7 @@ export function App() {
             </div>
           ) : (
             <form
+              className={styles.modalForm}
               onSubmit={(event) => {
                 event.preventDefault();
                 void submitModal();
@@ -1131,7 +1147,7 @@ export function App() {
                     onChange={(event) => setValue(event.target.value)}
                     autoComplete="off"
                   />
-                  <p className="field-hint">
+                  <p className={styles.fieldHint}>
                     {modal.kind === "create"
                       ? `In ${modal.parent || project?.name || "project root"}`
                       : "Use .strudel or .js for snippets."}
@@ -1139,14 +1155,14 @@ export function App() {
                 </>
               )}
               {modalError && (
-                <p role="alert" className="form-error">
+                <p role="alert" className={styles.formError}>
                   {modalError}
                 </p>
               )}
-              <div className="dialog-actions">
+              <div className={styles.dialogActions}>
                 <button
                   type="button"
-                  className="secondary-button"
+                  className={styles.secondaryButton}
                   disabled={busy}
                   onClick={() => setModal(null)}
                 >
@@ -1155,12 +1171,14 @@ export function App() {
                 <button
                   type="submit"
                   className={
-                    modal.kind === "delete" ? "danger-button" : "primary-button"
+                    modal.kind === "delete"
+                      ? styles.dangerButton
+                      : styles.primaryButton
                   }
                   disabled={busy}
                 >
                   {busy ? (
-                    <Loader2 size={14} className="spin" />
+                    <Loader2 size={14} className={styles.spin} />
                   ) : modal.kind === "delete" ? (
                     <Trash2 size={14} />
                   ) : (

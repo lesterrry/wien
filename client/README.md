@@ -135,7 +135,13 @@ src/shared/     # общий контракт
 src/renderer/   # React, explorer, редактор и плеер Strudel
 ```
 
-Цвета интерфейса: `src/renderer/src/theme.css`.
+Компоненты находятся в `src/renderer/src/components/<Component>/`: рядом лежат
+`<Component>.tsx` и `<Component>.module.css`. Условные и составные классы
+собираются через `classnames`. Общие кнопки и индикаторы переиспользуются через
+`composes` из `styles/common.module.css`.
+
+Цвета интерфейса: `src/renderer/src/styles/theme.css`.
+Глобальные базовые стили: `src/renderer/src/styles/global.css`.
 Стартовые сниппеты: `src/main/starter.ts`.
 
 Расширенная проверка реального Electron-окна:

@@ -1,0 +1,77 @@
+.editor {
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  padding: 15px 14px 0 5px;
+}
+
+.editor :global(.cm-editor) {
+  height: 100%;
+  background: transparent;
+  outline: none;
+}
+
+.editor :global(.cm-scroller) {
+  overflow: auto;
+  line-height: 1.85;
+}
+
+.editor :global(.cm-gutters) {
+  background: transparent;
+  border: 0;
+  color: var(--color-muted);
+  font-size: 12px;
+  padding-right: 17px;
+  min-width: 56px;
+}
+
+.editor :global(.cm-lineNumbers) :global(.cm-gutterElement) {
+  padding-left: 16px;
+}
+
+.editor :global(.cm-content) {
+  padding-top: 0;
+  caret-color: var(--color-primary);
+}
+
+.editor :global(.cm-line) {
+  padding-left: 0;
+}
+
+.editor :global(.cm-activeLine) {
+  background: var(--color-active-line);
+}
+
+.editor :global(.cm-cursor) {
+  border-left-color: var(--color-primary);
+}
+
+.editor :global(.cm-selectionBackground) {
+  background: var(--color-active);
+}
+
+.editor :global(.cm-tooltip) {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 6px;
+}
+
+.editor.linkDropActive {
+  outline: 1px solid var(--color-brand);
+  outline-offset: -8px;
+  position: relative;
+}
+
+.editor.linkDropActive::after {
+  content: attr(data-drop-hint);
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--color-surface-raised);
+  color: var(--color-primary);
+  font-size: 12px;
+  pointer-events: none;
+  z-index: 10;
+}

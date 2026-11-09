@@ -1,0 +1,80 @@
+.unsavedDot {
+  composes: unsavedDot from "../../styles/common.module.css";
+}
+
+.fileTabs {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  gap: 6px;
+  padding: 9px 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-app-region: no-drag;
+}
+
+.fileTab {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  height: 32px;
+  min-width: 120px;
+  max-width: 240px;
+  padding-right: 5px;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  background: var(--color-surface-raised);
+  color: var(--color-muted);
+}
+
+.fileTab:hover {
+  background: var(--color-hover);
+}
+
+.fileTab.active {
+  background: var(--color-active);
+  border-color: var(--color-border-strong);
+  color: var(--color-primary);
+}
+
+.fileTabSelect {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 9px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.fileTabName,
+.fileTabFolder {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileTabFolder {
+  max-width: 65px;
+  font-size: 10px;
+  color: var(--color-muted);
+}
+
+.fileTabClose {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  color: var(--color-muted);
+}
+
+.fileTabClose:hover {
+  color: var(--color-primary);
+  background: var(--color-active);
+}

@@ -1,0 +1,77 @@
+.iconButton {
+  width: 28px;
+  height: 28px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-secondary);
+  padding: 0;
+}
+
+.iconButton:hover:not(:disabled) {
+  background: var(--color-hover);
+  color: var(--color-primary);
+}
+
+.unsavedDot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  background: var(--color-warning);
+  border-radius: 50%;
+}
+
+.primaryButton,
+.secondaryButton,
+.dangerButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 13px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.primaryButton {
+  background: var(--color-primary);
+  color: var(--color-background);
+  font-weight: 500;
+}
+
+.primaryButton:hover {
+  background: var(--color-primary-hover);
+}
+
+.secondaryButton {
+  background: var(--color-hover);
+  color: var(--color-secondary);
+}
+
+.secondaryButton:hover {
+  background: var(--color-active);
+}
+
+.dangerButton {
+  background: var(--color-danger-strong);
+  color: var(--color-primary);
+}
+
+.dangerButton:hover {
+  background: var(--color-danger-hover);
+}
+
+.muted {
+  color: var(--color-muted);
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

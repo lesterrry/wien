@@ -1,5 +1,6 @@
 import { X } from "lucide-react";
 import { type ReactNode, useEffect, useRef } from "react";
+import styles from "./Dialog.module.css";
 
 export function Dialog({
   title,
@@ -15,12 +16,17 @@ export function Dialog({
     ref.current?.showModal();
   }, []);
   return (
-    <dialog ref={ref} className="dialog" onCancel={onClose} aria-label={title}>
-      <div className="dialog-heading">
+    <dialog
+      ref={ref}
+      className={styles.dialog}
+      onCancel={onClose}
+      aria-label={title}
+    >
+      <div className={styles.dialogHeading}>
         <h2>{title}</h2>
         <button
           type="button"
-          className="icon-button"
+          className={styles.iconButton}
           aria-label="Close dialog"
           onClick={onClose}
         >

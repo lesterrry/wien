@@ -1,0 +1,55 @@
+.iconButton {
+  composes: iconButton from "../../styles/common.module.css";
+}
+
+.dialog {
+  width: 420px;
+  padding: 22px;
+  background: var(--color-surface);
+  color: var(--color-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  box-shadow: 0 25px 80px var(--color-overlay);
+}
+
+.dialog::backdrop {
+  background: var(--color-overlay);
+  backdrop-filter: blur(3px);
+}
+
+.dialogHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 22px;
+}
+
+.dialog h2 {
+  font-size: 16px;
+  margin: 0;
+  font-weight: 550;
+  letter-spacing: -0.3px;
+}
+
+.dialog label {
+  display: block;
+  font-size: 11px;
+  color: var(--color-secondary);
+  margin-bottom: 8px;
+}
+
+.dialog input,
+.dialog select {
+  width: 100%;
+  color: var(--color-primary);
+  background: var(--color-background);
+  border: 1px solid var(--color-border-strong);
+  padding: 10px 11px;
+  border-radius: 6px;
+}
+
+.dialog p {
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--color-secondary);
+}

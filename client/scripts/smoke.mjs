@@ -28,7 +28,7 @@ try {
     /import glass from '\.\/instruments\/glass.strudel'/,
   );
   await page
-    .locator('.tree-row[data-exported="true"]')
+    .locator('[data-exported="true"]')
     .filter({ hasText: "glass.strudel" })
     .waitFor();
   await page.screenshot({ path: path.join(temporary, "workspace.png") });
@@ -105,7 +105,7 @@ note("c3*8").s("sine").gain(gain).lpf(cutoff).fast(speed)`);
     exact: true,
   });
   await gainKnob.waitFor();
-  assert.equal(await page.locator(".number-knob").count(), 3);
+  assert.equal(await page.getByRole("spinbutton").count(), 3);
   assert.equal(await gainKnob.getAttribute("aria-valuemin"), null);
   assert.equal(await gainKnob.getAttribute("aria-valuemax"), null);
   for (let i = 0; i < 5; i++) await gainKnob.press("ArrowDown");
@@ -180,7 +180,13 @@ note("c3*8").s("sine").gain(gain).lpf(cutoff).fast(speed)`);
     await gainKnob.evaluate((node) => getComputedStyle(node).outlineStyle),
     "none",
   );
-  assert.equal(await page.locator(".controls-panel input").count(), 0);
+  assert.equal(
+    await page
+      .getByRole("complementary", { name: "Snippet controls" })
+      .locator("input")
+      .count(),
+    0,
+  );
   await page
     .getByRole("button", { name: "Hide speed control", exact: true })
     .click();
@@ -208,12 +214,15 @@ note("c3*8").s("sine").gain(gain)`);
   const cutoffValue = page.getByLabel("cutoff value", { exact: true });
   assert.equal(await cutoffValue.textContent(), "-123456.75");
   await page.getByRole("button", { name: "Toggle controls" }).click();
-  assert.equal(await page.locator(".controls-panel").count(), 0);
+  assert.equal(
+    await page.getByRole("complementary", { name: "Snippet controls" }).count(),
+    0,
+  );
   await page.getByRole("button", { name: "Toggle controls" }).click();
   await cutoffValue.waitFor();
   assert.equal(await page.evaluate(() => window.getIsStarted()), false);
   await replaceCode('note("c3 e3 g3").s("triangle").gain(0.2)');
-  assert.equal(await page.locator(".number-knob").count(), 0);
+  assert.equal(await page.getByRole("spinbutton").count(), 0);
 
   console.log("Checking file tabs");
   const rootTab = page.getByRole("tab", {
@@ -262,7 +271,9 @@ note("c3*8").s("sine").gain(gain)`);
   }
   await rootTab.click();
   const tabBounds = await rootTab.boundingBox();
-  const toolbarBounds = await page.locator(".editor-toolbar").boundingBox();
+  const toolbarBounds = await page
+    .getByRole("toolbar", { name: "Snippet toolbar" })
+    .boundingBox();
   assert(
     tabBounds.y + tabBounds.height < toolbarBounds.y,
     "Tabs must have a gap above the editor",
@@ -294,7 +305,7 @@ note("c3*8").s("sine").gain(gain)`);
       ?.textContent.startsWith("export default "),
   );
   await page
-    .locator('.tree-row[data-exported="true"]')
+    .locator('[data-exported="true"]')
     .filter({ hasText: "first-light.strudel" })
     .waitFor();
   await page.getByLabel("Snippet actions", { exact: true }).click();
@@ -316,7 +327,7 @@ note("c3*8").s("sine").gain(gain)`);
     .getByRole("button", { name: "Remove exports", exact: true })
     .click();
   await page
-    .locator('.tree-row[data-exported="false"]')
+    .locator('[data-exported="false"]')
     .filter({ hasText: "glass.strudel" })
     .waitFor();
   await glassFile.dragTo(code, { targetPosition: { x: 160, y: 15 } });
@@ -326,7 +337,7 @@ note("c3*8").s("sine").gain(gain)`);
       ?.textContent.includes("import glass from './instruments/glass.strudel'"),
   );
   await page
-    .locator('.tree-row[data-exported="true"]')
+    .locator('[data-exported="true"]')
     .filter({ hasText: "glass.strudel" })
     .waitFor();
   const linkedRoot = await code.textContent();
@@ -371,7 +382,10 @@ note("c3*8").s("sine").gain(gain)`);
   await page.getByRole("button", { name: /^Update/ }).click();
   await page.getByText("Couldn’t run this code").waitFor();
   assert.match(
-    await page.locator(".evaluation-error").textContent(),
+    await page
+      .getByRole("alert")
+      .filter({ hasText: "Couldn’t run this code" })
+      .textContent(),
     /instruments\/glass.strudel/,
   );
   await page.getByText("The previous version is still playing.").waitFor();

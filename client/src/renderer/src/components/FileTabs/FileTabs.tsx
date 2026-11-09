@@ -1,5 +1,7 @@
+import classNames from "classnames";
 import { FileCode2, Package, X } from "lucide-react";
 import { useEffect, useRef } from "react";
+import styles from "./FileTabs.module.css";
 
 export interface FileTab {
   path: string;
@@ -30,7 +32,7 @@ export function FileTabs({
 
   return (
     <div
-      className="file-tabs"
+      className={styles.fileTabs}
       role="tablist"
       aria-label="Open snippets"
       ref={list}
@@ -46,7 +48,9 @@ export function FileTabs({
         const Icon = tab.exported ? Package : FileCode2;
         return (
           <div
-            className={`file-tab ${selected ? "active" : ""}`}
+            className={classNames(styles.fileTab, {
+              [styles.active]: selected,
+            })}
             key={tab.path}
             role="presentation"
           >
@@ -60,7 +64,7 @@ export function FileTabs({
               tabIndex={selected ? 0 : -1}
               disabled={disabled}
               title={tab.path}
-              className="file-tab-select"
+              className={styles.fileTabSelect}
               onClick={() => onSelect(tab.path)}
               onKeyDown={(event) => {
                 let next: number;
@@ -79,9 +83,9 @@ export function FileTabs({
               }}
             >
               <Icon size={13} />
-              <span className="file-tab-name">{filename}</span>
+              <span className={styles.fileTabName}>{filename}</span>
               {duplicateName && (
-                <span className="file-tab-folder">
+                <span className={styles.fileTabFolder}>
                   {tab.path.includes("/")
                     ? tab.path.slice(0, tab.path.lastIndexOf("/"))
                     : "/"}
@@ -89,7 +93,7 @@ export function FileTabs({
               )}
               {tab.dirty && (
                 <span
-                  className="unsaved-dot"
+                  className={styles.unsavedDot}
                   role="img"
                   aria-label="Unsaved changes"
                 />
@@ -97,7 +101,7 @@ export function FileTabs({
             </button>
             <button
               type="button"
-              className="file-tab-close"
+              className={styles.fileTabClose}
               aria-label={`Close ${tab.path}`}
               title="Close tab"
               disabled={disabled}

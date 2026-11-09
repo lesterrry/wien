@@ -12,11 +12,13 @@ import {
   registerSynthSounds,
   webaudioOutput,
 } from "@strudel/webaudio";
+import classNames from "classnames";
 import { useEffect, useRef } from "react";
 import { useDrop } from "react-dnd";
-import { changeControl, ignoreControl } from "../../shared/controls";
-import type { Entry } from "../../shared/types";
-import { compileGraph } from "./module-compiler";
+import { changeControl, ignoreControl } from "../../../../shared/controls";
+import type { Entry } from "../../../../shared/types";
+import { compileGraph } from "../../module-compiler";
+import styles from "./StrudelEditor.module.css";
 
 export interface Player {
   play(): Promise<void>;
@@ -233,7 +235,9 @@ export function StrudelEditor({
 
   return (
     <div
-      className={`editor ${isOver && canDrop ? "link-drop-active" : ""}`}
+      className={classNames(styles.editor, {
+        [styles.linkDropActive]: isOver && canDrop,
+      })}
       ref={(node) => {
         root.current = node;
         drop(node);
