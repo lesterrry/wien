@@ -1,0 +1,963 @@
+import type { ReplState } from "@strudel/codemirror";
+import {
+  ArrowDownToLine,
+  ArrowRight,
+  Check,
+  ChevronDown,
+  CircleHelp,
+  Code2,
+  FileCode2,
+  FilePlus2,
+  FolderOpen,
+  FolderPlus,
+  HardDrive,
+  Loader2,
+  MoreHorizontal,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Pencil,
+  Play,
+  Plus,
+  RefreshCw,
+  Search,
+  Square,
+  Trash2,
+  X,
+} from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  type Entry,
+  isWithin,
+  joinPath,
+  type Project,
+  parentPath,
+} from "../../shared/types";
+import { Dialog } from "./Dialog";
+import { Explorer } from "./Explorer";
+import { type Player, StrudelEditor } from "./StrudelEditor";
+
+interface Document {
+  path: string;
+  code: string;
+  saved: string;
+}
+type Modal =
+  | { kind: "create"; parent: string; folder: boolean }
+  | { kind: "rename"; entry: Entry }
+  | { kind: "move"; entry: Entry }
+  | { kind: "delete"; entry: Entry }
+  | { kind: "reload" }
+  | { kind: "help" };
+
+const api = window.workspace;
+const message = (error: unknown) =>
+  String(error instanceof Error ? error.message : error).replace(
+    /^Error invoking remote method '[^']+': Error: /,
+    "",
+  );
+
+export function App() {
+  const [editorVersion, setEditorVersion] = useState(0);
+  const [project, setProject] = useState<Project | null>(null);
+  const [document, setDocument] = useState<Document | null>(null);
+  const documentRef = useRef<Document | null>(null);
+  const saving = useRef<Promise<void> | null>(null);
+  const player = useRef<Player | null>(null);
+  const [playback, setPlayback] = useState<ReplState>({
+    started: false,
+    pending: false,
+  });
+  const [savedStatus, setSavedStatus] = useState("Saved locally");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  const [selection, setSelection] = useState<Entry | null>(null);
+  const [search, setSearch] = useState("");
+  const [sidebar, setSidebar] = useState(true);
+  const [projectMenu, setProjectMenu] = useState(false);
+  const [context, setContext] = useState<{
+    entry: Entry;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [modal, setModal] = useState<Modal | null>(null);
+  const [value, setValue] = useState("");
+  const [modalError, setModalError] = useState<string | null>(null);
+  const [position, setPosition] = useState([1, 1]);
+
+  const updateDocument = useCallback((next: Document | null) => {
+    documentRef.current = next;
+    setDocument(next);
+  }, []);
+
+  const flush = useCallback(async () => {
+    if (saving.current) return saving.current;
+    const work = async () => {
+      while (
+        documentRef.current &&
+        documentRef.current.code !== documentRef.current.saved
+      ) {
+        const snapshot = { ...documentRef.current };
+        setSavedStatus("Saving…");
+        try {
+          await api.save({
+            path: snapshot.path,
+            content: snapshot.code,
+            expected: snapshot.saved,
+          });
+          const current = documentRef.current;
+          if (current?.path === snapshot.path)
+            updateDocument({ ...current, saved: snapshot.code });
+        } catch (error) {
+          setSavedStatus("Not saved");
+          throw error;
+        }
+      }
+      setSavedStatus("Saved locally");
+    };
+    saving.current = work();
+    try {
+      await saving.current;
+    } finally {
+      saving.current = null;
+    }
+  }, [updateDocument]);
+
+  const run = useCallback(async (action: () => Promise<void>) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+    } catch (error) {
+      setError(message(error));
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }, []);
+
+  const openFile = useCallback(
+    async (path: string) => {
+      if (documentRef.current?.path === path) return;
+      await run(async () => {
+        await flush();
+        const code = await api.read(path);
+        await player.current?.stop();
+        setPlayback({ started: false, pending: false });
+        setPosition([1, 1]);
+        updateDocument({ path, code, saved: code });
+        setSavedStatus("Saved locally");
+      });
+    },
+    [flush, run, updateDocument],
+  );
+
+  useEffect(() => {
+    void api
+      .current()
+      .then(async (project) => {
+        setProject(project);
+        const first = project.entries.find((entry) => !entry.children);
+        if (first) {
+          const code = await api.read(first.id);
+          updateDocument({ path: first.id, code, saved: code });
+        }
+      })
+      .catch((error) => setError(message(error)));
+  }, [updateDocument]);
+
+  useEffect(() => {
+    if (!document || document.code === document.saved) return;
+    const timer = setTimeout(() => {
+      void flush().catch((error) => setError(message(error)));
+    }, 650);
+    return () => clearTimeout(timer);
+  }, [document, flush]);
+
+  useEffect(() => {
+    const protectPendingEdits = (event: BeforeUnloadEvent) => {
+      const current = documentRef.current;
+      if (!current || current.code === current.saved) return;
+      event.preventDefault();
+      event.returnValue = "";
+      void flush().catch((error) => setError(message(error)));
+    };
+    window.addEventListener("beforeunload", protectPendingEdits);
+    return () =>
+      window.removeEventListener("beforeunload", protectPendingEdits);
+  }, [flush]);
+
+  useEffect(
+    () =>
+      api.onBeforeClose(() => {
+        void run(async () => {
+          await flush();
+          await player.current?.stop();
+          api.finishClose();
+        });
+      }),
+    [flush, run],
+  );
+
+  const play = useCallback(() => {
+    void player.current?.play().catch((error) => setError(message(error)));
+  }, []);
+  const stop = useCallback(() => {
+    void player.current?.stop();
+  }, []);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey)) return;
+      if (event.key === "w") {
+        event.preventDefault();
+        api.close();
+      }
+      if (event.key === "s") {
+        event.preventDefault();
+        void flush().catch((error) => setError(message(error)));
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        event.stopPropagation();
+        play();
+      }
+      if (event.key === ".") {
+        event.preventDefault();
+        event.stopPropagation();
+        stop();
+      }
+      if (event.key === "b") {
+        event.preventDefault();
+        setSidebar((value) => !value);
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [flush, play, stop]);
+
+  useEffect(() => {
+    if (!context && !projectMenu) return;
+    const close = () => {
+      setContext(null);
+      setProjectMenu(false);
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    window.addEventListener("click", close);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [context, projectMenu]);
+
+  function showModal(next: Modal) {
+    setContext(null);
+    setModalError(null);
+    setValue(
+      next.kind === "rename"
+        ? next.entry.name
+        : next.kind === "create"
+          ? next.folder
+            ? "New folder"
+            : "untitled.strudel"
+          : "",
+    );
+    setModal(next);
+  }
+
+  async function refresh() {
+    setProject(await api.current());
+  }
+
+  async function move(from: string, to: string) {
+    await flush();
+    await api.move(from, to);
+    const current = documentRef.current;
+    if (current && isWithin(current.path, from)) {
+      updateDocument({
+        ...current,
+        path: to + current.path.slice(from.length),
+      });
+    }
+    setSelection(null);
+    await refresh();
+  }
+
+  async function switchProject(create: boolean) {
+    await run(async () => {
+      await flush();
+      const next = await (create ? api.create() : api.open());
+      if (!next) return;
+      await player.current?.stop();
+      updateDocument(null);
+      setPlayback({ started: false, pending: false });
+      setProject(next);
+      setSearch("");
+      setSelection(null);
+      const first = next.entries.find((entry) => !entry.children);
+      if (first) {
+        const code = await api.read(first.id);
+        updateDocument({ path: first.id, code, saved: code });
+      }
+    });
+  }
+
+  async function submitModal() {
+    if (!modal || busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    setModalError(null);
+    try {
+      if (modal.kind === "create") {
+        await flush();
+        const path = await api.add(modal.parent, value, modal.folder);
+        await refresh();
+        if (!modal.folder) {
+          await player.current?.stop();
+          const code = await api.read(path);
+          updateDocument({ path, code, saved: code });
+        }
+      } else if (modal.kind === "reload") {
+        const current = documentRef.current;
+        if (current) {
+          const code = await api.read(current.path);
+          await player.current?.stop();
+          updateDocument({ path: current.path, code, saved: code });
+          setEditorVersion((version) => version + 1);
+          setPlayback({ started: false, pending: false });
+          setSavedStatus("Saved locally");
+          setError(null);
+        }
+      } else if (modal.kind === "rename") {
+        if (value.includes("/"))
+          throw new Error("Enter a name without slashes.");
+        await move(modal.entry.id, joinPath(parentPath(modal.entry.id), value));
+      } else if (modal.kind === "move") {
+        await move(modal.entry.id, joinPath(value, modal.entry.name));
+      } else if (modal.kind === "delete") {
+        await flush();
+        await api.trash(modal.entry.id);
+        if (
+          documentRef.current &&
+          isWithin(documentRef.current.path, modal.entry.id)
+        ) {
+          await player.current?.stop();
+          updateDocument(null);
+          setPlayback({ started: false, pending: false });
+        }
+        setSelection(null);
+        await refresh();
+      }
+      setModal(null);
+    } catch (error) {
+      setModalError(message(error));
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }
+
+  const destination = selection?.children
+    ? selection.id
+    : selection
+      ? parentPath(selection.id)
+      : "";
+  const filename = document?.path.split("/").at(-1);
+  const dirty = document?.code !== document?.saved;
+  const folders = (entries: Entry[]): Entry[] =>
+    entries.flatMap((entry) =>
+      entry.children ? [entry, ...folders(entry.children)] : [],
+    );
+  const shortcut = navigator.platform.includes("Mac") ? "⌘" : "Ctrl";
+
+  return (
+    <div className={`app ${sidebar ? "" : "sidebar-hidden"}`}>
+      <div className="titlebar">
+        <div className="titlebar-sidebar">
+          <span className="app-name">
+            wien<span className="wordmark-dot">.</span>
+          </span>
+          <button
+            className="icon-button"
+            type="button"
+            title={`Toggle sidebar (${shortcut} B)`}
+            aria-label="Toggle sidebar"
+            onClick={() => setSidebar(!sidebar)}
+          >
+            {sidebar ? (
+              <PanelLeftClose size={17} />
+            ) : (
+              <PanelLeftOpen size={17} />
+            )}
+          </button>
+        </div>
+        <div className="titlebar-main">
+          <span>Music workspace</span>
+          <span className="prototype-label">LOCAL</span>
+        </div>
+      </div>
+
+      {sidebar && (
+        <aside className="sidebar">
+          <div className="project-picker-wrap">
+            <button
+              className="project-picker"
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                setProjectMenu(!projectMenu);
+              }}
+              disabled={busy}
+            >
+              <span className="project-avatar">
+                <Code2 size={18} />
+              </span>
+              <span>
+                <strong>{project?.name ?? "Opening workspace…"}</strong>
+                <small>Personal project</small>
+              </span>
+              <ChevronDown size={14} />
+            </button>
+            {projectMenu && (
+              <div className="menu project-menu">
+                <button type="button" onClick={() => void switchProject(true)}>
+                  <Plus size={15} />
+                  New project
+                </button>
+                <button type="button" onClick={() => void switchProject(false)}>
+                  <FolderOpen size={15} />
+                  Open project…
+                </button>
+                <div className="menu-divider" />
+                <button
+                  type="button"
+                  onClick={() =>
+                    void api.reveal().catch((error) => setError(message(error)))
+                  }
+                >
+                  <ArrowRight size={15} />
+                  Show project folder
+                </button>
+              </div>
+            )}
+          </div>
+          <label className="search-box">
+            <Search size={14} />
+            <input
+              aria-label="Find a snippet"
+              placeholder="Find a snippet…"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+            {search && (
+              <button
+                className="icon-button"
+                type="button"
+                aria-label="Clear search"
+                onClick={() => setSearch("")}
+              >
+                <X size={12} />
+              </button>
+            )}
+          </label>
+          <div className="section-heading">
+            <span>Files</span>
+            <div>
+              <button
+                className="icon-button"
+                type="button"
+                title="Refresh files"
+                aria-label="Refresh files"
+                disabled={busy}
+                onClick={() => void run(refresh)}
+              >
+                <RefreshCw size={13} />
+              </button>
+              <button
+                className="icon-button"
+                type="button"
+                title="New snippet"
+                aria-label="New snippet"
+                disabled={busy}
+                onClick={() =>
+                  showModal({
+                    kind: "create",
+                    parent: destination,
+                    folder: false,
+                  })
+                }
+              >
+                <FilePlus2 size={15} />
+              </button>
+              <button
+                className="icon-button"
+                type="button"
+                title="New folder"
+                aria-label="New folder"
+                disabled={busy}
+                onClick={() =>
+                  showModal({
+                    kind: "create",
+                    parent: destination,
+                    folder: true,
+                  })
+                }
+              >
+                <FolderPlus size={15} />
+              </button>
+            </div>
+          </div>
+          <Explorer
+            entries={project?.entries ?? []}
+            selected={document?.path ?? null}
+            search={search}
+            disabled={busy}
+            onOpen={(path) => void openFile(path)}
+            onSelect={setSelection}
+            onRename={(path, name) =>
+              run(() => move(path, joinPath(parentPath(path), name)))
+            }
+            onMove={(paths, parent) =>
+              run(async () => {
+                for (const path of paths)
+                  await move(
+                    path,
+                    joinPath(parent, path.split("/").at(-1) ?? path),
+                  );
+              })
+            }
+            onMenu={(entry, x, y) =>
+              setContext({
+                entry,
+                x: Math.min(x, window.innerWidth - 210),
+                y: Math.min(y, window.innerHeight - 225),
+              })
+            }
+          />
+          <div className="sidebar-bottom">
+            <button
+              type="button"
+              className="local-project"
+              onClick={() =>
+                void api.reveal().catch((error) => setError(message(error)))
+              }
+              title={project?.root}
+            >
+              <HardDrive size={16} />
+              <span>
+                On your computer<small>Changes save automatically</small>
+              </span>
+              <ArrowRight size={13} />
+            </button>
+            <button
+              type="button"
+              className="help-button"
+              onClick={() => showModal({ kind: "help" })}
+            >
+              <CircleHelp size={14} />
+              Getting started<span>?</span>
+            </button>
+          </div>
+        </aside>
+      )}
+
+      <main className="workspace">
+        <header className="editor-toolbar">
+          <div className="file-heading">
+            {document ? (
+              <>
+                <FileCode2 size={17} />
+                <div>
+                  <strong>{filename}</strong>
+                  <span>
+                    {project?.name}
+                    {parentPath(document.path)
+                      ? ` / ${parentPath(document.path)}`
+                      : ""}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <span className="muted">Your next idea starts here</span>
+            )}
+          </div>
+          <div className="transport">
+            <button
+              type="button"
+              className="icon-button stop-button"
+              title={`Stop (${shortcut} .)`}
+              aria-label="Stop playback"
+              disabled={!playback.started}
+              onClick={stop}
+            >
+              <Square size={14} fill="currentColor" />
+            </button>
+            <button
+              type="button"
+              className="play-button"
+              disabled={!document || playback.pending || busy}
+              onClick={play}
+            >
+              {playback.pending ? (
+                <Loader2 size={14} className="spin" />
+              ) : (
+                <Play size={13} fill="currentColor" />
+              )}
+              <span>{playback.started ? "Update" : "Play"}</span>
+              <kbd>{shortcut} ↵</kbd>
+            </button>
+            <button
+              type="button"
+              className="icon-button"
+              title="Editor shortcuts"
+              aria-label="Editor shortcuts"
+              onClick={() => showModal({ kind: "help" })}
+            >
+              <MoreHorizontal size={18} />
+            </button>
+          </div>
+        </header>
+
+        {error && (
+          <div role="alert" className="error-banner">
+            <span>{error}</span>
+            {savedStatus === "Not saved" && (
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => showModal({ kind: "reload" })}
+              >
+                Reload file…
+              </button>
+            )}
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="Dismiss error"
+              onClick={() => setError(null)}
+            >
+              <X size={15} />
+            </button>
+          </div>
+        )}
+        {document ? (
+          <StrudelEditor
+            key={`${project?.root}/${document.path}/${editorVersion}`}
+            initialCode={document.code}
+            onChange={(code) => {
+              const current = documentRef.current;
+              if (current) {
+                updateDocument({ ...current, code });
+                setSavedStatus("Unsaved changes");
+              }
+            }}
+            onState={setPlayback}
+            onReady={(next) => {
+              player.current = next;
+            }}
+            onPosition={(line, column) => setPosition([line, column])}
+          />
+        ) : (
+          <div className="empty-state">
+            <div className="empty-icon">
+              <Code2 size={30} strokeWidth={1.2} />
+            </div>
+            <h1>Make room for a little music.</h1>
+            <p>
+              Open a snippet, or start with a few notes.
+              <br />
+              There’s no wrong place to begin.
+            </p>
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() =>
+                showModal({ kind: "create", parent: "", folder: false })
+              }
+            >
+              <Plus size={15} />
+              New snippet
+            </button>
+          </div>
+        )}
+        {playback.error && (
+          <div className="evaluation-error" role="alert">
+            <strong>Couldn’t run this code</strong>
+            <span>{playback.error.message}</span>
+            {playback.started && (
+              <small>The previous version is still playing.</small>
+            )}
+          </div>
+        )}
+        <div className="playback-strip">
+          <div
+            className={`playback-state ${playback.started ? "playing" : ""}`}
+          >
+            <span className="status-dot" />
+            <span>{playback.started ? "Playing" : "Ready when you are"}</span>
+            {playback.started && (
+              <span className="playing-file">{filename}</span>
+            )}
+          </div>
+          <span className="keyboard-hint">
+            {playback.started
+              ? "Edit, then update to hear your changes"
+              : "A few notes can go a long way"}
+            <kbd>{shortcut} ↵</kbd>
+          </span>
+        </div>
+        <footer className="statusbar">
+          <span className={savedStatus === "Not saved" ? "save-error" : ""}>
+            {savedStatus === "Saving…" ? (
+              <Loader2 size={12} className="spin" />
+            ) : dirty ? (
+              <span className="unsaved-dot" />
+            ) : (
+              <Check size={12} />
+            )}
+            {savedStatus}
+          </span>
+          <div>
+            <span>
+              Ln {position[0]}, Col {position[1]}
+            </span>
+            <span>UTF-8</span>
+            <span className="strudel-badge">Strudel</span>
+          </div>
+        </footer>
+      </main>
+
+      {context && (
+        <div
+          className="menu context-menu"
+          style={{ left: context.x, top: context.y }}
+        >
+          {context.entry.children && (
+            <>
+              <button
+                type="button"
+                onClick={() =>
+                  showModal({
+                    kind: "create",
+                    parent: context.entry.id,
+                    folder: false,
+                  })
+                }
+              >
+                <FilePlus2 size={14} />
+                New snippet
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  showModal({
+                    kind: "create",
+                    parent: context.entry.id,
+                    folder: true,
+                  })
+                }
+              >
+                <FolderPlus size={14} />
+                New folder
+              </button>
+              <div className="menu-divider" />
+            </>
+          )}
+          <button
+            type="button"
+            onClick={() => showModal({ kind: "rename", entry: context.entry })}
+          >
+            <Pencil size={14} />
+            Rename
+          </button>
+          <button
+            type="button"
+            onClick={() => showModal({ kind: "move", entry: context.entry })}
+          >
+            <ArrowRight size={14} />
+            Move to folder…
+          </button>
+          <button
+            type="button"
+            className="danger-text"
+            onClick={() => showModal({ kind: "delete", entry: context.entry })}
+          >
+            <Trash2 size={14} />
+            Move to Trash
+          </button>
+        </div>
+      )}
+
+      {modal && (
+        <Dialog
+          title={
+            modal.kind === "create"
+              ? modal.folder
+                ? "New folder"
+                : "New snippet"
+              : modal.kind === "reload"
+                ? "Reload from disk?"
+                : modal.kind === "rename"
+                  ? "Rename"
+                  : modal.kind === "move"
+                    ? "Move to folder"
+                    : modal.kind === "delete"
+                      ? "Move to Trash?"
+                      : "A place to play"
+          }
+          onClose={() => {
+            if (!busy) setModal(null);
+          }}
+        >
+          {modal.kind === "help" ? (
+            <div className="help-content">
+              <p>
+                Write Strudel code, play it, and follow the sound. Your snippets
+                are plain files on your computer.
+              </p>
+              <div>
+                <span>Play / update code</span>
+                <kbd>{shortcut} Enter</kbd>
+              </div>
+              <div>
+                <span>Stop playback</span>
+                <kbd>{shortcut} .</kbd>
+              </div>
+              <div>
+                <span>Save now</span>
+                <kbd>{shortcut} S</kbd>
+              </div>
+              <div>
+                <span>Toggle sidebar</span>
+                <kbd>{shortcut} B</kbd>
+              </div>
+              <p className="muted">
+                Drag snippets into folders to organize them. Starter sounds use
+                built-in synthesizers and work offline. Opening another snippet
+                stops playback.
+              </p>
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => setModal(null)}
+              >
+                Let’s make something
+                <ArrowRight size={14} />
+              </button>
+            </div>
+          ) : (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void submitModal();
+              }}
+            >
+              {modal.kind === "reload" ? (
+                <p>
+                  Unsaved edits will be discarded. Copy anything you want to
+                  keep before reloading the file from disk.
+                </p>
+              ) : modal.kind === "delete" ? (
+                <p>
+                  <strong>{modal.entry.name}</strong>
+                  {modal.entry.children ? " and everything inside it" : ""} will
+                  move to your computer’s Trash.
+                </p>
+              ) : modal.kind === "move" ? (
+                <>
+                  <label htmlFor="destination">Destination</label>
+                  <select
+                    id="destination"
+                    value={value}
+                    onChange={(event) => setValue(event.target.value)}
+                  >
+                    <option value="">Project root</option>
+                    {folders(project?.entries ?? [])
+                      .filter((entry) => !isWithin(entry.id, modal.entry.id))
+                      .map((entry) => (
+                        <option key={entry.id} value={entry.id}>
+                          {entry.id}
+                        </option>
+                      ))}
+                  </select>
+                </>
+              ) : (
+                <>
+                  <label htmlFor="item-name">
+                    {modal.kind === "create" && modal.folder
+                      ? "Folder name"
+                      : "Name"}
+                  </label>
+                  <input
+                    id="item-name"
+                    value={value}
+                    ref={(input) => {
+                      if (
+                        input &&
+                        window.document.activeElement?.tagName !== "INPUT"
+                      ) {
+                        input.focus();
+                        input.select();
+                      }
+                    }}
+                    onChange={(event) => setValue(event.target.value)}
+                    autoComplete="off"
+                  />
+                  <p className="field-hint">
+                    {modal.kind === "create"
+                      ? `In ${modal.parent || project?.name || "project root"}`
+                      : "Use .strudel or .js for snippets."}
+                  </p>
+                </>
+              )}
+              {modalError && (
+                <p role="alert" className="form-error">
+                  {modalError}
+                </p>
+              )}
+              <div className="dialog-actions">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={busy}
+                  onClick={() => setModal(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className={
+                    modal.kind === "delete" ? "danger-button" : "primary-button"
+                  }
+                  disabled={busy}
+                >
+                  {busy ? (
+                    <Loader2 size={14} className="spin" />
+                  ) : modal.kind === "delete" ? (
+                    <Trash2 size={14} />
+                  ) : (
+                    <ArrowDownToLine size={14} />
+                  )}
+                  {modal.kind === "create"
+                    ? "Create"
+                    : modal.kind === "delete"
+                      ? "Move to Trash"
+                      : modal.kind === "move"
+                        ? "Move"
+                        : modal.kind === "reload"
+                          ? "Discard and reload"
+                          : "Rename"}
+                </button>
+              </div>
+            </form>
+          )}
+        </Dialog>
+      )}
+    </div>
+  );
+}

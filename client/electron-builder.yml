@@ -1,0 +1,12 @@
+appId: studio.wien.app
+productName: Wien
+directories:
+  output: release
+files:
+  - out/**/*
+  - package.json
+mac:
+  category: public.app-category.music
+  identity: null
+asar: true
+npmRebuild: false

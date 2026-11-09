@@ -1,0 +1,25 @@
+import { contextBridge, ipcRenderer } from "electron";
+import type { WorkspaceApi } from "../shared/types";
+
+const api: WorkspaceApi = {
+  current: () => ipcRenderer.invoke("project:current"),
+  open: () => ipcRenderer.invoke("project:open"),
+  create: () => ipcRenderer.invoke("project:create"),
+  read: (path) => ipcRenderer.invoke("project:read", path),
+  save: (request) => ipcRenderer.invoke("project:save", request),
+  add: (parent, name, folder) =>
+    ipcRenderer.invoke("project:add", parent, name, folder),
+  move: (from, to) => ipcRenderer.invoke("project:move", from, to),
+  trash: (path) => ipcRenderer.invoke("project:trash", path),
+  reveal: () => ipcRenderer.invoke("project:reveal"),
+  close: () => ipcRenderer.send("app:close"),
+  onBeforeClose: (callback) => {
+    ipcRenderer.on("app:before-close", callback);
+    return () => {
+      ipcRenderer.removeListener("app:before-close", callback);
+    };
+  },
+  finishClose: () => ipcRenderer.send("app:close-ready"),
+};
+
+contextBridge.exposeInMainWorld("workspace", api);

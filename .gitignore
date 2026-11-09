@@ -1,0 +1,6 @@
+node_modules/
+client/out/
+client/release/
+.DS_Store
+*.log
+
