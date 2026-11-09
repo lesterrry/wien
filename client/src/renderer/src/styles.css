@@ -914,16 +914,16 @@ kbd {
   margin-bottom: 10px;
   border: 1px solid var(--color-border);
   border-radius: 9px;
-  background: var(--color-surface-raised);
-  padding: 9px 11px 13px;
+  padding: 7px 9px 10px;
 }
 .control-heading {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 6px;
+  margin-bottom: 6px;
 }
 .control-name {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 12px;
   overflow: hidden;
   white-space: nowrap;
@@ -939,8 +939,8 @@ kbd {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  padding: 6px 0 4px;
+  gap: 9px;
+  padding: 4px 0 2px;
 }
 .number-knob {
   width: 88px;
@@ -978,7 +978,7 @@ kbd {
 }
 .control-value {
   max-width: 100%;
-  color: var(--color-primary);
+  color: var(--color-secondary);
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
@@ -1013,7 +1013,7 @@ kbd {
     --controls-width: 0px;
   }
   .control-body {
-    gap: 8px;
+    gap: 6px;
   }
   .transport {
     gap: 5px;

@@ -7,9 +7,9 @@
   --color-surface-raised: #2c2d28;
 
   /* Content priority; primary also fills prominent buttons */
-  --color-primary: #dfdcd6;
+  --color-primary: #dfdbd6;
   --color-secondary: #b4afa8;
-  --color-muted: #898c80;
+  --color-muted: #8c8780;
 
   /* Brand and boundaries */
   --color-brand: #c6b8a4;
