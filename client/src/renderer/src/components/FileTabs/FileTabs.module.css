@@ -12,10 +12,11 @@
   padding: 9px 2px;
   overflow-x: auto;
   scrollbar-width: none;
-  -webkit-app-region: no-drag;
+  -webkit-app-region: drag;
 }
 
 .fileTab {
+  -webkit-app-region: no-drag;
   display: flex;
   align-items: center;
   flex-shrink: 0;
@@ -70,6 +71,7 @@
   flex-shrink: 0;
   width: 20px;
   height: 20px;
+  padding: 0;
   border-radius: 4px;
   color: var(--color-muted);
 }

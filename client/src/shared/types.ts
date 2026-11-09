@@ -35,6 +35,7 @@ export interface WorkspaceApi {
   close(): void;
   onBeforeClose(callback: () => void): () => void;
   finishClose(): void;
+  cancelClose(): void;
 }
 
 export const isWithin = (path: string, parent: string) =>

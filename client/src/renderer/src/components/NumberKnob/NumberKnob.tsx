@@ -8,9 +8,7 @@ const numberFormat = new Intl.NumberFormat("en-US", {
   useGrouping: false,
 });
 
-function stepFor(value: number) {
-  return 10 ** (Math.floor(Math.log10(Math.max(1, Math.abs(value)))) - 2);
-}
+const step = 0.01;
 
 export function NumberKnob({
   control,
@@ -28,7 +26,6 @@ export function NumberKnob({
     x: number;
     y: number;
     value: number;
-    step: number;
   } | null>(null);
   const change = (next: number) => {
     if (Number.isFinite(next)) onChange(name, Number(next.toFixed(5)));
@@ -68,7 +65,6 @@ export function NumberKnob({
               x: event.clientX,
               y: event.clientY,
               value,
-              step: stepFor(value),
             };
           }}
           onPointerMove={(event) => {
@@ -78,7 +74,7 @@ export function NumberKnob({
             change(
               start.value +
                 distance *
-                  start.step *
+                  step *
                   (event.shiftKey ? 0.1 : event.altKey ? 10 : 1),
             );
           }}
@@ -106,7 +102,7 @@ export function NumberKnob({
             change(
               value +
                 direction *
-                  stepFor(value) *
+                  step *
                   (event.shiftKey ? 0.1 : event.altKey ? 10 : 1),
             );
           }}

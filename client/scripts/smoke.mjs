@@ -111,6 +111,32 @@ note("c3*8").s("sine").gain(gain).lpf(cutoff).fast(speed)`);
   for (let i = 0; i < 5; i++) await gainKnob.press("ArrowDown");
   assert.match(await code.textContent(), /var gain = 0.15/);
   assert.equal(await page.evaluate(() => window.getIsStarted()), false);
+  const cutoffKnob = page.getByRole("spinbutton", {
+    name: "cutoff knob",
+    exact: true,
+  });
+  const angle = (knob) =>
+    knob
+      .locator("path")
+      .getAttribute("transform")
+      .then((value) => Number(/rotate\(([^ ]+)/.exec(value)[1]));
+  const cutoffAngleBefore = await angle(cutoffKnob);
+  const cutoffBounds = await cutoffKnob.boundingBox();
+  const cutoffX = cutoffBounds.x + cutoffBounds.width / 2;
+  const cutoffY = cutoffBounds.y + cutoffBounds.height / 2;
+  await page.mouse.move(cutoffX, cutoffY);
+  await page.mouse.down();
+  await page.mouse.move(cutoffX, cutoffY - 35, { steps: 20 });
+  await page.mouse.up();
+  assert.equal(await cutoffKnob.getAttribute("aria-valuenow"), "800.35");
+  const cutoffRotation =
+    ((await angle(cutoffKnob)) - cutoffAngleBefore + 360) % 360;
+  await cutoffKnob.press("ArrowUp");
+  assert.equal(await cutoffKnob.getAttribute("aria-valuenow"), "800.36");
+  await cutoffKnob.press("Shift+ArrowUp");
+  assert.equal(await cutoffKnob.getAttribute("aria-valuenow"), "800.361");
+  await cutoffKnob.press("Alt+ArrowUp");
+  assert.equal(await cutoffKnob.getAttribute("aria-valuenow"), "800.461");
   await page.getByRole("button", { name: /^Play/ }).click();
   await page.getByText("Playing", { exact: true }).waitFor();
   await page.waitForFunction(() => window.getTime() > 0.3);
@@ -162,12 +188,18 @@ note("c3*8").s("sine").gain(gain).lpf(cutoff).fast(speed)`);
     "Changing gain must restore real audio without Update",
   );
   const knobBounds = await gainKnob.boundingBox();
+  const gainAngleBefore = await angle(gainKnob);
   const knobX = knobBounds.x + knobBounds.width / 2;
   const knobY = knobBounds.y + knobBounds.height / 2;
   await page.mouse.move(knobX, knobY);
   await page.mouse.down();
   await page.mouse.move(knobX, knobY - 35, { steps: 20 });
   await page.mouse.up();
+  const gainRotation = ((await angle(gainKnob)) - gainAngleBefore + 360) % 360;
+  assert(
+    Math.abs(gainRotation - cutoffRotation) < 0.001,
+    "Large and fractional values must rotate at the same speed",
+  );
   await page.waitForFunction(() =>
     window
       .getPattern()

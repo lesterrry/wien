@@ -23,6 +23,7 @@ const api: WorkspaceApi = {
     };
   },
   finishClose: () => ipcRenderer.send("app:close-ready"),
+  cancelClose: () => ipcRenderer.send("app:close-cancelled"),
 };
 
 contextBridge.exposeInMainWorld("workspace", api);

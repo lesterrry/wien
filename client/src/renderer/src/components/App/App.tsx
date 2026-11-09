@@ -275,10 +275,19 @@ export function App() {
   useEffect(
     () =>
       api.onBeforeClose(() => {
+        if (busyRef.current) {
+          api.cancelClose();
+          return;
+        }
         void run(async () => {
-          await flush();
-          await player.current?.stop();
-          api.finishClose();
+          try {
+            await flush();
+            await player.current?.stop();
+            api.finishClose();
+          } catch (error) {
+            api.cancelClose();
+            throw error;
+          }
         });
       }),
     [flush, run],

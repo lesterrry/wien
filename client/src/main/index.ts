@@ -12,6 +12,8 @@ if (!app.isPackaged && process.env.WIEN_USER_DATA) {
 let window: BrowserWindow | null = null;
 let project: ProjectFs;
 let closing = false;
+let closePending = false;
+let quitting = false;
 
 const stateFile = () => path.join(app.getPath("userData"), "workspace.json");
 
@@ -114,15 +116,25 @@ function registerIpc() {
     if (event.sender === window?.webContents) window.close();
   });
   ipcMain.on("app:close-ready", (event) => {
-    if (event.sender === window?.webContents) {
+    if (event.sender === window?.webContents && closePending) {
+      closePending = false;
       closing = true;
-      window.close();
+      if (quitting) app.quit();
+      else window.close();
+    }
+  });
+  ipcMain.on("app:close-cancelled", (event) => {
+    if (event.sender === window?.webContents) {
+      closePending = false;
+      quitting = false;
     }
   });
 }
 
 function createWindow() {
   closing = false;
+  closePending = false;
+  quitting = false;
   window = new BrowserWindow({
     width: 1320,
     height: 870,
@@ -147,7 +159,10 @@ function createWindow() {
   window.on("close", (event) => {
     if (!closing && !window?.webContents.isDestroyed()) {
       event.preventDefault();
-      window?.webContents.send("app:before-close");
+      if (!closePending) {
+        closePending = true;
+        window?.webContents.send("app:before-close");
+      }
     }
   });
   window.on("closed", () => {
@@ -188,4 +203,13 @@ void app
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+
+app.on("before-quit", (event) => {
+  if (!window || closing || window.webContents.isDestroyed()) return;
+  // Keep Quit distinct from closing a macOS window: resume app.quit() after
+  // the renderer has saved, instead of only resuming window.close().
+  event.preventDefault();
+  quitting = true;
+  window.close();
 });
