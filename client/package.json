@@ -6,6 +6,7 @@
   "author": "Wien",
   "main": "out/main/index.js",
   "scripts": {
+    "postinstall": "install-electron",
     "dev": "electron-vite dev",
     "check": "biome check . && pnpm typecheck",
     "typecheck": "tsc --noEmit",

@@ -16,6 +16,11 @@ pnpm --dir client install
 just run-client
 ```
 
+`pnpm install` также скачивает исполняемый файл Electron через `postinstall`.
+Это нужно и в новом worktree: его `node_modules` устанавливаются отдельно.
+Если зависимости установлены с `--ignore-scripts`, выполни
+`pnpm --dir client exec install-electron` перед запуском.
+
 Открывать в VS Code нужно **корень репозитория**. Задача **Wien: Run client**
 запускает приложение из корня; default task **Wien: Run** также запускает сервер
 в соседнем терминале. Установите рекомендованное расширение **Biome**:
