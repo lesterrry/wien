@@ -48,6 +48,10 @@
   color: var(--color-brand);
 }
 
+.controlsEmpty code + code {
+  margin-top: 4px;
+}
+
 .controlsHint {
   padding: 15px 18px;
   font-size: 10px;

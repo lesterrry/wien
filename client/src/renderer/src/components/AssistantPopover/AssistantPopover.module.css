@@ -30,29 +30,43 @@
   }
 }
 
-.panel::after {
-  content: "";
+.rim {
   position: absolute;
-  inset: -1px;
+  inset: 0;
   padding: 1.5px;
   border-radius: inherit;
   pointer-events: none;
-  background: linear-gradient(
-    110deg,
-    transparent 10%,
-    var(--color-brand) 28%,
-    #eee6ff 38%,
-    #b9d5e6 48%,
-    var(--color-brand) 58%,
-    transparent 80%
-  );
-  background-size: 250% 100%;
+  overflow: hidden;
   mask:
     linear-gradient(#fff 0 0) content-box,
     linear-gradient(#fff 0 0);
   mask-composite: exclude;
   opacity: 0;
   transition: opacity 200ms;
+}
+
+/* The mask stays still; only the gradient layer rotates. Its first and last
+   frames coincide, without repainting background-position on every frame. */
+.rim::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(200%, 640px);
+  aspect-ratio: 1;
+  background: conic-gradient(
+    transparent 0deg,
+    var(--color-brand) 35deg,
+    #eee6ff 75deg,
+    #b9d5e6 105deg,
+    transparent 145deg 180deg,
+    var(--color-brand) 215deg,
+    #eee6ff 255deg,
+    #b9d5e6 285deg,
+    transparent 325deg 360deg
+  );
+  transform: translate(-50%, -50%);
+  animation: orbit 3.6s linear infinite paused;
 }
 
 .closing {
@@ -147,9 +161,13 @@
   color: var(--color-primary);
 }
 
-.thinking::after {
+.thinking .rim {
   opacity: 0.9;
-  animation: shimmer 2.4s linear infinite;
+}
+
+.thinking .rim::before {
+  animation-play-state: running;
+  will-change: transform;
 }
 
 .srOnly {
@@ -161,12 +179,12 @@
   white-space: nowrap;
 }
 
-@keyframes shimmer {
+@keyframes orbit {
   from {
-    background-position: 150% 0;
+    transform: translate(-50%, -50%) rotate(0turn);
   }
   to {
-    background-position: -100% 0;
+    transform: translate(-50%, -50%) rotate(1turn);
   }
 }
 
@@ -183,7 +201,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .panel,
-  .panel::after,
+  .rim,
+  .rim::before,
   .answer {
     animation: none;
     transition: none;

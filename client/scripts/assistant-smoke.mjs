@@ -46,6 +46,37 @@ try {
   const dialog = page.getByRole("dialog", { name: "Wien assistant" });
   const input = page.getByRole("textbox", { name: "Ask Wien" });
 
+  // The shortcut closes a toolbar-opened popover without moving it to the cursor.
+  await page.getByRole("button", { name: /^Ask Wien/ }).click();
+  await expect(input).toBeFocused();
+  await input.fill("Keep this draft");
+  const bottomTop = await dialog.evaluate((element) => element.style.top);
+  await input.press(`${mod}+,`);
+  await expect(dialog).toBeHidden();
+  const closing = page.locator('[data-assistant][aria-hidden="true"]');
+  if (await closing.count()) {
+    assert.equal(
+      await closing.evaluate((element) => element.style.top),
+      bottomTop,
+    );
+  }
+  await expect(code).toBeFocused();
+  await page.keyboard.press(`${mod}+,`);
+  await expect(input).toBeFocused();
+  await expect(input).toHaveValue("Keep this draft");
+  await input.fill("");
+  // Holding the shortcut must not repeatedly open and close the popover.
+  await input.dispatchEvent("keydown", {
+    key: ",",
+    code: "Comma",
+    repeat: true,
+    metaKey: mod === "Meta",
+    ctrlKey: mod === "Control",
+  });
+  await expect(dialog).toBeVisible();
+  await input.press(`${mod}+,`);
+  await expect(dialog).toBeHidden();
+
   await code.click();
   await page.keyboard.press(`${mod}+a`);
   await page.keyboard.press(`${mod}+,`);
@@ -78,7 +109,7 @@ try {
     )
     .toBe(edited);
   await page.screenshot({ path: path.join(temporary, "assistant.png") });
-  await input.press("Escape");
+  await input.press(`${mod}+,`);
   await expect(code).toBeFocused();
   await page.keyboard.press(`${mod}+z`);
   await expect(code).toHaveText(original.replaceAll("\n", ""));
@@ -165,7 +196,7 @@ try {
   await input.press("Enter");
   await expect.poll(() => calls.length).toBe(6);
   const late = reply;
-  await input.press("Escape");
+  await input.press(`${mod}+,`);
   late({ message: "Too late.", code: edited });
   await expect(dialog).toBeHidden();
   await expect(code).toHaveText('note("c2")');

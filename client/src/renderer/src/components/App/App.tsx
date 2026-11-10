@@ -307,7 +307,8 @@ export function App() {
       if (event.key === "," || event.code === "Comma") {
         event.preventDefault();
         event.stopPropagation();
-        if (!busyRef.current && !modal) player.current?.assist();
+        if (!event.repeat && !busyRef.current && !modal)
+          player.current?.assist();
         return;
       }
       if (
@@ -930,25 +931,6 @@ export function App() {
             )}
           </div>
         )}
-        <div className={styles.playbackStrip}>
-          <div
-            className={classNames(styles.playbackState, {
-              [styles.playing]: playback.started,
-            })}
-          >
-            <span className={styles.statusDot} />
-            <span>{playback.started ? "Playing" : "Ready when you are"}</span>
-            {playback.started && (
-              <span className={styles.playingFile}>{filename}</span>
-            )}
-          </div>
-          <span className={styles.keyboardHint}>
-            {playback.started
-              ? "Edit, then update to hear your changes"
-              : "A few notes can go a long way"}
-            <kbd>{shortcut} ↵</kbd>
-          </span>
-        </div>
         <footer className={styles.statusbar}>
           <span
             className={classNames({

@@ -92,7 +92,7 @@ try {
   await page.getByRole("button", { name: /^Update/ }).click();
   await page.getByText("Couldn’t run this code").waitFor({ state: "hidden" });
   await page.getByRole("button", { name: "Stop playback" }).click();
-  await page.getByText("Ready when you are").waitFor();
+  await page.getByRole("button", { name: /^Play/ }).waitFor();
 
   console.log("Checking numeric controls and reactive audio");
   await replaceCode(`var gain = 0.2;

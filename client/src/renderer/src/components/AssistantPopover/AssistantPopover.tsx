@@ -31,6 +31,8 @@ export function AssistantPopover({
 }) {
   const [open, setOpen] = useState(false);
   const [visible, setVisible] = useState(false);
+  const [activePlacement, setActivePlacement] =
+    useState<AssistantPlacement>("cursor");
   const [prompt, setPrompt] = useState("");
   const [answer, setAnswer] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -44,6 +46,7 @@ export function AssistantPopover({
   const input = useRef<HTMLTextAreaElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const request = useRef<string | null>(null);
+  const lastInvocation = useRef(0);
 
   const cancel = useCallback(() => {
     if (request.current) window.workspace.cancelAssist(request.current);
@@ -72,10 +75,16 @@ export function AssistantPopover({
   );
 
   useEffect(() => {
-    if (!invocation) return;
+    if (!invocation || invocation === lastInvocation.current) return;
+    lastInvocation.current = invocation;
+    if (open && placement === "cursor") {
+      close();
+      return;
+    }
+    setActivePlacement(placement);
     setVisible(true);
     setOpen(true);
-  }, [invocation]);
+  }, [invocation, open, placement, close]);
 
   useEffect(() => {
     if (disabled) close(false);
@@ -93,7 +102,7 @@ export function AssistantPopover({
 
   const place = useCallback(() => {
     if (!panel.current || !view.dom.isConnected) return;
-    if (placement === "bottom") {
+    if (activePlacement === "bottom") {
       const bounds = (
         view.dom.parentElement ?? view.dom
       ).getBoundingClientRect();
@@ -129,7 +138,7 @@ export function AssistantPopover({
         ),
       ),
     });
-  }, [view, placement]);
+  }, [view, activePlacement]);
 
   useLayoutEffect(() => {
     if (!visible || !invocation) return;
@@ -241,6 +250,7 @@ export function AssistantPopover({
       style={{ ...position, height: open ? undefined : closingHeight }}
       aria-busy={pending}
     >
+      <span className={styles.rim} aria-hidden="true" />
       {(answer || error) && (
         <div
           className={classNames(styles.answer, { [styles.error]: !!error })}

@@ -19,8 +19,6 @@ export function ControlsPanel({
   onChange: (name: string, value: number | boolean) => void;
   onIgnore: (name: string) => void;
 }) {
-  const hasNumber = controls.some((control) => control.kind === "number");
-  const hasBoolean = controls.some((control) => control.kind === "boolean");
   return (
     <aside className={styles.controlsPanel} aria-label="Snippet controls">
       <div className={styles.controlsTitle}>
@@ -70,21 +68,7 @@ export function ControlsPanel({
           </div>
         )}
       </div>
-      <div className={styles.controlsHint}>
-        {hasNumber && (
-          <>
-            Drag a knob to adjust · Shift for precision
-            <br />
-          </>
-        )}
-        {hasBoolean && (
-          <>
-            Press a switch to toggle
-            <br />
-          </>
-        )}
-        Changes are saved in your code.
-      </div>
+      <div className={styles.controlsHint}>Hold Shift for more precision</div>
     </aside>
   );
 }
