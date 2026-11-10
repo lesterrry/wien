@@ -1,5 +1,5 @@
 import { X } from "lucide-react";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import type { NumberControl } from "../../../../shared/controls";
 import styles from "./NumberKnob.module.css";
 
@@ -22,6 +22,7 @@ export function NumberKnob({
   onIgnore: (name: string) => void;
 }) {
   const { name, value } = control;
+  const knob = useRef<HTMLButtonElement>(null);
   const drag = useRef<{
     x: number;
     y: number;
@@ -30,6 +31,31 @@ export function NumberKnob({
   const change = (next: number) => {
     if (Number.isFinite(next)) onChange(name, Number(next.toFixed(5)));
   };
+  useEffect(() => {
+    const element = knob.current;
+    if (!element) return;
+    let currentValue = value;
+    const wheel = (event: WheelEvent) => {
+      if (disabled || event.ctrlKey || !event.deltaY || drag.current) return;
+      event.preventDefault();
+      // Normalize mouse notches and smooth trackpad scrolling to the same scale.
+      const distance =
+        event.deltaMode === WheelEvent.DOM_DELTA_LINE
+          ? event.deltaY / 3
+          : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+            ? event.deltaY
+            : event.deltaY / 100;
+      const next =
+        currentValue -
+        distance * step * 2 * (event.shiftKey ? 0.1 : event.altKey ? 10 : 1);
+      if (!Number.isFinite(next)) return;
+      currentValue = Number(next.toFixed(5));
+      onChange(name, currentValue);
+    };
+    // React wheel handlers are passive; a native listener lets us stop panel scrolling.
+    element.addEventListener("wheel", wheel, { passive: false });
+    return () => element.removeEventListener("wheel", wheel);
+  }, [disabled, name, onChange, value]);
   return (
     <div className={styles.numberControl}>
       <div className={styles.controlHeading}>
@@ -49,13 +75,14 @@ export function NumberKnob({
       </div>
       <div className={styles.controlBody}>
         <button
+          ref={knob}
           type="button"
           role="spinbutton"
           className={styles.numberKnob}
           aria-label={`${name} knob`}
           aria-valuenow={value}
           disabled={disabled}
-          title="Drag up or right to increase · Shift for fine adjustment"
+          title="Drag up/right or scroll up to increase · Shift for precision · Alt for faster adjustment"
           onPointerDown={(event) => {
             if (event.button !== 0) return;
             event.preventDefault();

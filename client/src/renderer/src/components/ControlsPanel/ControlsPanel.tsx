@@ -73,7 +73,7 @@ export function ControlsPanel({
       <div className={styles.controlsHint}>
         {hasNumber && (
           <>
-            Drag a knob to adjust · Shift for precision
+            Drag or scroll a knob · Shift for precision · Alt for speed
             <br />
           </>
         )}
