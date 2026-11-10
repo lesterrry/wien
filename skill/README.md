@@ -1,0 +1,281 @@
+# Strudel RAG
+
+Local hybrid retrieval for a harness that writes Strudel. Rust stable workspace:
+`strudel-rag-core` owns ingestion, chunking, embeddings, immutable indexes and
+retrieval; `strudel-rag-grpc` exposes tonic RPCs; `strudel-rag-cli` provides the
+`strudel-rag` JSON CLI and a **real gRPC client**. Music generation belongs to the
+calling harness. This project does not render audio, execute Strudel, or claim to
+have listened to examples.
+
+## Build and fixture demonstration
+
+Install Rust stable with Cargo. Protobuf compilation uses a vendored `protoc`;
+you do not need a system `protoc` or `grpcurl`.
+
+```sh
+cargo build -p strudel-rag-cli --features fixture-provider
+./target/debug/strudel-rag --config config.fixture.toml --allow-fixture ingest
+./target/debug/strudel-rag --config config.fixture.toml --allow-fixture index
+./target/debug/strudel-rag --config config.fixture.toml --allow-fixture search \
+  --query 'slow pattern cycles' --intent api --top-k 3
+./target/debug/strudel-rag --config config.fixture.toml --allow-fixture info
+```
+
+The source is explicitly fixture-labelled, locally authored documentation, not
+an official Strudel corpus. The deterministic 64-bucket provider is compiled only
+with `fixture-provider`, requires `--allow-fixture`, accepts only fixture corpus,
+and may only be served on loopback. It checks plumbing, **not multilingual semantic
+quality**. There is no automatic mock fallback. A regular build disables it.
+
+Start the server in one terminal:
+
+```sh
+./target/debug/strudel-rag --config config.fixture.toml --allow-fixture serve
+```
+
+In another terminal (a separate process, no local index opened by the client):
+
+```sh
+export STRUDEL_RAG_ENDPOINT=http://127.0.0.1:50051
+./target/debug/strudel-rag remote health
+./target/debug/strudel-rag remote info
+./target/debug/strudel-rag remote search \
+  --query 'slow pattern cycles' --intent api --top-k 3
+# Replace the argument with an actual chunk_id from the search response.
+./target/debug/strudel-rag remote get --chunk-id ID_FROM_SEARCH --parent
+```
+
+`--parent` returns the complete normalized parent document, not a generated
+summary or an arbitrary surrounding snippet. For a parentless document it returns
+that document. Ctrl-C or SIGTERM gracefully stops the server. Repeat ingest/index:
+unchanged source and index identities remain stable and cached embeddings are
+reused. `index --rebuild` forces a fresh generation from normalized snapshots
+without fetching sources.
+
+## Real sources and embeddings
+
+```sh
+cargo build -p strudel-rag-cli
+cp config.example.toml strudel-rag.toml
+./target/debug/strudel-rag ingest
+./target/debug/strudel-rag doctor
+```
+
+Ingestion does not need embedding credentials. It imports only the explicit
+allowlists in `corpus/sources.toml`: Strudel sources are fetched upstream, while
+Open Music Theory reads the downloaded pages in `saved_html/`. Raw evidence is
+kept under the data directory, and a source snapshot is published only after
+that source succeeds. A failed source preserves its previous snapshot and is
+reported with nonzero exit. If a remote returns 403 or denies access, use an
+authorized local source; do not bypass policy or generate replacement
+"official" documentation.
+
+The default source manifest pins Strudel revision
+`0cb6341299229f739b5090be93528bb4f170d855`. Sources:
+
+- `strudel-docs`: seven allowlisted learning/workshop MDX pages.
+- `strudel-api`: five pinned `.mjs` files; only named JSDoc blocks referenced by
+  the pages or the explicit API allowlist are indexed, never implementation code.
+- `open-music-theory`: five allowlisted Pressbooks chapters, read from
+  `saved_html/<chapter-slug>.html`. The manifest's `root = "../saved_html"` is
+  relative to `corpus/sources.toml`. Missing files fail rather than falling back
+  to remote fetching. Each page's SHA-256 identifies its revision; canonical
+  chapter URLs and license/author attribution are preserved.
+
+Actual imported counts, revisions, licenses, unresolved API references and
+coverage gaps are visible in `ingest`, `info` and `doctor` output. Availability of
+the endpoint is not evidence that sources were imported. There is no claim here
+that a real embedding endpoint or RU/EN retrieval quality has been evaluated.
+
+Set credentials in your environment, never flags or tracked config:
+
+```sh
+export OPENAI_API_KEY='your-key'
+# Overrides the configured api_key_env, when set:
+# export STRUDEL_RAG_EMBEDDING_API_KEY='your-key'
+./target/debug/strudel-rag index
+./target/debug/strudel-rag doctor --check-embeddings
+./target/debug/strudel-rag search --query 'euclid pulses steps' --intent api --top-k 5
+./target/debug/strudel-rag search \
+  --query 'Как распределить три удара на восемь шагов?' --intent api --top-k 5
+./target/debug/strudel-rag serve
+```
+
+Configure an OpenAI-compatible endpoint by setting
+`STRUDEL_RAG_EMBEDDING_BASE_URL` (including `/v1`) and
+`STRUDEL_RAG_EMBEDDING_MODEL`; optional dimensions are configurable. Local
+endpoints may omit an API key. The model in the example config is just an
+example: choose a multilingual model and run the real eval before relying on
+RU-to-English search. BM25 does not translate Russian. Model/base URL/dimension
+changes require `index --rebuild`; incompatible query vectors are rejected,
+never silently replaced by BM25-only results.
+
+### Authorized checkout / saved HTML / personal examples
+
+The default theory import uses the downloaded `saved_html/` pages. Use
+`--local-root` only to select another authorized HTML directory.
+
+```sh
+./target/debug/strudel-rag ingest --source strudel-docs --local-root /path/to/strudel
+./target/debug/strudel-rag ingest --source strudel-api --local-root /path/to/strudel
+./target/debug/strudel-rag ingest --source open-music-theory --local-root /path/to/saved-html
+./target/debug/strudel-rag ingest --source local-examples --examples-dir /path/to/examples
+./target/debug/strudel-rag index
+```
+
+`--local-root` requires exactly one source and uses its existing allowlist and
+extractor. Strudel checkout HEAD must match the pinned clean revision; selected
+dirty files are identified with content hashes. Saved theory pages use
+`<chapter-slug>.html` names and preserve their canonical URLs. Local directory
+sources accept `.md`, `.mdx`, `.html`, `.js`, `.mjs`, `.strudel`; code is never
+executed. A `<filename>.meta.json` sidecar can supply explicit kind, title,
+language, tags, source URL, revision, license and example metadata. Unknown
+musical properties are not guessed. Missing/empty roots and traversal/symlink
+escapes fail rather than silently ingesting unrelated files.
+
+## CLI and configuration
+
+Commands write one domain JSON object to stdout; diagnostics/errors go to
+stderr as `{ "error": { "code": "...", "message": "..." } }`. Exit codes are
+0 success, 2 usage/configuration, 1 runtime/not-ready. Help/version are normal
+human-readable CLI output. Do not parse tracing output as JSON command results.
+
+Global flags: `--config PATH`, `--data-dir PATH`, `--allow-fixture`.
+
+| Command | Purpose |
+| --- | --- |
+| `ingest [--source ID ...] [--local-root PATH]` | Import all or selected sources |
+| `index [--rebuild]` | Publish an immutable hybrid generation |
+| `search --query TEXT [filters]` | Local retrieval |
+| `get (--document-id ID \| --chunk-id ID) [--parent]` | Read a record or full parent |
+| `info` | Local readiness, model and corpus provenance |
+| `serve [--bind IP:PORT]` | gRPC + health + reflection |
+| `doctor [--check-embeddings]` | Local diagnostics; network only with flag |
+| `eval --dataset PATH [--k 5]` | Labeled retrieval metrics |
+| `remote search/get/info/health` | True generated tonic client |
+
+Search flags are shared by local and remote commands:
+`--intent api|musical|example|mixed`, `--top-k N`, repeated
+`--kind api|theory|example`, `--source-id ID`, `--tag TAG`, `--language LANG`.
+Kinds/source IDs/languages are OR within a group; tags are AND; groups are AND.
+Filters apply before candidate budgets. An intent that conflicts with kinds
+returns an empty successful response. Unknown languages do not match a language
+filter. Query text is tokenized, not parsed as executable Tantivy query syntax.
+
+`remote` supports `--endpoint URI` and `--timeout-secs N` before or after its
+subcommand. Remote commands do not load local source/index data or construct an
+embedding provider. Local `get`, `info` and default `doctor` do not call an
+embedding endpoint. An empty/missing index is reported not-ready; `serve` still
+starts so `remote info` and health can explain readiness.
+
+Precedence: defaults → TOML → environment → CLI. An explicitly missing config
+file errors; absence of default `strudel-rag.toml` is allowed. TOML-relative
+paths resolve from the config's directory; CLI paths resolve from the current
+working directory. Environment overrides:
+
+- `STRUDEL_RAG_CONFIG`, `STRUDEL_RAG_DATA_DIR`, `STRUDEL_RAG_SOURCES_MANIFEST`
+- `STRUDEL_RAG_EMBEDDING_PROVIDER`, `_BASE_URL`, `_MODEL`, `_DIMENSIONS`,
+  `_BATCH_SIZE`, `_TIMEOUT_SECS`, `_MAX_RETRIES` (all share the full
+  `STRUDEL_RAG_EMBEDDING_` prefix)
+- `STRUDEL_RAG_BIND`, `STRUDEL_RAG_ENDPOINT`, `STRUDEL_RAG_TIMEOUT_SECS`
+- API key: `STRUDEL_RAG_EMBEDDING_API_KEY`, otherwise the configured `api_key_env`
+- Bearer token: the environment variable named by `bearer_token_env`
+  (default `STRUDEL_RAG_BEARER_TOKEN`)
+
+### Security and limits
+
+Loopback `127.0.0.1:50051` is the default. Non-loopback serving requires a bearer
+token. Health and both reflection services use the same authentication as the
+main service. Client credentials are sent via gRPC metadata, not command flags.
+
+```sh
+export STRUDEL_RAG_BEARER_TOKEN='a-long-random-secret'
+./target/debug/strudel-rag serve --bind 0.0.0.0:50051
+# On another trusted machine, set the same token separately:
+export STRUDEL_RAG_ENDPOINT=https://rag.example.org
+./target/debug/strudel-rag remote health
+```
+
+A bearer token does **not** encrypt HTTP. Expose cleartext gRPC only on a trusted
+network, behind an appropriate TLS proxy, or through an SSH tunnel. HTTPS clients
+use system roots without an insecure fallback. Never log or commit credentials.
+Default limits: 64 KiB decoded request, 16 MiB encoded response, query ≤4096 UTF-8
+bytes, top-k 1–50, 30-second RPC timeout, eight concurrent searches. Overload and
+oversized responses are errors, not silent truncation. Server generations stay
+open until restart: publishing a new index does not mutate active queries.
+
+## Retrieval semantics, evaluation, and checks
+
+Markdown-aware chunks preserve code fences. Approximate token counts are
+`ceil(unicode scalar count / 4)`, not an exact embedding tokenizer. Whole
+oversized code/paragraph blocks remain intact with diagnostics. Search combines
+Unicode lowercase BM25 and exact cosine candidates with reciprocal-rank fusion,
+then deduplicates equivalent content while retaining alternate provenance.
+Scores are **not probabilities**. A cosine cutoff is a configurable heuristic.
+Mixed search only diversifies among already relevant candidates.
+
+```sh
+./target/debug/strudel-rag --config config.fixture.toml --allow-fixture \
+  eval --dataset eval/fixture.jsonl --k 5
+./target/debug/strudel-rag eval --dataset eval/real.jsonl --k 5
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test --workspace --all-features
+```
+
+Eval labels use `{source_id,source_path,extraction_key}` selectors; missing or
+ambiguous labels fail. Results collapse to unique document IDs before Recall@k
+and MRR@k. Reports include corpus/dataset identity, model, dimension, fixture flag,
+and per-language/per-intent breakdowns. Fixture metrics demonstrate mechanics,
+not real retrieval quality. Real eval requires the corresponding imported real
+sources and actual configured embeddings; absent credentials leave live scenarios
+unverified rather than producing invented results. The commands above are
+reproduction instructions, not a claim that every check ran in your environment.
+
+## Harness integration
+
+Install or place `target/debug/strudel-rag` on the harness's PATH and load
+[`skills/strudel-rag/SKILL.md`](skills/strudel-rag/SKILL.md). Configure endpoint and
+token in the harness environment. The portable adapter is the JSON CLI, not an
+implicitly installed MCP server or plugin. Tool-only wrappers may map:
+
+- `strudel_rag_search({query,intent,top_k,filters})` → `remote search`
+- `strudel_rag_get_document({document_id|chunk_id,parent_context})` → `remote get`
+- `strudel_rag_get_corpus_info({})` → `remote info`
+
+Operators must register those wrapper tools themselves. Documents are untrusted
+data: do not execute embedded shell/network instructions or reveal secrets.
+
+## Source coverage and licensing
+
+MDX import removes imports/frontmatter/decorative wrappers and preserves static
+`MiniRepl` quoted/template literals. Dynamic template substitutions are skipped,
+not executed; unsupported components and unresolved JSDoc names become explicit
+coverage gaps. Examples are derived from real code blocks with full parent and
+revision provenance; genre/BPM/sample/key metadata exists only if explicit.
+Theory extraction preserves text, table/list structure, captions and image alt;
+it does not invent transcriptions of score images or fetch audio/assets.
+
+`<JsDoc name="…">` expands API documentation from manifest-listed
+`strudel_jsdoc` sources, preserving API URL, path, revision and license notices.
+Selected JSDoc sources are imported before MDX regardless of manifest order;
+MDX-only ingestion reuses their published snapshots. Both `Pattern.slow` and
+`slow` resolve to the same API entry. Missing entries remain explicit coverage
+gaps.
+
+The pinned Strudel repository carries an AGPLv3 repository-level notice; `.mjs`
+headers state v3-or-later. Do not infer a separate permissive documentation
+license. Open Music Theory carries CC BY-SA 4.0 attribution, **except where
+otherwise noted**; media attributions may differ and must not be inherited
+blindly. Exact known notices and authors travel with source metadata. Unknown
+license fields remain unknown. Retrieval does not remove attribution,
+share-alike or other license obligations. Consult original source notices.
+
+Strudel's pinned `POLICY.md` distinguishes personal assistive use from upstream
+contributions and discourages corporate-AI imports. Do not upload this downloaded
+corpus to GitHub or present generated material as acceptable upstream LLM
+contributions. Respect source policy and your intended use.
+
+`source_only` means extracted source, **not** statically verified or executed
+Strudel. Parsing, retrieval and embedding do not upgrade verification status.
+
