@@ -10,6 +10,17 @@ export interface NumberControl {
   ignoreAt: number;
 }
 
+export interface BooleanControl {
+  kind: "boolean";
+  name: string;
+  value: boolean;
+  start: number;
+  end: number;
+  ignoreAt: number;
+}
+
+export type Control = NumberControl | BooleanControl;
+
 // Read constants without executing user code or guessing the type of a call.
 function numberValue(node: Expression): number | undefined {
   if (node.type === "Literal" && typeof node.value === "number")
@@ -46,8 +57,21 @@ function numberValue(node: Expression): number | undefined {
   }
 }
 
+// Read boolean literals, including `!` and parentheses, without evaluating user code.
+function booleanValue(node: Expression): boolean | undefined {
+  if (node.type === "Literal" && typeof node.value === "boolean")
+    return node.value;
+  if (node.type === "ParenthesizedExpression")
+    return booleanValue(node.expression);
+  if (node.type === "UnaryExpression" && node.operator === "!") {
+    const value = booleanValue(node.argument);
+    if (value === undefined) return;
+    return !value;
+  }
+}
+
 export function readControls(code: string): {
-  controls: NumberControl[];
+  controls: Control[];
   valid: boolean;
 } {
   const comments: Comment[] = [];
@@ -67,7 +91,7 @@ export function readControls(code: string): {
           comment.end <= position &&
           /^\s*$/.test(code.slice(comment.end, position)),
       );
-    const controls: NumberControl[] = [];
+    const controls: Control[] = [];
     const names = new Map<string, number>();
     for (const statement of ast.body) {
       const declaration =
@@ -81,20 +105,33 @@ export function readControls(code: string): {
         names.set(name, (names.get(name) ?? 0) + 1);
         if (!item.init || ignored(statement.start) || ignored(item.start))
           continue;
-        const value = numberValue(item.init);
-        if (value === undefined || !Number.isFinite(value)) continue;
-        controls.push({
-          kind: "number",
-          name,
-          value,
-          start: item.init.start,
-          end: item.init.end,
-          // In a comma declaration, annotate just this binding.
-          ignoreAt:
-            declaration.declarations.length === 1
-              ? statement.start
-              : item.start,
-        });
+        const start = item.init.start;
+        const end = item.init.end;
+        // In a comma declaration, annotate just this binding.
+        const ignoreAt =
+          declaration.declarations.length === 1 ? statement.start : item.start;
+        const numeric = numberValue(item.init);
+        if (numeric !== undefined && Number.isFinite(numeric)) {
+          controls.push({
+            kind: "number",
+            name,
+            value: numeric,
+            start,
+            end,
+            ignoreAt,
+          });
+          continue;
+        }
+        const flag = booleanValue(item.init);
+        if (flag !== undefined)
+          controls.push({
+            kind: "boolean",
+            name,
+            value: flag,
+            start,
+            end,
+            ignoreAt,
+          });
       }
     }
     return {
@@ -110,18 +147,26 @@ export function readControls(code: string): {
 export function changeControl(
   code: string,
   name: string,
-  value: number,
+  value: number | boolean,
 ): Edit | undefined {
-  if (!Number.isFinite(value)) return;
+  if (typeof value === "number" && !Number.isFinite(value)) return;
   const control = readControls(code).controls.find(
     (control) => control.name === name,
   );
   if (!control || Object.is(control.value, value)) return;
-  return {
-    start: control.start,
-    end: control.end,
-    text: Object.is(value, -0) ? "-0" : String(value),
-  };
+  // Only rewrite a binding whose kind matches the new value.
+  if (control.kind === "number" && typeof value === "number")
+    return {
+      start: control.start,
+      end: control.end,
+      text: Object.is(value, -0) ? "-0" : String(value),
+    };
+  if (control.kind === "boolean" && typeof value === "boolean")
+    return {
+      start: control.start,
+      end: control.end,
+      text: String(value),
+    };
 }
 
 export function ignoreControl(code: string, name: string): Edit | undefined {
