@@ -1,106 +1,135 @@
 .panel {
   position: fixed;
   z-index: 40;
-  width: min(400px, calc(100vw - 24px));
+  isolation: isolate;
+  width: min(440px, calc(100vw - 24px));
   max-height: calc(100vh - 84px);
-  overflow: auto;
-  padding: 12px;
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border-strong);
-  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 22%, transparent);
+  border-radius: 26px;
+  background:
+    linear-gradient(135deg, #ffffff12, transparent 42%, #ffffff04),
+    color-mix(in srgb, var(--color-surface) 74%, transparent);
+  backdrop-filter: blur(24px) saturate(150%);
   box-shadow:
-    0 16px 50px var(--color-overlay),
-    0 0 0 3px var(--color-brand-glow);
-  transform-origin: top left;
-  animation: appear 170ms ease-out;
+    inset 0 1px 0 #ffffff20,
+    inset 0 -1px 0 #ffffff08,
+    0 8px 32px #0004,
+    0 2px 6px #0002;
+  transform-origin: center;
   transition:
-    opacity 140ms,
-    transform 140ms;
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 180ms ease;
   -webkit-app-region: no-drag;
+}
+
+@starting-style {
+  .panel {
+    opacity: 0;
+    transform: scaleX(0.12);
+  }
+}
+
+.panel::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  padding: 1.5px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    110deg,
+    transparent 10%,
+    var(--color-brand) 28%,
+    #eee6ff 38%,
+    #b9d5e6 48%,
+    var(--color-brand) 58%,
+    transparent 80%
+  );
+  background-size: 250% 100%;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 200ms;
 }
 
 .closing {
   opacity: 0;
-  transform: translateY(-5px) scale(0.98);
+  transform: scaleX(0.12);
   pointer-events: none;
 }
 
-.heading {
+.closing > * {
+  opacity: 0;
+}
+
+.composer {
   display: flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--color-brand);
-  font-size: 12px;
-  margin-bottom: 10px;
-}
-
-.file {
-  margin-left: auto;
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--color-muted);
-  font-size: 11px;
-}
-
-.iconButton {
-  composes: iconButton from "../../styles/common.module.css";
-  width: 24px;
-  height: 24px;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 8px 10px 8px 19px;
 }
 
 .panel textarea {
-  width: 100%;
-  min-height: 52px;
-  max-height: 180px;
+  display: block;
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  min-height: 30px;
+  max-height: min(180px, 25vh);
   field-sizing: content;
   resize: none;
   border: 0;
-  padding: 0 3px;
+  padding: 5px 0;
   background: transparent;
   color: var(--color-primary);
   font: inherit;
-  line-height: 1.65;
+  line-height: 20px;
   outline: none;
 }
 
 .panel textarea::placeholder {
-  color: var(--color-muted);
+  color: var(--color-secondary);
 }
 
 .answer {
-  padding: 0 3px 12px;
-  margin-bottom: 12px;
-  border-bottom: 1px solid var(--color-border);
+  margin: 0 19px;
+  padding: 17px 0 13px;
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--color-primary) 12%, transparent);
   line-height: 1.65;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  max-height: 220px;
+  max-height: min(220px, 35vh);
   overflow: auto;
+  animation: answer-in 180ms ease-out;
 }
 
 .error {
   color: var(--color-danger);
 }
 
-.footer {
+.actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 8px;
-  color: var(--color-muted);
-  font-size: 11px;
+  gap: 5px;
+  flex-shrink: 0;
+  height: 30px;
 }
 
-.send {
+.send,
+.closeButton {
   display: grid;
   place-items: center;
   width: 28px;
   height: 28px;
   padding: 0;
   border-radius: 50%;
+}
+
+.send {
   color: var(--color-background);
   background: var(--color-primary);
 }
@@ -109,41 +138,53 @@
   background: var(--color-primary-hover);
 }
 
-.working {
+.closeButton {
   color: var(--color-secondary);
 }
 
-.working span {
-  animation: pulse 1s ease-in-out infinite alternate;
+.closeButton:hover {
+  background: #ffffff12;
+  color: var(--color-primary);
 }
 
-.thinking {
-  border-color: var(--color-brand);
+.thinking::after {
+  opacity: 0.9;
+  animation: shimmer 2.4s linear infinite;
 }
 
-@keyframes appear {
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+@keyframes answer-in {
   from {
     opacity: 0;
-    transform: translateY(-5px) scale(0.98);
+    filter: blur(3px);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes pulse {
-  from {
-    opacity: 0.2;
-  }
-  to {
-    opacity: 1;
+    filter: blur(0);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .panel,
-  .working span {
+  .panel::after,
+  .answer {
     animation: none;
     transition: none;
   }

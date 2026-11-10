@@ -1,7 +1,7 @@
 import { isolateHistory } from "@codemirror/commands";
 import type { EditorView } from "@codemirror/view";
 import classNames from "classnames";
-import { ArrowUp, Sparkles, Square, X } from "lucide-react";
+import { ArrowUp, Square, X } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -11,17 +11,22 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { parseModule } from "../../../../shared/modules";
+import { MarkdownAnswer } from "../MarkdownAnswer/MarkdownAnswer";
 import styles from "./AssistantPopover.module.css";
+
+export type AssistantPlacement = "cursor" | "bottom";
 
 export function AssistantPopover({
   view,
   path,
   invocation,
+  placement,
   disabled,
 }: {
   view: EditorView;
   path: string;
   invocation: number;
+  placement: AssistantPlacement;
   disabled: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -30,7 +35,12 @@ export function AssistantPopover({
   const [answer, setAnswer] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const [position, setPosition] = useState({ left: 0, top: 0 });
+  const [closingHeight, setClosingHeight] = useState<number>();
+  const [position, setPosition] = useState<{
+    left: number;
+    top: number;
+    width?: number;
+  }>({ left: 0, top: 0 });
   const input = useRef<HTMLTextAreaElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const request = useRef<string | null>(null);
@@ -43,6 +53,7 @@ export function AssistantPopover({
 
   const close = useCallback(
     (focus = true) => {
+      setClosingHeight(panel.current?.offsetHeight);
       cancel();
       setOpen(false);
       setAnswer(null);
@@ -72,7 +83,7 @@ export function AssistantPopover({
 
   useEffect(() => {
     if (open) return;
-    const timer = setTimeout(() => setVisible(false), 140);
+    const timer = setTimeout(() => setVisible(false), 220);
     return () => clearTimeout(timer);
   }, [open]);
 
@@ -82,10 +93,26 @@ export function AssistantPopover({
 
   const place = useCallback(() => {
     if (!panel.current || !view.dom.isConnected) return;
+    if (placement === "bottom") {
+      const bounds = (
+        view.dom.parentElement ?? view.dom
+      ).getBoundingClientRect();
+      const margin = 24;
+      const width = Math.min(440, Math.max(0, bounds.width - margin * 2));
+      setPosition({
+        width,
+        left: bounds.left + (bounds.width - width) / 2,
+        top: Math.max(
+          bounds.top + margin,
+          bounds.bottom - margin - panel.current.offsetHeight,
+        ),
+      });
+      return;
+    }
     const cursor = view.coordsAtPos(view.state.selection.main.head);
     const bounds = view.dom.getBoundingClientRect();
-    const width = panel.current?.offsetWidth ?? 400;
-    const height = panel.current?.offsetHeight ?? 220;
+    const width = panel.current.offsetWidth;
+    const height = panel.current.offsetHeight;
     setPosition({
       left: Math.max(
         12,
@@ -102,7 +129,7 @@ export function AssistantPopover({
         ),
       ),
     });
-  }, [view]);
+  }, [view, placement]);
 
   useLayoutEffect(() => {
     if (!visible || !invocation) return;
@@ -211,37 +238,23 @@ export function AssistantPopover({
         [styles.closing]: !open,
         [styles.thinking]: pending,
       })}
-      style={position}
+      style={{ ...position, height: open ? undefined : closingHeight }}
+      aria-busy={pending}
     >
-      <div className={styles.heading}>
-        <Sparkles size={14} />
-        <span>Assist</span>
-        <span className={styles.file}>{path.split("/").at(-1)}</span>
-        <button
-          type="button"
-          className={styles.iconButton}
-          aria-label="Close assistant"
-          onClick={() => close()}
-        >
-          <X size={14} />
-        </button>
-      </div>
-      {(answer || error || pending) && (
+      {(answer || error) && (
         <div
           className={classNames(styles.answer, { [styles.error]: !!error })}
           role={error ? "alert" : "status"}
           aria-live="polite"
         >
-          {pending ? (
-            <span className={styles.working}>
-              Working on it<span>…</span>
-            </span>
-          ) : (
-            error || answer
-          )}
+          {error || (answer && <MarkdownAnswer>{answer}</MarkdownAnswer>)}
         </div>
       )}
+      <span className={styles.srOnly} role="status">
+        {pending ? "Working on it…" : ""}
+      </span>
       <form
+        className={styles.composer}
         onSubmit={(event) => {
           event.preventDefault();
           void submit();
@@ -254,7 +267,7 @@ export function AssistantPopover({
           value={prompt}
           readOnly={pending}
           maxLength={16000}
-          rows={2}
+          rows={1}
           onChange={(event) => setPrompt(event.target.value)}
           onKeyDown={(event) => {
             if (
@@ -267,10 +280,7 @@ export function AssistantPopover({
             }
           }}
         />
-        <div className={styles.footer}>
-          <span>
-            Current file · <kbd>esc</kbd> to close
-          </span>
+        <div className={styles.actions}>
           {pending ? (
             <button
               type="button"
@@ -280,14 +290,24 @@ export function AssistantPopover({
             >
               <Square size={12} fill="currentColor" />
             </button>
-          ) : (
+          ) : prompt.trim() ? (
             <button
               type="submit"
               className={styles.send}
               aria-label="Send request"
-              disabled={!prompt.trim() || disabled}
+              disabled={disabled}
             >
               <ArrowUp size={17} />
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={styles.closeButton}
+              aria-label="Close assistant"
+              title="Close (Esc)"
+              onClick={() => close()}
+            >
+              <X size={14} />
             </button>
           )}
         </div>

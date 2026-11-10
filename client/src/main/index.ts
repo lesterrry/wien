@@ -2,6 +2,7 @@ import * as fs from "node:fs/promises";
 import path from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
 import type { AssistRequest } from "../shared/assistant";
+import { externalWebUrl } from "../shared/links";
 import type { SaveRequest } from "../shared/types";
 import { askAssistant } from "./assistant";
 import { ProjectFs } from "./project-fs";
@@ -128,6 +129,11 @@ function registerIpc() {
     project.trash(relative, shell.trashItem),
   );
   handle("project:reveal", () => shell.openPath(project.root));
+  handle("app:open-external-link", (value: string) => {
+    const url = externalWebUrl(value);
+    if (!url) throw new Error("Only HTTP and HTTPS links can be opened.");
+    return shell.openExternal(url);
+  });
   handle("project:open", async () => {
     if (!window) return null;
     const result = await dialog.showOpenDialog(window, {

@@ -17,6 +17,7 @@ const api: WorkspaceApi = {
   move: (from, to) => ipcRenderer.invoke("project:move", from, to),
   trash: (path) => ipcRenderer.invoke("project:trash", path),
   reveal: () => ipcRenderer.invoke("project:reveal"),
+  openExternalLink: (url) => ipcRenderer.invoke("app:open-external-link", url),
   close: () => ipcRenderer.send("app:close"),
   onBeforeClose: (callback) => {
     ipcRenderer.on("app:before-close", callback);

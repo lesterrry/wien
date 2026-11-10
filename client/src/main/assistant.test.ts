@@ -1,6 +1,33 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { externalWebUrl } from "../shared/links";
 import { askAssistant } from "./assistant";
+
+test("model links only open absolute HTTP(S) URLs without credentials", () => {
+  assert.equal(
+    externalWebUrl("https://strudel.cc/learn/"),
+    "https://strudel.cc/learn/",
+  );
+  assert.equal(
+    externalWebUrl("http://localhost:3001/docs"),
+    "http://localhost:3001/docs",
+  );
+  for (const value of [
+    null,
+    42,
+    "",
+    "/relative",
+    "#fragment",
+    "//example.com",
+    "javascript:alert(1)",
+    "data:text/html,x",
+    "file:///etc/passwd",
+    "vscode://file/test",
+    "https://user:password@example.com",
+  ]) {
+    assert.equal(externalWebUrl(value), null);
+  }
+});
 
 const request = {
   prompt: "Softer bass",

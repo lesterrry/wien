@@ -50,9 +50,7 @@ try {
   await page.keyboard.press(`${mod}+a`);
   await page.keyboard.press(`${mod}+,`);
   await expect(input).toBeFocused();
-  await expect(
-    page.getByRole("button", { name: "Send request" }),
-  ).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Send request" })).toBeHidden();
   await input.fill("Make a soft bass");
   await input.press("Shift+Enter");
   assert.equal(calls.length, 0);
@@ -90,8 +88,52 @@ try {
   await input.press("Enter");
   await expect.poll(() => calls.length).toBe(2);
   await expect(dialog).not.toContainText("A softer bass");
-  reply({ message: "It plays a repeating bass pattern.", code: null });
-  await expect(dialog).toContainText("It plays a repeating bass pattern.");
+  reply({
+    message: [
+      "It plays a **repeating bass** pattern with `gain(0.2)`.",
+      "",
+      "- Soft attack",
+      "- ~~Loud~~ Gentle release",
+      "",
+      "```js",
+      "stack(\n  note('a1'),\n  s('white')\n)",
+      "```",
+      "",
+      "| Control | Value |",
+      "| --- | --- |",
+      "| Gain | 0.2 |",
+      "",
+      "[Strudel](https://strudel.cc/learn/) [Unsafe](javascript:alert(1))",
+      "<script>window.__markdownExecuted = true</script>",
+      "![image description](https://example.invalid/image.png)",
+    ].join("\n"),
+    code: null,
+  });
+  await expect(dialog).toContainText(
+    "It plays a repeating bass pattern with gain(0.2).",
+  );
+  await expect(dialog.locator("strong")).toHaveText("repeating bass");
+  await expect(dialog.locator("li")).toHaveCount(2);
+  await expect(dialog.locator("del")).toHaveText("Loud");
+  assert.equal(
+    await dialog.locator("pre code").textContent(),
+    "stack(\n  note('a1'),\n  s('white')\n)\n",
+  );
+  await expect(dialog.locator("table td")).toHaveText(["Gain", "0.2"]);
+  await expect(dialog.getByRole("link", { name: "Strudel" })).toHaveAttribute(
+    "href",
+    "https://strudel.cc/learn/",
+  );
+  await expect(dialog.getByRole("link", { name: "Unsafe" })).toHaveCount(0);
+  await expect(dialog.locator("img, script")).toHaveCount(0);
+  assert.equal(await page.evaluate(() => window.__markdownExecuted), undefined);
+  await assert.rejects(
+    page.evaluate(() =>
+      window.workspace.openExternalLink("file:///etc/passwd"),
+    ),
+    /Only HTTP and HTTPS/,
+  );
+  await page.screenshot({ path: path.join(temporary, "markdown.png") });
   await expect(code).toHaveText(original.replaceAll("\n", ""));
 
   await input.fill("Bad syntax");

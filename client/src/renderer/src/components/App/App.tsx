@@ -802,7 +802,7 @@ export function App() {
               aria-label="Ask Wien"
               title={`Ask Wien (${shortcut} ,)`}
               disabled={!document || busy}
-              onClick={() => player.current?.assist()}
+              onClick={() => player.current?.assist("bottom")}
             >
               <Sparkles size={16} />
             </button>

@@ -35,6 +35,7 @@ export interface WorkspaceApi {
   move(from: string, to: string): Promise<void>;
   trash(path: string): Promise<void>;
   reveal(): Promise<void>;
+  openExternalLink(url: string): Promise<void>;
   close(): void;
   onBeforeClose(callback: () => void): () => void;
   finishClose(): void;

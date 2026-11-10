@@ -18,11 +18,14 @@ import { useDrop } from "react-dnd";
 import { changeControl, ignoreControl } from "../../../../shared/controls";
 import type { Entry } from "../../../../shared/types";
 import { compileGraph } from "../../module-compiler";
-import { AssistantPopover } from "../AssistantPopover/AssistantPopover";
+import {
+  type AssistantPlacement,
+  AssistantPopover,
+} from "../AssistantPopover/AssistantPopover";
 import styles from "./StrudelEditor.module.css";
 
 export interface Player {
-  assist(): void;
+  assist(placement?: AssistantPlacement): void;
   play(): Promise<void>;
   stop(): Promise<void>;
   replaceCode(code: string): void;
@@ -62,6 +65,8 @@ export function StrudelEditor({
 }) {
   const [view, setView] = useState<EditorView | null>(null);
   const [assistantInvocation, setAssistantInvocation] = useState(0);
+  const [assistantPlacement, setAssistantPlacement] =
+    useState<AssistantPlacement>("cursor");
   const root = useRef<HTMLDivElement>(null);
   const editor = useRef<EditorView | null>(null);
   const readOnly = useRef(new Compartment());
@@ -183,7 +188,10 @@ export function StrudelEditor({
       requested = null;
     };
     callbacks.current.onReady({
-      assist: () => setAssistantInvocation((value) => value + 1),
+      assist: (placement = "cursor") => {
+        setAssistantPlacement(placement);
+        setAssistantInvocation((value) => value + 1);
+      },
       play: () => evaluate(true),
       stop: () => {
         cancelLive();
@@ -256,6 +264,7 @@ export function StrudelEditor({
           view={view}
           path={path}
           invocation={assistantInvocation}
+          placement={assistantPlacement}
           disabled={disabled}
         />
       )}
