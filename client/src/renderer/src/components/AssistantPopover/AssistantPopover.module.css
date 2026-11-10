@@ -1,0 +1,150 @@
+.panel {
+  position: fixed;
+  z-index: 40;
+  width: min(400px, calc(100vw - 24px));
+  max-height: calc(100vh - 84px);
+  overflow: auto;
+  padding: 12px;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 16px;
+  box-shadow:
+    0 16px 50px var(--color-overlay),
+    0 0 0 3px var(--color-brand-glow);
+  transform-origin: top left;
+  animation: appear 170ms ease-out;
+  transition:
+    opacity 140ms,
+    transform 140ms;
+  -webkit-app-region: no-drag;
+}
+
+.closing {
+  opacity: 0;
+  transform: translateY(-5px) scale(0.98);
+  pointer-events: none;
+}
+
+.heading {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--color-brand);
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+
+.file {
+  margin-left: auto;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-muted);
+  font-size: 11px;
+}
+
+.iconButton {
+  composes: iconButton from "../../styles/common.module.css";
+  width: 24px;
+  height: 24px;
+}
+
+.panel textarea {
+  width: 100%;
+  min-height: 52px;
+  max-height: 180px;
+  field-sizing: content;
+  resize: none;
+  border: 0;
+  padding: 0 3px;
+  background: transparent;
+  color: var(--color-primary);
+  font: inherit;
+  line-height: 1.65;
+  outline: none;
+}
+
+.panel textarea::placeholder {
+  color: var(--color-muted);
+}
+
+.answer {
+  padding: 0 3px 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--color-border);
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.error {
+  color: var(--color-danger);
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  color: var(--color-muted);
+  font-size: 11px;
+}
+
+.send {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--color-background);
+  background: var(--color-primary);
+}
+
+.send:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+.working {
+  color: var(--color-secondary);
+}
+
+.working span {
+  animation: pulse 1s ease-in-out infinite alternate;
+}
+
+.thinking {
+  border-color: var(--color-brand);
+}
+
+@keyframes appear {
+  from {
+    opacity: 0;
+    transform: translateY(-5px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes pulse {
+  from {
+    opacity: 0.2;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel,
+  .working span {
+    animation: none;
+    transition: none;
+  }
+}

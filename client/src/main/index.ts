@@ -1,7 +1,9 @@
 import * as fs from "node:fs/promises";
 import path from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
+import type { AssistRequest } from "../shared/assistant";
 import type { SaveRequest } from "../shared/types";
+import { askAssistant } from "./assistant";
 import { ProjectFs } from "./project-fs";
 import { starterFiles } from "./starter";
 
@@ -14,6 +16,7 @@ let project: ProjectFs;
 let closing = false;
 let closePending = false;
 let quitting = false;
+let assistantRequest: { id: string; controller: AbortController } | null = null;
 
 const stateFile = () => path.join(app.getPath("userData"), "workspace.json");
 
@@ -60,6 +63,38 @@ async function initializeProject() {
 }
 
 function registerIpc() {
+  // Network requests must not block the serialized filesystem/autosave queue.
+  ipcMain.handle(
+    "assistant:send",
+    async (event, id: string, request: AssistRequest) => {
+      if (
+        event.sender !== window?.webContents ||
+        event.senderFrame !== window.webContents.mainFrame
+      )
+        throw new Error("Invalid assistant request.");
+      if (typeof id !== "string" || id.length > 100)
+        throw new Error("Invalid request ID.");
+      if (assistantRequest)
+        throw new Error("An assistant request is already running.");
+      const current = { id, controller: new AbortController() };
+      assistantRequest = current;
+      try {
+        return await askAssistant(request, current.controller.signal);
+      } finally {
+        if (assistantRequest === current) assistantRequest = null;
+      }
+    },
+  );
+  ipcMain.on("assistant:cancel", (event, id: string) => {
+    if (
+      event.sender === window?.webContents &&
+      event.senderFrame === window.webContents.mainFrame &&
+      assistantRequest?.id === id
+    ) {
+      assistantRequest.controller.abort();
+      assistantRequest = null;
+    }
+  });
   // Serialize IO so autosaves, renames and project switches cannot race.
   let queue: Promise<unknown> = Promise.resolve();
   const handle = (channel: string, action: (...args: never[]) => unknown) => {
@@ -166,6 +201,8 @@ function createWindow() {
     }
   });
   window.on("closed", () => {
+    assistantRequest?.controller.abort();
+    assistantRequest = null;
     window = null;
   });
   if (process.env.ELECTRON_RENDERER_URL) {

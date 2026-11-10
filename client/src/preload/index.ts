@@ -2,6 +2,8 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { WorkspaceApi } from "../shared/types";
 
 const api: WorkspaceApi = {
+  assist: (id, request) => ipcRenderer.invoke("assistant:send", id, request),
+  cancelAssist: (id) => ipcRenderer.send("assistant:cancel", id),
   current: () => ipcRenderer.invoke("project:current"),
   open: () => ipcRenderer.invoke("project:open"),
   create: () => ipcRenderer.invoke("project:create"),

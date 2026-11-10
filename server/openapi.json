@@ -28,6 +28,115 @@
         }
       }
     },
+    "/v1/assist": {
+      "post": {
+        "summary": "Ask the editor assistant; selection is context, edits replace the entire current file.",
+        "operationId": "assist",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistRequest"
+              },
+              "example": {
+                "file": {
+                  "content": "note(\"a1\").s(\"sawtooth\").gain(0.2)",
+                  "cursor": {
+                    "anchor": 0,
+                    "head": 10
+                  },
+                  "path": "first-light.strudel"
+                },
+                "prompt": "Make the bass softer. Reply briefly."
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Short answer and optional complete replacement code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid prompt, file or cursor offsets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Non-local browser origin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request body too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Provider usage limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Invalid or incomplete model response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Local Codex login required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Provider timeout",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/generate": {
       "post": {
         "summary": "Generate a completed text response using the server's configured provider.",
@@ -150,6 +259,82 @@
             "type": "string"
           }
         }
+      },
+      "AssistRequest": {
+        "type": "object",
+        "required": [
+          "prompt",
+          "file"
+        ],
+        "properties": {
+          "file": {
+            "$ref": "#/components/schemas/FileContext"
+          },
+          "prompt": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AssistResponse": {
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Entire replacement file, or null for an answer without an edit."
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Cursor": {
+        "type": "object",
+        "required": [
+          "anchor",
+          "head"
+        ],
+        "properties": {
+          "anchor": {
+            "type": "integer",
+            "description": "Zero-based UTF-16 offset. Different anchor/head values indicate a selection.",
+            "minimum": 0
+          },
+          "head": {
+            "type": "integer",
+            "description": "Zero-based UTF-16 offset of the active end of the selection (caret).",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
+      "FileContext": {
+        "type": "object",
+        "required": [
+          "path",
+          "content",
+          "cursor"
+        ],
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "cursor": {
+            "$ref": "#/components/schemas/Cursor"
+          },
+          "path": {
+            "type": "string",
+            "description": "Project-relative path; context only, never used for filesystem access."
+          }
+        },
+        "additionalProperties": false
       },
       "GenerateRequest": {
         "type": "object",

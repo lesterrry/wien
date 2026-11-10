@@ -24,6 +24,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Sparkles,
   Square,
   Trash2,
   X,
@@ -303,6 +304,18 @@ export function App() {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey)) return;
+      if (event.key === "," || event.code === "Comma") {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!busyRef.current && !modal) player.current?.assist();
+        return;
+      }
+      if (
+        event.target instanceof Element &&
+        event.target.closest("[data-assistant]") &&
+        event.key === "Enter"
+      )
+        return;
       if (event.key === "w") {
         event.preventDefault();
         event.stopPropagation();
@@ -330,7 +343,7 @@ export function App() {
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [closeTab, flush, play, stop]);
+  }, [closeTab, flush, play, stop, modal]);
 
   useEffect(() => {
     if (!context && !projectMenu) return;
@@ -785,6 +798,16 @@ export function App() {
           <div className={styles.transport}>
             <button
               type="button"
+              className={styles.iconButton}
+              aria-label="Ask Wien"
+              title={`Ask Wien (${shortcut} ,)`}
+              disabled={!document || busy}
+              onClick={() => player.current?.assist()}
+            >
+              <Sparkles size={16} />
+            </button>
+            <button
+              type="button"
               className={classNames(styles.iconButton, styles.stopButton)}
               title={`Stop (${shortcut} .)`}
               aria-label="Stop playback"
@@ -1074,6 +1097,10 @@ export function App() {
               <div>
                 <span>Stop playback</span>
                 <kbd>{shortcut} .</kbd>
+              </div>
+              <div>
+                <span>Ask Wien</span>
+                <kbd>{shortcut} ,</kbd>
               </div>
               <div>
                 <span>Save now</span>
