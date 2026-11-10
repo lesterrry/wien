@@ -1,6 +1,6 @@
 import type { ReplState } from "@strudel/codemirror";
 import { Loader2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type Control,
   changeControl,
@@ -53,11 +53,33 @@ export function ControllerPanel({
   );
   const [loading, setLoading] = useState(true);
 
-  // Collect every reachable .strudel file once per bound document.
+  // Latest code, readable from effects without adding it to a dependency
+  // array (which would otherwise re-fetch imports on every keystroke).
+  const codeRef = useRef(document.code);
+  useEffect(() => {
+    codeRef.current = document.code;
+  }, [document.code]);
+
+  // A stable string describing the current imports. It only
+  // changes when the import list changes — not when a knob edits a literal.
+  const importsKey = useMemo(() => {
+    try {
+      return importsOf(document.code, document.path)
+        .map((node) => String(node.source.value))
+        .join("|");
+    } catch {
+      return "";
+    }
+  }, [document.code, document.path]);
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     const load = async () => {
+      // importsKey is a dependency so the scan reruns only when the
+      // import list changes; codeRef.current keeps the body free of a
+      // `document.code` reference that would otherwise trigger re-fetching.
+      void importsKey;
       const result: Record<string, string> = {};
       const visited = new Set<string>([document.path]);
       const visit = async (path: string, code: string) => {
@@ -76,7 +98,7 @@ export function ControllerPanel({
         }
       };
       try {
-        await visit(document.path, document.code);
+        await visit(document.path, codeRef.current);
       } catch {
         // Defensive: never block the panel on a parse failure.
       }
@@ -89,7 +111,7 @@ export function ControllerPanel({
     return () => {
       cancelled = true;
     };
-  }, [document.path]);
+  }, [document.path, importsKey]);
 
   const sources = useMemo(
     () => ({ [document.path]: document.code, ...foreignSources }),
