@@ -19,6 +19,10 @@ run-server:
 build-server:
     cargo build --manifest-path server/Cargo.toml --locked --release
 
+# Export OpenAPI and generate VS Code HTTP requests
+generate:
+    bash server/scripts/generate-http.sh
+
 # Check lint, formatting, types, and run tests
 test:
     pnpm --dir client test

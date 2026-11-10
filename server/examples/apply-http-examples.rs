@@ -1,0 +1,58 @@
+//! Compatibility step for httpgenerator 1.1.0, which ignores JSON request examples.
+//! Routes, headers, variables, and filenames still come from httpgenerator.
+use std::{env, fs, io, path::Path};
+
+use serde_json::Value;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let args: Vec<_> = env::args_os().skip(1).collect();
+    if args.len() != 2 {
+        return Err("Usage: apply-http-examples <openapi.json> <http-directory>".into());
+    }
+    let spec: Value = serde_json::from_slice(&fs::read(&args[0])?)?;
+    for entry in fs::read_dir(&args[1])? {
+        let path = entry?.path();
+        if path
+            .extension()
+            .is_some_and(|extension| extension == "http")
+        {
+            apply_example(&spec, &path)?;
+        }
+    }
+    Ok(())
+}
+
+fn apply_example(spec: &Value, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let source = fs::read_to_string(path)?;
+    let lines: Vec<_> = source.lines().collect();
+    let invalid = || io::Error::other("Unexpected httpgenerator output format");
+    let (method, route) = lines
+        .iter()
+        .find_map(|line| line.strip_prefix("### Request: "))
+        .and_then(|request| request.split_once(' '))
+        .ok_or_else(invalid)?;
+    let media = &spec["paths"][route][method.to_ascii_lowercase()]["requestBody"]["content"]["application/json"];
+    let Some(example) = media.get("example") else {
+        fs::write(path, format!("{}\n", source.trim_end()))?;
+        return Ok(());
+    };
+    let request = lines
+        .iter()
+        .position(|line| line.starts_with(&format!("{method} ")))
+        .ok_or_else(invalid)?;
+    let end_headers = request
+        + 1
+        + lines[request + 1..]
+            .iter()
+            .position(|line| line.is_empty())
+            .ok_or_else(invalid)?;
+    fs::write(
+        path,
+        format!(
+            "{}\n\n{}\n",
+            lines[..end_headers].join("\n"),
+            serde_json::to_string_pretty(example)?
+        ),
+    )?;
+    Ok(())
+}

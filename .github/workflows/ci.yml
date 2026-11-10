@@ -71,5 +71,8 @@ jobs:
       - name: Test without credentials or external model calls
         run: cargo test --locked
 
+      - name: Check generated OpenAPI and HTTP requests
+        run: bash scripts/generate-http.sh --check
+
       - name: Build server
         run: cargo build --locked --release

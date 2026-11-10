@@ -8,6 +8,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
+use utoipa::openapi::{Info, OpenApi, Server};
 use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_swagger_ui::SwaggerUi;
 
@@ -58,26 +59,42 @@ impl IntoResponse for ApiError {
     }
 }
 
-pub fn router(provider: Arc<dyn Provider>) -> Router {
+fn documented_routes() -> (Router<Arc<dyn Provider>>, OpenApi) {
     let (router, mut spec) = OpenApiRouter::new()
         .routes(routes!(generate))
         .routes(routes!(health))
         .split_for_parts();
-    spec.info.title = "Wien local AI server".into();
-    spec.info.version = env!("CARGO_PKG_VERSION").into();
+    spec.info = Info::new("Wien local AI server", env!("CARGO_PKG_VERSION"));
+    spec.servers = Some(vec![Server::new("http://127.0.0.1:3001")]);
+    (router, spec)
+}
+
+/// The same contract as /openapi.json, without config, credentials, or a listening server.
+pub fn openapi() -> OpenApi {
+    documented_routes().1
+}
+
+pub fn router(provider: Arc<dyn Provider>) -> Router {
+    let (router, spec) = documented_routes();
     router
         .merge(SwaggerUi::new("/docs").url("/openapi.json", spec))
         .layer(DefaultBodyLimit::max(256 * 1024))
         .with_state(provider)
 }
 
-#[utoipa::path(get, path = "/health", responses((status = 200, description = "Server is running; does not probe model authentication", body = String)))]
+/// Check server health without calling the model.
+#[utoipa::path(get, path = "/health", responses((status = 200, description = "Server is running; does not probe model authentication", body = String, content_type = "text/plain")))]
 async fn health() -> &'static str {
     "ok"
 }
 
+/// Generate a completed text response using the server's configured provider.
 #[utoipa::path(
-    post, path = "/v1/generate", request_body = GenerateRequest,
+    post, path = "/v1/generate",
+    request_body(content = GenerateRequest, example = json!({
+        "text": "Hello!",
+        "options": {"model": "gpt-6.1-sol", "reasoning_effort": "low"}
+    })),
     responses(
         (status = 200, description = "Completed model response", body = ModelResponse),
         (status = 400, description = "Invalid JSON, text, model, or options", body = ApiError),

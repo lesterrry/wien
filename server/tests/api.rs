@@ -207,6 +207,7 @@ async fn serves_openapi_and_offline_swagger_without_credentials() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     let spec = json_body(response).await;
+    assert_eq!(spec, serde_json::to_value(api::openapi()).unwrap());
     assert!(spec["paths"]["/v1/generate"]["post"]["responses"]["200"].is_object());
     assert!(spec["components"]["schemas"]["ModelOptions"]["properties"]["model"].is_object());
     let schemas = spec["components"]["schemas"].as_object().unwrap();
@@ -233,4 +234,30 @@ async fn serves_openapi_and_offline_swagger_without_credentials() {
         assert_eq!(response.status(), StatusCode::OK, "{uri}");
     }
     assert_eq!(calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn generated_http_body_matches_openapi_example_and_is_accepted() {
+    let spec = serde_json::to_value(api::openapi()).unwrap();
+    let example = spec["paths"]["/v1/generate"]["post"]["requestBody"]["content"]["application/json"]["example"].clone();
+    assert!(
+        example["options"]["model"]
+            .as_str()
+            .is_some_and(|value| !value.is_empty())
+    );
+    let http = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/http/PostGenerate.http"
+    ))
+    .unwrap();
+    assert!(http.contains("POST {{baseUrl}}/v1/generate"));
+    let (_, body) = http.split_once("\n{").unwrap();
+    let generated: Value = serde_json::from_str(&format!("{{{body}")).unwrap();
+    assert_eq!(generated, example);
+    let (app, calls) = app(None);
+    assert_eq!(
+        app.oneshot(request(generated)).await.unwrap().status(),
+        StatusCode::OK
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
 }

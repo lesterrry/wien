@@ -21,6 +21,7 @@ just run-server
 - `just test` — линты, форматирование, типы и тесты клиента; rustfmt, Clippy и тесты сервера.
 - `just build-client` — `pnpm build` в `client`, результат в `client/out`.
 - `just build-server` — release-сборка в `server/target/release`.
+- `just generate` — экспорт OpenAPI и генерация `server/http/*.http` для REST Client в VS Code.
 
 Все pnpm-скрипты определены в [client/package.json](client/package.json).
 Дополнительные команды, упаковка `.app` и работа с проектами описаны
