@@ -7,8 +7,8 @@ test("recognizes finite top-level numbers, arithmetic and exported bindings with
   const code = `
 var speed = 2;
 let offset = -3.5;
-export const tempo = (108 / 4), power = 2 ** 3;
-const label = "var fake = 42", yes = true, infinite = 1 / 0;
+export const tempo = (108 / 4), power = 2 ** 3, yes = true;
+const label = "var fake = 42", infinite = 1 / 0;
 const call = (() => { throw new Error('must not execute') })();
 function voice() { var local = 12; }
 { let scoped = 30; }
@@ -22,6 +22,7 @@ const object = { value: 2 };
       ["offset", -3.5],
       ["tempo", 27],
       ["power", 8],
+      ["yes", true],
     ],
   );
 });

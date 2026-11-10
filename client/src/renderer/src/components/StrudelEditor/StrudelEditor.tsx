@@ -24,7 +24,7 @@ export interface Player {
   play(): Promise<void>;
   stop(): Promise<void>;
   replaceCode(code: string): void;
-  changeControl(name: string, value: number): void;
+  changeControl(name: string, value: number | boolean): void;
   ignoreControl(name: string): void;
 }
 

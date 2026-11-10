@@ -1,5 +1,6 @@
 import { SlidersHorizontal } from "lucide-react";
-import type { NumberControl } from "../../../../shared/controls";
+import type { Control } from "../../../../shared/controls";
+import { BooleanSwitch } from "../BooleanSwitch/BooleanSwitch";
 import { NumberKnob } from "../NumberKnob/NumberKnob";
 import styles from "./ControlsPanel.module.css";
 
@@ -11,13 +12,15 @@ export function ControlsPanel({
   onChange,
   onIgnore,
 }: {
-  controls: NumberControl[];
+  controls: Control[];
   valid: boolean;
   hasDocument: boolean;
   disabled: boolean;
-  onChange: (name: string, value: number) => void;
+  onChange: (name: string, value: number | boolean) => void;
   onIgnore: (name: string) => void;
 }) {
+  const hasNumber = controls.some((control) => control.kind === "number");
+  const hasBoolean = controls.some((control) => control.kind === "boolean");
   return (
     <aside className={styles.controlsPanel} aria-label="Snippet controls">
       <div className={styles.controlsTitle}>
@@ -26,15 +29,25 @@ export function ControlsPanel({
         <small>{controls.length}</small>
       </div>
       <div className={styles.controlsList}>
-        {controls.map((control) => (
-          <NumberKnob
-            key={control.name}
-            control={control}
-            disabled={disabled}
-            onChange={onChange}
-            onIgnore={onIgnore}
-          />
-        ))}
+        {controls.map((control) =>
+          control.kind === "number" ? (
+            <NumberKnob
+              key={control.name}
+              control={control}
+              disabled={disabled}
+              onChange={onChange}
+              onIgnore={onIgnore}
+            />
+          ) : (
+            <BooleanSwitch
+              key={control.name}
+              control={control}
+              disabled={disabled}
+              onChange={onChange}
+              onIgnore={onIgnore}
+            />
+          ),
+        )}
         {!controls.length && (
           <div className={styles.controlsEmpty}>
             <p>
@@ -47,9 +60,10 @@ export function ControlsPanel({
             {hasDocument && valid && (
               <>
                 <code>const gain = 0.3</code>
+                <code>const enabled = true</code>
                 <p>
-                  Use a number in a top-level var, let or const. It appears here
-                  automatically.
+                  Use a number or a boolean in a top-level var, let or const.
+                  Numbers appear as knobs, booleans as switches.
                 </p>
               </>
             )}
@@ -57,8 +71,18 @@ export function ControlsPanel({
         )}
       </div>
       <div className={styles.controlsHint}>
-        Drag to adjust · Shift for precision
-        <br />
+        {hasNumber && (
+          <>
+            Drag a knob to adjust · Shift for precision
+            <br />
+          </>
+        )}
+        {hasBoolean && (
+          <>
+            Press a switch to toggle
+            <br />
+          </>
+        )}
         Changes are saved in your code.
       </div>
     </aside>
