@@ -3,19 +3,35 @@
   "tasks": [
     {
       "label": "Wien: Run",
+      "dependsOn": ["Wien: Run client", "Wien: Run server"],
+      "dependsOrder": "parallel",
+      "problemMatcher": [],
+      "group": { "kind": "build", "isDefault": true }
+    },
+    {
+      "label": "Wien: Run client",
       "type": "shell",
-      "command": "just run",
+      "command": "just run-client",
       "options": {
         "cwd": "${workspaceFolder}"
       },
       "problemMatcher": [],
-      "group": {
-        "kind": "build",
-        "isDefault": true
-      },
       "presentation": {
         "reveal": "always",
-        "panel": "dedicated"
+        "panel": "dedicated",
+        "group": "wien-dev"
+      }
+    },
+    {
+      "label": "Wien: Run server",
+      "type": "shell",
+      "command": "just run-server",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": ["$rustc"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "wien-dev"
       }
     },
     {
@@ -32,9 +48,9 @@
       }
     },
     {
-      "label": "Wien: Build",
+      "label": "Wien: Build client",
       "type": "shell",
-      "command": "just build",
+      "command": "just build-client",
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -43,6 +59,13 @@
         "kind": "build",
         "isDefault": false
       }
+    },
+    {
+      "label": "Wien: Build server",
+      "type": "shell",
+      "command": "just build-server",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": ["$rustc"]
     }
   ]
 }
