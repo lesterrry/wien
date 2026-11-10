@@ -1,0 +1,71 @@
+use std::{fmt, path::Path};
+
+use serde::Deserialize;
+
+use crate::providers::ProviderKind;
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Config {
+    pub provider: ProviderKind,
+}
+
+impl Config {
+    pub fn load(path: &Path) -> Result<Self, ConfigError> {
+        let source = std::fs::read_to_string(path).map_err(|_| ConfigError::Read)?;
+        // Do not expose TOML snippets: an accidentally pasted credential must not reach logs.
+        toml::from_str(&source).map_err(|_| ConfigError::Invalid)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum ConfigError {
+    Read,
+    Invalid,
+}
+
+impl fmt::Display for ConfigError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Read => {
+                "Cannot read server config. Check server/config.toml or WIEN_SERVER_CONFIG."
+            }
+            Self::Invalid => {
+                "Invalid server TOML config. Expected provider = \"codex\" and no unknown fields."
+            }
+        })
+    }
+}
+
+impl std::error::Error for ConfigError {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn loads_checked_in_provider_config() {
+        let config =
+            Config::load(&Path::new(env!("CARGO_MANIFEST_DIR")).join("config.toml")).unwrap();
+        assert_eq!(config.provider, ProviderKind::Codex);
+    }
+
+    #[test]
+    fn invalid_or_missing_config_fails_without_fallback_or_content_leaks() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        assert_eq!(Config::load(&path).unwrap_err(), ConfigError::Read);
+        for source in [
+            "",
+            "provider = 'unknown'",
+            "provider = 42",
+            "provider = 'codex'\nsecret = 'test-only-secret'",
+            "provider = 'test-only-secret",
+        ] {
+            std::fs::write(&path, source).unwrap();
+            let error = Config::load(&path).unwrap_err();
+            assert_eq!(error, ConfigError::Invalid);
+            assert!(!format!("{error:?} {error}").contains("test-only-secret"));
+        }
+    }
+}

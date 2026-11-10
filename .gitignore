@@ -3,4 +3,16 @@ client/out/
 client/release/
 .DS_Store
 *.log
+server/target/
+
+# Local credentials must never enter the repository.
+.env
+.env.*
+!.env.example
+auth.json
+auth.*.json
+credentials.json
+.codex/
+*.pem
+*.key
 

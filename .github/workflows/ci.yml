@@ -45,3 +45,34 @@ jobs:
 
       - name: Build client
         run: pnpm build
+
+  server:
+    name: Server checks and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Lint
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+      - name: Test without credentials or external model calls
+        run: cargo test --locked
+
+      - name: Check generated OpenAPI and HTTP requests
+        run: bash scripts/generate-http.sh --check
+
+      - name: Build server
+        run: cargo build --locked --release
