@@ -4,6 +4,7 @@ import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type Control,
+  type ControlChange,
   changeControl,
   moveControl,
   readControls,
@@ -13,8 +14,7 @@ import {
   importsOf,
   resolveImport,
 } from "../../../../shared/modules";
-import { BooleanSwitch } from "../BooleanSwitch/BooleanSwitch";
-import { NumberKnob } from "../NumberKnob/NumberKnob";
+import { ControlInput } from "../ControlsPanel/ControlsPanel";
 import styles from "./ControllerPanel.module.css";
 
 const api = window.workspace;
@@ -50,7 +50,7 @@ export function ControllerPanel({
   playback: ReplState;
   disabled: boolean;
   /** Applies to the document that is currently bound to the editor. */
-  onChange: (name: string, value: number | boolean) => void;
+  onChange: (name: string, value: ControlChange) => void;
   /** Reorders a control in the bound document. */
   onMove: (
     name: string,
@@ -61,7 +61,7 @@ export function ControllerPanel({
   onForeignChange: (
     path: string,
     name: string,
-    value: number | boolean,
+    value: ControlChange,
   ) => Promise<void>;
   /** Reorders a control inside an imported file. Same-file only. */
   onForeignMove: (
@@ -163,7 +163,7 @@ export function ControllerPanel({
   async function handleChange(
     file: string,
     name: string,
-    value: number | boolean,
+    value: ControlChange,
   ) {
     if (file === document.path) {
       // Live edit through the editor so imports and history stay intact.
@@ -356,23 +356,13 @@ export function ControllerPanel({
                           setDrag(null);
                         }}
                       >
-                        {control.kind === "number" ? (
-                          <NumberKnob
-                            control={control}
-                            disabled={disabled}
-                            onChange={(name, value) =>
-                              void handleChange(file.path, name, value)
-                            }
-                          />
-                        ) : (
-                          <BooleanSwitch
-                            control={control}
-                            disabled={disabled}
-                            onChange={(name, value) =>
-                              void handleChange(file.path, name, value)
-                            }
-                          />
-                        )}
+                        <ControlInput
+                          control={control}
+                          disabled={disabled}
+                          onChange={(name, change) =>
+                            void handleChange(file.path, name, change)
+                          }
+                        />
                       </fieldset>
                     );
                   })}
