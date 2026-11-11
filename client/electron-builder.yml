@@ -2,12 +2,19 @@ appId: studio.wien.app
 productName: Wien
 directories:
   output: release
+  buildResources: resources
 files:
   - out/**/*
   - "!out/tests/**"
   - package.json
+  - resources/icon.png
 mac:
   category: public.app-category.music
+  icon: resources/icon.icns
   identity: null
+win:
+  icon: resources/icon.ico
+linux:
+  icon: resources/icon.png
 asar: true
 npmRebuild: false
