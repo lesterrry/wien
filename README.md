@@ -32,6 +32,9 @@ just run-server
 Default task **Wien: Run** (`⌘⇧B`) запускает обе части в соседних терминалах.
 Для сервера нужен stable Rust с компонентами rustfmt и clippy.
 
-GitHub Actions проверяет и собирает клиент и сервер отдельными jobs на каждый push
-и pull request. Используются оба lockfile; серверные тесты не требуют личных токенов
-или запросов к модели. Workflow также можно запустить вручную из вкладки Actions.
+GitHub Actions проверяет и собирает клиент, сервер и Rust workspace `skill/`
+отдельными jobs на каждый push и pull request. Используются lockfile каждого
+компонента. Для `skill/` запускаются rustfmt, Clippy и тесты со всеми features,
+production release-сборка CLI и fixture-сборка с проверкой ingest/index/search/eval.
+Тесты сервера и fixture-проверки skill не требуют личных токенов или запросов
+к внешней модели. Workflow также можно запустить вручную из вкладки Actions.
