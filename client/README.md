@@ -65,8 +65,29 @@ Developer ID и notarization для распространения здесь н
   продолжает играть предыдущий успешно запущенный код.
 - **On your computer** открывает папку проекта в файловом менеджере.
 
-Стартовые сниппеты используют встроенные синтезаторы и играют без сети.
-Внешние наборы сэмплов нужно подключать в коде через `samples(...)`.
+Стандартные банки Strudel подключаются автоматически при подготовке плеера:
+drum machines (включая `RolandTR808` и алиасы `TR808`, `TR909`), Uzu drumkit,
+Salamander piano, VCSL, mridangam, Uzu wavetables, стандартная подборка Dirt-Samples
+и GM soundfonts (`gm_piano` и другие). Например, без дополнительного `samples(...)`:
+
+```js
+s("bd sd,hh*8").bank("RolandTR808");
+```
+
+Карты звуков включены в сборку; аудиофайлы и soundfonts загружаются из сети только
+при первом воспроизведении соответствующего звука. Стартовые сниппеты используют
+встроенные синтезаторы и играют без сети. Пользовательские наборы по-прежнему
+подключаются через `samples(...)` и могут переопределять стандартные звуки.
+
+Снимок карт и алиасов находится в `src/renderer/src/standard-samples.json`;
+регистрация — в `standard-sounds.ts`. Источник состава банков и подборки
+Dirt-Samples — [prebake Strudel](https://codeberg.org/uzu/strudel/src/branch/main/website/src/repl/prebake.mjs)
+(AGPL-3.0-or-later); карты получены с `https://strudel.b-cdn.net/`.
+Для обновления снимка используйте JSON-карты из этого prebake и сохраняйте
+CDN base URL каждого банка. Сами аудиофайлы не входят в сборку; их лицензии
+указаны в исходных библиотеках (Salamander piano — CC BY 3.0, Alexander Holm;
+VCSL — CC0, Versilian Studios).
+
 AI пока не реализован.
 
 ## Контролы
