@@ -1,0 +1,210 @@
+.panel {
+  position: fixed;
+  z-index: 40;
+  isolation: isolate;
+  width: min(440px, calc(100vw - 24px));
+  max-height: calc(100vh - 84px);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 22%, transparent);
+  border-radius: 26px;
+  background:
+    linear-gradient(135deg, #ffffff12, transparent 42%, #ffffff04),
+    color-mix(in srgb, var(--color-surface) 74%, transparent);
+  backdrop-filter: blur(24px) saturate(150%);
+  box-shadow:
+    inset 0 1px 0 #ffffff20,
+    inset 0 -1px 0 #ffffff08,
+    0 8px 32px #0004,
+    0 2px 6px #0002;
+  transform-origin: center;
+  transition:
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 180ms ease;
+  -webkit-app-region: no-drag;
+}
+
+@starting-style {
+  .panel {
+    opacity: 0;
+    transform: scaleX(0.12);
+  }
+}
+
+.rim {
+  position: absolute;
+  inset: 0;
+  padding: 1.5px;
+  border-radius: inherit;
+  pointer-events: none;
+  overflow: hidden;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 200ms;
+}
+
+/* The mask stays still; only the gradient layer rotates. Its first and last
+   frames coincide, without repainting background-position on every frame. */
+.rim::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(200%, 640px);
+  aspect-ratio: 1;
+  background: conic-gradient(
+    transparent 0deg,
+    var(--color-brand) 35deg,
+    #eee6ff 75deg,
+    #b9d5e6 105deg,
+    transparent 145deg 180deg,
+    var(--color-brand) 215deg,
+    #eee6ff 255deg,
+    #b9d5e6 285deg,
+    transparent 325deg 360deg
+  );
+  transform: translate(-50%, -50%);
+  animation: orbit 3.6s linear infinite paused;
+}
+
+.closing {
+  opacity: 0;
+  transform: scaleX(0.12);
+  pointer-events: none;
+}
+
+.closing > * {
+  opacity: 0;
+}
+
+.composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 8px 10px 8px 19px;
+}
+
+.panel textarea {
+  display: block;
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  min-height: 30px;
+  max-height: min(180px, 25vh);
+  field-sizing: content;
+  resize: none;
+  border: 0;
+  padding: 5px 0;
+  background: transparent;
+  color: var(--color-primary);
+  font: inherit;
+  line-height: 20px;
+  outline: none;
+}
+
+.panel textarea::placeholder {
+  color: var(--color-secondary);
+}
+
+.answer {
+  margin: 0 19px;
+  padding: 17px 0 13px;
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--color-primary) 12%, transparent);
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: min(220px, 35vh);
+  overflow: auto;
+  animation: answer-in 180ms ease-out;
+}
+
+.error {
+  color: var(--color-danger);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  height: 30px;
+}
+
+.send,
+.closeButton {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.send {
+  color: var(--color-background);
+  background: var(--color-primary);
+}
+
+.send:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+.closeButton {
+  color: var(--color-secondary);
+}
+
+.closeButton:hover {
+  background: #ffffff12;
+  color: var(--color-primary);
+}
+
+.thinking .rim {
+  opacity: 0.9;
+}
+
+.thinking .rim::before {
+  animation-play-state: running;
+  will-change: transform;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@keyframes orbit {
+  from {
+    transform: translate(-50%, -50%) rotate(0turn);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(1turn);
+  }
+}
+
+@keyframes answer-in {
+  from {
+    opacity: 0;
+    filter: blur(3px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel,
+  .rim,
+  .rim::before,
+  .answer {
+    animation: none;
+    transition: none;
+  }
+}
