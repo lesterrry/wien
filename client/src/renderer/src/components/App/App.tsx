@@ -31,8 +31,12 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { changeControl, readControls } from "../../../../shared/controls";
-import { editSource, hasExports } from "../../../../shared/modules";
+import {
+  changeControl,
+  moveControl,
+  readControls,
+} from "../../../../shared/controls";
+import { type Edit, editSource, hasExports } from "../../../../shared/modules";
 import {
   type Entry,
   isWithin,
@@ -289,11 +293,16 @@ export function App() {
 
   const foreignSaves = useRef(new Map<string, Promise<void>>());
 
-  const saveForeign = useCallback(
-    (path: string, name: string, value: number | boolean): Promise<void> => {
-      // Serialize per file. Two concurrent read-then-save calls would
-      // otherwise both compute `expected` from the same disk snapshot,
-      // and the second would fail with "This file changed on disk".
+  // Serialize per-file read-then-save tasks. Two concurrent calls would
+  // otherwise both compute `expected` from the same disk snapshot, and
+  // the second would fail with "This file changed on disk". The transform
+  // returns `undefined` for no-ops (e.g. same value, self-move), which
+  // skip the save entirely.
+  const saveForeignEdit = useCallback(
+    (
+      path: string,
+      transform: (code: string) => Edit | undefined,
+    ): Promise<void> => {
       const owner = sessionsRef.current.find(
         (s) => s.document.path === documentRef.current?.path,
       );
@@ -303,7 +312,7 @@ export function App() {
         .then(async () => {
           await flush();
           const code = await api.read(path);
-          const edit = changeControl(code, name, value);
+          const edit = transform(code);
           if (!edit) return;
           const next = editSource(code, [edit]);
           await api.save({ path, content: next, expected: code });
@@ -348,6 +357,25 @@ export function App() {
       return task;
     },
     [documentRef, flush, patchSession, players, sessionsRef],
+  );
+
+  const saveForeign = useCallback(
+    (path: string, name: string, value: number | boolean): Promise<void> =>
+      saveForeignEdit(path, (code) => changeControl(code, name, value)),
+    [saveForeignEdit],
+  );
+
+  const saveForeignMove = useCallback(
+    (
+      path: string,
+      name: string,
+      targetName: string,
+      placement: "before" | "after",
+    ): Promise<void> =>
+      saveForeignEdit(path, (code) =>
+        moveControl(code, name, targetName, placement),
+      ),
+    [saveForeignEdit],
   );
 
   useEffect(() => {
@@ -1161,7 +1189,11 @@ export function App() {
             onChange={(name, value) =>
               player.current?.changeControl(name, value)
             }
+            onMove={(name, targetName, placement) =>
+              player.current?.moveControl(name, targetName, placement)
+            }
             onForeignChange={saveForeign}
+            onForeignMove={saveForeignMove}
             onError={setError}
           />
         )}
@@ -1210,6 +1242,9 @@ export function App() {
           disabled={busy}
           onChange={(name, value) => player.current?.changeControl(name, value)}
           onIgnore={(name) => player.current?.ignoreControl(name)}
+          onMove={(name, targetName, placement) =>
+            player.current?.moveControl(name, targetName, placement)
+          }
           onOpenController={() => setWorkspaceView("controls")}
         />
       )}

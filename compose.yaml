@@ -1,0 +1,21 @@
+services:
+  skill:
+    build:
+      context: ./skill
+      dockerfile: Dockerfile
+    init: true
+    restart: unless-stopped
+    environment:
+      STRUDEL_RAG_BEARER_TOKEN: ${STRUDEL_RAG_BEARER_TOKEN:?Set STRUDEL_RAG_BEARER_TOKEN in the environment or root .env}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      STRUDEL_RAG_EMBEDDING_API_KEY: ${STRUDEL_RAG_EMBEDDING_API_KEY:-}
+      STRUDEL_RAG_EMBEDDING_BASE_URL: ${STRUDEL_RAG_EMBEDDING_BASE_URL:-https://api.openai.com/v1/}
+      STRUDEL_RAG_EMBEDDING_MODEL: ${STRUDEL_RAG_EMBEDDING_MODEL:-text-embedding-3-small}
+    ports:
+      - "127.0.0.1:${STRUDEL_RAG_PORT:-50051}:50051"
+    volumes:
+      - skill-data:/var/lib/strudel-rag
+      - ./skill/saved_html:/app/saved_html:ro
+
+volumes:
+  skill-data:

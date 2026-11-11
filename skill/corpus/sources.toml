@@ -1,0 +1,47 @@
+# Curated, allowlisted upstream sources. Raw fetched material is not committed.
+# Strudel POLICY.md applies independently of retrieval and licensing.
+[[sources]]
+source_id = "strudel-docs"
+type = "strudel_repository"
+extractor = "strudel_mdx"
+revision = "0cb6341299229f739b5090be93528bb4f170d855"
+language = "en"
+fixture = false
+base_url = "https://codeberg.org/uzu/strudel/raw/commit/{revision}/{path}"
+paths = ["website/src/pages/learn/mini-notation.mdx", "website/src/pages/learn/time-modifiers.mdx", "website/src/pages/learn/tonal.mdx", "website/src/pages/learn/samples.mdx", "website/src/pages/learn/synths.mdx", "website/src/pages/learn/effects.mdx", "website/src/pages/workshop/first-sounds.mdx"]
+evidence_paths = ["LICENSE", "README.md", "POLICY.md"]
+[sources.license]
+name = "AGPL-3.0 (repository-level notice; no separate docs license asserted)"
+url = "https://codeberg.org/uzu/strudel/src/commit/0cb6341299229f739b5090be93528bb4f170d855/LICENSE"
+attribution = "Strudel contributors; consult pinned LICENSE and POLICY.md."
+
+[[sources]]
+source_id = "strudel-api"
+type = "strudel_repository"
+extractor = "strudel_jsdoc"
+revision = "0cb6341299229f739b5090be93528bb4f170d855"
+language = "en"
+fixture = false
+base_url = "https://codeberg.org/uzu/strudel/raw/commit/{revision}/{path}"
+paths = ["packages/core/pattern.mjs", "packages/core/euclid.mjs", "packages/core/controls.mjs", "packages/tonal/tonal.mjs", "packages/tonal/voicings.mjs"]
+reference_paths = ["website/src/pages/learn/mini-notation.mdx", "website/src/pages/learn/time-modifiers.mdx", "website/src/pages/learn/tonal.mdx", "website/src/pages/learn/samples.mdx", "website/src/pages/learn/synths.mdx", "website/src/pages/learn/effects.mdx", "website/src/pages/workshop/first-sounds.mdx"]
+api_names = ["s", "note", "n", "bank", "scale", "transpose", "scaleTranspose", "voicing", "voicings", "rootNotes", "lpf", "room", "gain", "chord"]
+[sources.license]
+name = "AGPL-3.0-or-later"
+url = "https://codeberg.org/uzu/strudel/src/commit/0cb6341299229f739b5090be93528bb4f170d855/LICENSE"
+attribution = "Strudel contributors; per-file copyright notices apply."
+
+[[sources]]
+source_id = "open-music-theory"
+type = "html_pages"
+extractor = "pressbooks"
+# Resolved relative to this manifest; chapter filenames follow the URL slugs.
+root = "../saved_html"
+language = "en"
+fixture = false
+urls = ["https://viva.pressbooks.pub/openmusictheory/chapter/rhythm-and-meter-in-pop-music/", "https://viva.pressbooks.pub/openmusictheory/chapter/intro-to-harmony/", "https://viva.pressbooks.pub/openmusictheory/chapter/species-counterpoint/", "https://viva.pressbooks.pub/openmusictheory/chapter/intro-to-form-in-popular-music/", "https://viva.pressbooks.pub/openmusictheory/chapter/formal-sections-in-general/"]
+[sources.license]
+name = "CC BY-SA 4.0, except where otherwise noted"
+url = "https://creativecommons.org/licenses/by-sa/4.0/"
+attribution = "Open Music Theory authors, as credited on each chapter; media licenses are independent."
+
