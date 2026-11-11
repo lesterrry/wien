@@ -14,10 +14,50 @@ import {
   flattenControlGroups,
   type PanelLayout,
 } from "../../../../shared/control-tree";
-import type { Control } from "../../../../shared/controls";
+import type {
+  Control,
+  ControlChange,
+  ControlValue,
+} from "../../../../shared/controls";
 import { BooleanSwitch } from "../BooleanSwitch/BooleanSwitch";
+import { EnumSwitch } from "../EnumSwitch/EnumSwitch";
+import { MultiSelect } from "../MultiSelect/MultiSelect";
 import { NumberKnob } from "../NumberKnob/NumberKnob";
+import { NumberSlider } from "../NumberSlider/NumberSlider";
 import styles from "./ControlsPanel.module.css";
+
+interface ControlCallbacks {
+  disabled: boolean;
+  onChange: (name: string, change: ControlChange) => void;
+  onIgnore?: (name: string) => void;
+}
+
+export function ControlInput({
+  control,
+  disabled,
+  onChange,
+  onIgnore,
+}: ControlCallbacks & { control: Control }) {
+  const props = { disabled, onIgnore };
+  const setValue = (name: string, value: ControlValue) =>
+    onChange(name, { type: "set", value });
+  switch (control.kind) {
+    case "multi-enum":
+      return <MultiSelect {...props} control={control} onChange={onChange} />;
+    case "enum":
+      return <EnumSwitch {...props} control={control} onChange={setValue} />;
+    case "slider":
+      return <NumberSlider {...props} control={control} onChange={setValue} />;
+    case "number":
+      return <NumberKnob {...props} control={control} onChange={setValue} />;
+    case "boolean":
+      return <BooleanSwitch {...props} control={control} onChange={setValue} />;
+    default: {
+      const unsupported: never = control;
+      throw new Error(`Unsupported control: ${unsupported}`);
+    }
+  }
+}
 
 type Menu = { x: number; y: number } & (
   | { kind: "control"; path: string; control: Control }
@@ -54,7 +94,7 @@ export function ControlsPanel({
   errors: Record<string, string>;
   onPin: () => void;
   onLayout: (layout: PanelLayout) => void;
-  onChange: (path: string, name: string, value: number | boolean) => void;
+  onChange: (path: string, name: string, change: ControlChange) => void;
   onIgnore: (path: string, name: string) => void;
   onDefinition: (path: string, name: string) => void;
   onMove: (
@@ -308,25 +348,14 @@ export function ControlsPanel({
                         });
                       }}
                     >
-                      {control.kind === "number" ? (
-                        <NumberKnob
-                          control={control}
-                          disabled={disabled}
-                          onChange={(name, value) =>
-                            onChange(group.path, name, value)
-                          }
-                          onIgnore={(name) => onIgnore(group.path, name)}
-                        />
-                      ) : (
-                        <BooleanSwitch
-                          control={control}
-                          disabled={disabled}
-                          onChange={(name, value) =>
-                            onChange(group.path, name, value)
-                          }
-                          onIgnore={(name) => onIgnore(group.path, name)}
-                        />
-                      )}
+                      <ControlInput
+                        control={control}
+                        disabled={disabled}
+                        onChange={(name, change) =>
+                          onChange(group.path, name, change)
+                        }
+                        onIgnore={(name) => onIgnore(group.path, name)}
+                      />
                       {error && (
                         <p role="alert" className={styles.issue}>
                           {error}

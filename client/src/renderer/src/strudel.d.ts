@@ -8,6 +8,7 @@ declare module "@strudel/codemirror" {
   export class StrudelMirror {
     constructor(options: {
       root: HTMLElement;
+      id?: string;
       initialCode: string;
       solo?: boolean;
       bgFill?: boolean;
@@ -23,6 +24,7 @@ declare module "@strudel/codemirror" {
     code: string;
     repl: {
       state: ReplState;
+      start(): Promise<void>;
       scheduler: { now(): number; cps: number };
     };
     evaluate(autostart?: boolean): Promise<void>;

@@ -19,7 +19,7 @@ test("recursive imports preserve file controls and share repeated sources withou
     "b.strudel":
       "import shared from './shared.strudel'; const enabled = true; export default shared;",
     "shared.strudel":
-      "const gain = 3; //@ignore\nconst hidden = 4; throw new Error('must not execute'); export default gain;",
+      "const gain = 3;\n//@ignore\nconst hidden = 4; throw new Error('must not execute'); export default gain;",
   };
   const calls: string[] = [];
   const tree = await readControlTree("master.strudel", async (path) => {
@@ -39,7 +39,10 @@ test("recursive imports preserve file controls and share repeated sources withou
     [...(controlSources(tree).get("gain") ?? [])],
     ["master.strudel", "a.strudel", "shared.strudel"],
   );
-  const edit = changeControl(sources[first.path], "gain", 9);
+  const edit = changeControl(sources[first.path], "gain", {
+    type: "set",
+    value: 9,
+  });
   assert(edit);
   sources[first.path] = editSource(sources[first.path], [edit]);
   const updated = await readControlTree(

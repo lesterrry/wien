@@ -22,15 +22,15 @@ try {
       console.log("renderer:", event.text().slice(0, 350));
   });
   const projectRoot = path.join(temporary, "projects", "First session");
+  await page.getByLabel("Strudel code editor").waitFor();
   await page
-    .getByLabel("Strudel code editor")
-    .filter({ visible: true })
-    .waitFor();
+    .getByRole("button", { name: "first-light.strudel", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Close controls-demo.strudel", exact: true })
+    .click();
   assert.match(
-    await page
-      .getByLabel("Strudel code editor")
-      .filter({ visible: true })
-      .textContent(),
+    await page.getByLabel("Strudel code editor").textContent(),
     /import glass from '\.\/instruments\/glass.strudel'/,
   );
   await page
@@ -74,12 +74,12 @@ try {
   assert(signal > 0.0001, `Expected real audio output, got ${signal}`);
   console.log("Audio signal peak:", signal);
 
-  const code = page.getByLabel("Strudel code editor").filter({ visible: true });
+  const code = page.getByLabel("Strudel code editor");
   async function replaceCode(value) {
     await page.waitForFunction(
       () =>
         document
-          .querySelector('[data-active="true"] .cm-content')
+          .querySelector('[aria-label="Strudel code editor"]')
           ?.getAttribute("contenteditable") === "true",
     );
     await code.click();
@@ -87,7 +87,7 @@ try {
     await page.keyboard.insertText(value);
     await page.waitForFunction(
       (expected) =>
-        document.querySelector('[data-active="true"] .cm-content')
+        document.querySelector('[aria-label="Strudel code editor"]')
           ?.textContent === expected.replaceAll("\n", ""),
       value,
     );
@@ -104,7 +104,7 @@ try {
 
   console.log("Checking numeric controls and reactive audio");
   await replaceCode(`var gain = 0.2;
-let cutoff = 800;
+let cutoff = 800.0;
 const speed = (2 / 2);
 note("c3*8").s("sine").gain(gain).lpf(cutoff).fast(speed)`);
   const gainValue = page.getByLabel("gain value", { exact: true });
@@ -223,19 +223,16 @@ note("c3*8").s("sine").gain(gain).lpf(cutoff).fast(speed)`);
   assert.equal(
     await page
       .getByRole("complementary", { name: "Snippet controls" })
-      .locator("input")
+      .locator('input:not([aria-label="Search controls"])')
       .count(),
-    1,
+    0,
   );
   await page
     .getByRole("button", { name: "Hide speed control", exact: true })
     .click();
-  assert.equal(
-    await page
-      .getByRole("spinbutton", { name: "speed knob", exact: true })
-      .count(),
-    0,
-  );
+  await expect(
+    page.getByRole("spinbutton", { name: "speed knob", exact: true }),
+  ).toHaveCount(0);
   assert.match(await code.textContent(), /\/\/@ignoreconst speed/);
   await code.click();
   await code.press(process.platform === "darwin" ? "Meta+z" : "Control+z");
@@ -252,7 +249,7 @@ note("c3*8").s("sine").gain(gain)`);
   await gainKnob.press("Shift+ArrowUp");
   assert.match(await code.textContent(), /gain = 0.12446/);
   const cutoffValue = page.getByLabel("cutoff value", { exact: true });
-  assert.equal(await cutoffValue.textContent(), "-123456.75");
+  await expect(cutoffValue).toHaveText("-123456.75");
   await page.getByRole("button", { name: "Toggle controls" }).click();
   assert.equal(
     await page.getByRole("complementary", { name: "Snippet controls" }).count(),
@@ -341,7 +338,7 @@ note("c3*8").s("sine").gain(gain)`);
     .click();
   await page.waitForFunction(() =>
     document
-      .querySelector('[data-active="true"] .cm-content')
+      .querySelector('[aria-label="Strudel code editor"]')
       ?.textContent.startsWith("export default "),
   );
   await page
@@ -354,7 +351,7 @@ note("c3*8").s("sine").gain(gain)`);
     .click();
   await page.waitForFunction(
     (expected) =>
-      document.querySelector('[data-active="true"] .cm-content')
+      document.querySelector('[aria-label="Strudel code editor"]')
         ?.textContent === expected,
     originalRoot,
   );
@@ -374,7 +371,7 @@ note("c3*8").s("sine").gain(gain)`);
   await glassFile.dragTo(code, { targetPosition: { x: 160, y: 15 } });
   await page.waitForFunction(() =>
     document
-      .querySelector('[data-active="true"] .cm-content')
+      .querySelector('[aria-label="Strudel code editor"]')
       ?.textContent.includes("import glass from './instruments/glass.strudel'"),
   );
   await page
@@ -441,7 +438,7 @@ note("c3*8").s("sine").gain(gain)`);
   );
   await page.waitForFunction(() =>
     document
-      .querySelector('[data-active="true"] .cm-content')
+      .querySelector('[aria-label="Strudel code editor"]')
       ?.textContent.includes("'./sketches/glass.strudel'"),
   );
   await fs.access(path.join(projectRoot, "sketches/glass.strudel"));
@@ -528,15 +525,11 @@ note("c3*8").s("sine").gain(gain)`);
   await page.getByRole("dialog").waitFor({ state: "hidden" });
   await assert.rejects(fs.access(path.join(projectRoot, "renamed-folder")));
   await page.reload();
+  await page.getByLabel("Strudel code editor").waitFor();
   await page
-    .getByLabel("Strudel code editor")
-    .filter({ visible: true })
-    .waitFor();
-  assert.equal(
-    await page
-      .getByLabel("Strudel code editor")
-      .filter({ visible: true })
-      .textContent(),
+    .getByRole("button", { name: "first-light.strudel", exact: true })
+    .click();
+  await expect(page.getByLabel("Strudel code editor")).toHaveText(
     'note("c3 e3 g3").s("triangle").gain(0.2)',
   );
   await replaceCode('note("f4").s("triangle")');

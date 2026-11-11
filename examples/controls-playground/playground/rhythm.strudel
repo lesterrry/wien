@@ -1,0 +1,7 @@
+// A nested composition. Hiding/collapsing this panel does not hide kick or hats.
+import kick from './kick.strudel'
+import hats from './hats.strudel'
+
+const enabled = true
+
+export default enabled ? stack(kick, hats) : silence

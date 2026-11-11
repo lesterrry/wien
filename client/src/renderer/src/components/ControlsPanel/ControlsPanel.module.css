@@ -42,6 +42,13 @@
   line-height: 1.7;
 }
 
+.controlError {
+  color: var(--color-danger);
+  font-size: 11px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
 .controlsEmpty code {
   display: block;
   padding: 9px;

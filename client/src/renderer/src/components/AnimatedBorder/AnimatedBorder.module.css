@@ -1,0 +1,63 @@
+.border {
+  position: absolute;
+  inset: var(--animated-border-inset, -1px);
+  padding: 1.5px;
+  border-radius: inherit;
+  pointer-events: none;
+  overflow: hidden;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 200ms;
+}
+
+.border::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(200%, var(--animated-border-min-size, 0px));
+  aspect-ratio: 1;
+  background: conic-gradient(
+    transparent 0deg,
+    var(--color-brand) 35deg,
+    #eee6ff 75deg,
+    #b9d5e6 105deg,
+    transparent 145deg 180deg,
+    var(--color-brand) 215deg,
+    #eee6ff 255deg,
+    #b9d5e6 285deg,
+    transparent 325deg 360deg
+  );
+  transform: translate(-50%, -50%);
+  animation: orbit 3.6s linear infinite paused;
+}
+
+.active {
+  opacity: 0.9;
+}
+
+.active::before {
+  animation-play-state: running;
+  will-change: transform;
+}
+
+@keyframes orbit {
+  from {
+    transform: translate(-50%, -50%) rotate(0turn);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(1turn);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .border {
+    transition: none;
+  }
+  .border::before {
+    animation: none;
+  }
+}

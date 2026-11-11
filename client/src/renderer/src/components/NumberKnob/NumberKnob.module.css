@@ -101,6 +101,15 @@
   text-overflow: ellipsis;
 }
 
+.bounds {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  color: var(--color-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
 @media (max-width: 1050px) {
   .controlBody {
     gap: 6px;

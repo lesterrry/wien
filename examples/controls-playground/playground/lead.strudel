@@ -1,0 +1,11 @@
+import { waveform, voiceDecay } from './tone.strudel'
+
+const leadGain = 0.1
+const leadPan = 0.2 // @slider -1..1
+const enabled = true
+
+export default note("<c4 eb4 g4 bb4>*2")
+  .s(waveform)
+  .attack(0.01).decay(voiceDecay).sustain(0.1).release(0.08)
+  .pan(leadPan)
+  .gain(enabled ? Math.max(0, leadGain) : 0)

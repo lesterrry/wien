@@ -41,7 +41,16 @@ export async function readControlTree(
       const code = await source;
       const result = readControls(code);
       group.controls = result.controls;
-      group.issues = result.issues;
+      group.issues = [
+        ...(result.issues ?? []),
+        ...(result.errors ?? []).map((error) => {
+          const separator = error.indexOf(":");
+          return {
+            name: separator > 0 ? error.slice(0, separator) : "Control",
+            message: separator > 0 ? error.slice(separator + 1).trim() : error,
+          };
+        }),
+      ];
       if (!result.valid) {
         group.error = "Finish editing this file to use its controls.";
         return group;

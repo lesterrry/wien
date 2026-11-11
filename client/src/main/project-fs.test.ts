@@ -169,6 +169,32 @@ test("failed links leave both files intact", async () => {
   }
 });
 
+test("moving and linking snippets preserves control annotations", async () => {
+  const { project, cleanup } = await fixture();
+  try {
+    await project.add("", "main.strudel", false);
+    await project.add("", "voice.strudel", false);
+    await project.save({
+      path: "main.strudel",
+      expected: await project.read("main.strudel"),
+      content: '//@slider\nconst gain = 0.2; note("c3").gain(gain)',
+    });
+    await project.link("voice.strudel", "main.strudel");
+    await project.move("voice.strudel", "bell.strudel");
+    await project.move("main.strudel", "track.strudel");
+    const code = await project.read("track.strudel");
+    assert.match(code, /\/\/@slider\nconst gain = 0.2/);
+    assert.match(code, /from '\.\/bell.strudel'/);
+    const graph = await project.graph("track.strudel", code);
+    assert.deepEqual(Object.keys(graph.sources), [
+      "bell.strudel",
+      "track.strudel",
+    ]);
+  } finally {
+    await cleanup();
+  }
+});
+
 test("a failed second write rolls back automatic export conversion", async () => {
   const { project, cleanup } = await fixture();
   try {

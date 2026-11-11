@@ -1,4 +1,3 @@
-import type { ReplState } from "@strudel/codemirror";
 import classNames from "classnames";
 import {
   ArrowDownToLine,
@@ -11,9 +10,9 @@ import {
   FilePlus2,
   FolderOpen,
   FolderPlus,
-  HardDrive,
   Loader2,
   MoreHorizontal,
+  Network,
   Package,
   PanelLeftClose,
   PanelLeftOpen,
@@ -27,6 +26,7 @@ import {
   SlidersHorizontal,
   Sparkles,
   Square,
+  SquareX,
   Trash2,
   X,
 } from "lucide-react";
@@ -39,6 +39,8 @@ import {
   relocatePanelPreferences,
 } from "../../../../shared/control-tree";
 import {
+  type Control,
+  type ControlChange,
   changeControl,
   ignoreControl,
   moveControl,
@@ -52,18 +54,18 @@ import {
   type Project,
   parentPath,
 } from "../../../../shared/types";
+import {
+  type Document,
+  useSnippetSessions,
+} from "../../hooks/useSnippetSessions";
 import { ControlsPanel } from "../ControlsPanel/ControlsPanel";
 import { Dialog } from "../Dialog/Dialog";
 import { Explorer } from "../Explorer/Explorer";
 import { FileTabs } from "../FileTabs/FileTabs";
-import { type Player, StrudelEditor } from "../StrudelEditor/StrudelEditor";
+import { GraphView } from "../GraphView/GraphView";
+import { StrudelEditor } from "../StrudelEditor/StrudelEditor";
 import styles from "./App.module.css";
 
-interface Document {
-  path: string;
-  code: string;
-  saved: string;
-}
 type Modal =
   | { kind: "create"; parent: string; folder: boolean }
   | { kind: "rename"; entry: Entry }
@@ -102,10 +104,6 @@ const message = (error: unknown) =>
   );
 
 export function App() {
-  const [editors, setEditors] = useState<Record<string, Document>>({});
-  const players = useRef(new Map<string, Player>());
-  const playingPath = useRef<string | null>(null);
-  const [playingFile, setPlayingFile] = useState<string | null>(null);
   const [preferences, setPreferences] = useState<PanelPreferences>({
     pinned: null,
     roots: {},
@@ -147,16 +145,25 @@ export function App() {
     name: string;
   } | null>(null);
   const [project, setProject] = useState<Project | null>(null);
-  const [document, setDocument] = useState<Document | null>(null);
+  const {
+    sessions,
+    sessionsRef,
+    document,
+    documentRef,
+    playback,
+    position,
+    player,
+    players,
+    updateDocument: selectDocument,
+    patchSession,
+    setPlayer,
+    removeSessions,
+    renameSessions,
+    stopAll,
+  } = useSnippetSessions();
   const [tabs, setTabs] = useState<string[]>([]);
   const tabsRef = useRef<string[]>([]);
-  const documentRef = useRef<Document | null>(null);
   const saving = useRef<Promise<void> | null>(null);
-  const player = useRef<Player | null>(null);
-  const [playback, setPlayback] = useState<ReplState>({
-    started: false,
-    pending: false,
-  });
   const [savedStatus, setSavedStatus] = useState("Saved locally");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -174,8 +181,47 @@ export function App() {
   const [modal, setModal] = useState<Modal | null>(null);
   const [value, setValue] = useState("");
   const [modalError, setModalError] = useState<string | null>(null);
-  const [position, setPosition] = useState([1, 1]);
-  const [controllerOpen, setControllerOpen] = useState(false);
+  const [workspaceView, setWorkspaceView] = useState<
+    "editor" | "controls" | "graph"
+  >("editor");
+  const controllerOpen = workspaceView === "controls";
+  const graphActive = workspaceView === "graph";
+  const [graphOpen, setGraphOpen] = useState(false);
+  const [graphFocus, setGraphFocus] = useState<{
+    path: string | null;
+    revision: number;
+  }>({ path: null, revision: 0 });
+  const openGraph = (path: string | null = null) => {
+    setContext(null);
+    setGraphOpen(true);
+    setWorkspaceView("graph");
+    setGraphFocus((focus) => ({ path, revision: focus.revision + 1 }));
+  };
+  const closeGraph = useCallback(() => {
+    setGraphOpen(false);
+    setWorkspaceView((view) => (view === "graph" ? "editor" : view));
+  }, []);
+  const playingPaths = new Set(
+    sessions
+      .filter((session) => session.playback.started)
+      .map((session) => session.document.path),
+  );
+  const graphDrafts = Object.fromEntries(
+    sessions
+      .filter((s) => s.document.code !== s.document.saved)
+      .map((s) => [s.document.path, s.document.code]),
+  );
+
+  const setControllerOpen = useCallback(
+    (open: boolean) => setWorkspaceView(open ? "controls" : "editor"),
+    [],
+  );
+  const playingFile =
+    sessions
+      .filter((session) => session.playback.started)
+      .map((session) => session.document.path)
+      .join(", ") || null;
+  const pendingControlPaths = useRef(new Set<string>());
 
   const updateTabs = useCallback((next: string[]) => {
     tabsRef.current = next;
@@ -184,23 +230,22 @@ export function App() {
 
   const updateDocument = useCallback(
     (next: Document | null) => {
-      documentRef.current = next;
-      setDocument(next);
-      if (next) setEditors((current) => ({ ...current, [next.path]: next }));
+      selectDocument(next);
       if (next && !tabsRef.current.includes(next.path))
         updateTabs([...tabsRef.current, next.path]);
     },
-    [updateTabs],
+    [updateTabs, selectDocument],
   );
 
   const flush = useCallback(async () => {
     if (saving.current) return saving.current;
     const work = async () => {
-      while (
-        documentRef.current &&
-        documentRef.current.code !== documentRef.current.saved
-      ) {
-        const snapshot = { ...documentRef.current };
+      for (;;) {
+        const session = sessionsRef.current.find(
+          (s) => s.document.code !== s.document.saved,
+        );
+        if (!session) break;
+        const snapshot = { ...session.document };
         setSavedStatus("Saving…");
         try {
           await api.save({
@@ -208,9 +253,11 @@ export function App() {
             content: snapshot.code,
             expected: snapshot.saved,
           });
-          const current = documentRef.current;
-          if (current?.path === snapshot.path)
-            updateDocument({ ...current, saved: snapshot.code });
+          const current = sessionsRef.current.find((s) => s.id === session.id);
+          if (current)
+            patchSession(current.id, {
+              document: { ...current.document, saved: snapshot.code },
+            });
           setProject((currentProject) =>
             currentProject
               ? {
@@ -236,7 +283,7 @@ export function App() {
     } finally {
       saving.current = null;
     }
-  }, [updateDocument]);
+  }, [patchSession, sessionsRef]);
 
   const run = useCallback(async (action: () => Promise<void>) => {
     if (busyRef.current) return;
@@ -257,14 +304,16 @@ export function App() {
     async (path: string) => {
       await controlQueue.current;
       await flush();
+      const existing = sessionsRef.current.find(
+        (s) => s.document.path === path,
+      );
       const code = await api.read(path);
-      players.current.get(path)?.replaceCode(code);
-      player.current = players.current.get(path) ?? null;
-      setPosition([1, 1]);
+      if (existing && code !== existing.document.code)
+        players.current.get(existing.id)?.replaceCode(code);
       updateDocument({ path, code, saved: code });
       setSavedStatus("Saved locally");
     },
-    [flush, updateDocument],
+    [flush, updateDocument, sessionsRef, players],
   );
 
   const openFile = useCallback(
@@ -274,7 +323,7 @@ export function App() {
       if (documentRef.current?.path === path) return;
       await run(() => activateFile(path));
     },
-    [activateFile, run],
+    [activateFile, run, documentRef, setControllerOpen],
   );
 
   const closeTab = useCallback(
@@ -284,12 +333,6 @@ export function App() {
         const index = tabsRef.current.indexOf(path);
         if (index < 0) return;
         const remaining = tabsRef.current.filter((item) => item !== path);
-        if (playingPath.current === path) {
-          await players.current.get(path)?.stop();
-          playingPath.current = null;
-          setPlayingFile(null);
-          setPlayback({ started: false, pending: false });
-        }
         if (documentRef.current?.path === path) {
           await flush();
           const previous = navigationBack.current.get(path);
@@ -305,14 +348,23 @@ export function App() {
           navigationBack.current.delete(path);
           if (next) await activateFile(next);
           else {
-            player.current = null;
             updateDocument(null);
           }
         }
+        await removeSessions([path]);
         updateTabs(remaining);
       });
     },
-    [activateFile, flush, run, updateDocument, updateTabs],
+    [
+      activateFile,
+      flush,
+      run,
+      updateDocument,
+      updateTabs,
+      removeSessions,
+      documentRef,
+      setControllerOpen,
+    ],
   );
 
   function saveForeignEdit(
@@ -321,23 +373,17 @@ export function App() {
   ): Promise<void> {
     controlWrites.current += 1;
     const task = controlQueue.current.then(async () => {
-      const active = documentRef.current;
-      const code = active?.path === path ? active.code : await api.read(path);
+      const open = sessionsRef.current.find(
+        (session) => session.document.path === path,
+      );
+      const code = open ? open.document.code : await api.read(path);
       const edit = transform(code);
       if (!edit) return;
       const next = editSource(code, [edit]);
-      if (active?.path === path) {
-        player.current?.replaceCode(next);
+      if (open) {
+        players.current.get(open.id)?.replaceCode(next);
         await flush();
-      } else {
-        await api.save({ path, content: next, expected: code });
-        players.current.get(path)?.replaceCode(next);
-        setEditors((current) =>
-          current[path]
-            ? { ...current, [path]: { path, code: next, saved: next } }
-            : current,
-        );
-      }
+      } else await api.save({ path, content: next, expected: code });
       setTreeVersion((version) => version + 1);
       scheduleLiveUpdate(path);
     });
@@ -397,17 +443,27 @@ export function App() {
   }, [updateDocument]);
 
   useEffect(() => {
-    if (!document || document.code === document.saved) return;
-    const timer = setTimeout(() => {
-      void flush().catch((error) => setError(message(error)));
-    }, 650);
+    if (
+      !sessions.some(
+        (session) => session.document.code !== session.document.saved,
+      )
+    )
+      return;
+    const timer = setTimeout(
+      () => void flush().catch((error) => setError(message(error))),
+      650,
+    );
     return () => clearTimeout(timer);
-  }, [document, flush]);
+  }, [sessions, flush]);
 
   useEffect(() => {
     const protectPendingEdits = (event: BeforeUnloadEvent) => {
-      const current = documentRef.current;
-      if (!current || current.code === current.saved) return;
+      if (
+        !sessionsRef.current.some(
+          (session) => session.document.code !== session.document.saved,
+        )
+      )
+        return;
       event.preventDefault();
       event.returnValue = "";
       void flush().catch((error) => setError(message(error)));
@@ -415,7 +471,7 @@ export function App() {
     window.addEventListener("beforeunload", protectPendingEdits);
     return () =>
       window.removeEventListener("beforeunload", protectPendingEdits);
-  }, [flush]);
+  }, [flush, sessionsRef]);
 
   useEffect(
     () =>
@@ -429,8 +485,7 @@ export function App() {
             await controlQueue.current;
             await preferencesSave.current;
             await flush();
-            if (playingPath.current)
-              await players.current.get(playingPath.current)?.stop();
+            await stopAll();
             api.finishClose();
           } catch (error) {
             api.cancelClose();
@@ -438,26 +493,21 @@ export function App() {
           }
         });
       }),
-    [flush, run],
+    [flush, run, stopAll],
   );
 
   const play = useCallback(() => {
-    void run(async () => {
+    const target = player.current;
+    setError(null);
+    void (async () => {
       await controlQueue.current;
       await flush();
-      const path = documentRef.current?.path;
-      if (!path) return;
-      if (playingPath.current && playingPath.current !== path)
-        await players.current.get(playingPath.current)?.stop();
-      playingPath.current = path;
-      setPlayingFile(path);
-      await players.current.get(path)?.play();
-    });
-  }, [flush, run]);
+      await target?.play();
+    })().catch((error) => setError(message(error)));
+  }, [flush, player]);
   const stop = useCallback(() => {
-    if (playingPath.current)
-      void players.current.get(playingPath.current)?.stop();
-  }, []);
+    void player.current?.stop();
+  }, [player]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -465,8 +515,16 @@ export function App() {
       if (event.key === "," || event.code === "Comma") {
         event.preventDefault();
         event.stopPropagation();
-        if (!event.repeat && !busyRef.current && !modal && !controllerOpen)
+        if (
+          !event.repeat &&
+          !busyRef.current &&
+          !modal &&
+          !controllerOpen &&
+          !graphActive
+        ) {
+          setWorkspaceView("editor");
           player.current?.assist();
+        }
         return;
       }
       if (
@@ -478,7 +536,9 @@ export function App() {
       if (event.key === "w") {
         event.preventDefault();
         event.stopPropagation();
-        if (documentRef.current) void closeTab(documentRef.current.path);
+        if (graphActive) closeGraph();
+        else if (controllerOpen) setWorkspaceView("editor");
+        else if (documentRef.current) void closeTab(documentRef.current.path);
         else api.close();
       }
       if (event.key === "s") {
@@ -488,12 +548,13 @@ export function App() {
       if (event.key === "Enter") {
         event.preventDefault();
         event.stopPropagation();
-        play();
+        if (!graphActive) play();
       }
-      if (event.key === ".") {
+      if (event.key === "." || event.code === "Period") {
         event.preventDefault();
         event.stopPropagation();
-        stop();
+        if (event.shiftKey || graphActive) void stopAll();
+        else stop();
       }
       if (event.key === "b") {
         event.preventDefault();
@@ -502,7 +563,19 @@ export function App() {
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [closeTab, flush, play, stop, modal, controllerOpen]);
+  }, [
+    closeTab,
+    closeGraph,
+    graphActive,
+    controllerOpen,
+    flush,
+    play,
+    stop,
+    stopAll,
+    modal,
+    player,
+    documentRef,
+  ]);
 
   useEffect(() => {
     if (!context && !projectMenu) return;
@@ -539,36 +612,37 @@ export function App() {
   async function refresh() {
     await controlQueue.current;
     setProject(await api.current());
-    const current = documentRef.current;
-    if (current && current.code === current.saved) {
-      const code = await api.read(current.path);
-      if (code !== current.code) player.current?.replaceCode(code);
-      updateDocument({ ...current, code, saved: code });
-      setSavedStatus("Saved locally");
-    }
-    if (!current || current.code === current.saved) setControlErrors({});
-    for (const [path, editor] of players.current) {
-      if (path === documentRef.current?.path) continue;
+    for (const session of sessionsRef.current) {
+      if (session.document.code !== session.document.saved) continue;
       try {
-        const code = await api.read(path);
-        editor.replaceCode(code);
-        setEditors((current) => ({
-          ...current,
-          [path]: { path, code, saved: code },
-        }));
+        const code = await api.read(session.document.path);
+        if (code !== session.document.code)
+          players.current.get(session.id)?.replaceCode(code);
+        patchSession(session.id, {
+          document: { ...session.document, code, saved: code },
+        });
       } catch {
-        /* Missing files remain diagnosed in their panel branches. */
+        /* Missing files are diagnosed by the panel and graph. */
       }
     }
+    if (
+      !sessionsRef.current.some(
+        (session) => session.document.code !== session.document.saved,
+      )
+    )
+      setControlErrors({});
     setTreeVersion((version) => version + 1);
   }
 
   async function syncDocument() {
-    const current = documentRef.current;
-    if (!current) return;
-    const code = await api.read(current.path);
-    if (code !== current.code) player.current?.replaceCode(code);
-    updateDocument({ ...current, code, saved: code });
+    for (const session of sessionsRef.current) {
+      const code = await api.read(session.document.path);
+      if (code !== session.document.code)
+        players.current.get(session.id)?.replaceCode(code);
+      patchSession(session.id, {
+        document: { ...session.document, code, saved: code },
+      });
+    }
     setSavedStatus("Saved locally");
   }
 
@@ -596,11 +670,6 @@ export function App() {
   async function move(from: string, to: string) {
     await controlQueue.current;
     await flush();
-    if (playingPath.current)
-      await players.current.get(playingPath.current)?.stop();
-    playingPath.current = null;
-    setPlayingFile(null);
-    setPlayback({ started: false, pending: false });
     await preferencesSave.current;
     await api.move(from, to);
     const relocate = (file: string) =>
@@ -609,30 +678,21 @@ export function App() {
     setControllerRoot((current) => (current ? relocate(current) : null));
     setDefinitionContext(null);
     navigationBack.current.clear();
-    setEditors((current) =>
-      Object.fromEntries(
-        Object.entries(current).map(([file, doc]) => [
-          relocate(file),
-          { ...doc, path: relocate(file) },
-        ]),
-      ),
-    );
+    renameSessions(from, to);
     setControlErrors({});
     updateTabs(
       tabsRef.current.map((file) =>
         isWithin(file, from) ? to + file.slice(from.length) : file,
       ),
     );
-    const current = documentRef.current;
-    if (current && isWithin(current.path, from)) {
-      updateDocument({
-        ...current,
-        path: to + current.path.slice(from.length),
-      });
-    }
     setSelection(null);
     await syncDocument();
     await refresh();
+    await Promise.all(
+      sessionsRef.current
+        .filter((session) => session.playback.started)
+        .map((session) => players.current.get(session.id)?.update()),
+    );
   }
 
   async function switchProject(create: boolean) {
@@ -642,14 +702,10 @@ export function App() {
       await flush();
       const next = await (create ? api.create() : api.open());
       if (!next) return;
-      if (playingPath.current)
-        await players.current.get(playingPath.current)?.stop();
+      await removeSessions(tabsRef.current);
       updateTabs([]);
       updateDocument(null);
-      setPlayback({ started: false, pending: false });
-      playingPath.current = null;
-      setPlayingFile(null);
-      setEditors({});
+      setGraphOpen(false);
       setControllerOpen(false);
       setControllerRoot(null);
       setDefinitionContext(null);
@@ -677,7 +733,7 @@ export function App() {
         const path = await api.add(modal.parent, value, modal.folder);
         await refresh();
         if (!modal.folder) {
-          await player.current?.stop();
+          setWorkspaceView("editor");
           const code = await api.read(path);
           updateDocument({ path, code, saved: code });
         }
@@ -700,23 +756,19 @@ export function App() {
         await move(modal.entry.id, joinPath(value, modal.entry.name));
       } else if (modal.kind === "delete") {
         await flush();
-        if (playingPath.current)
-          await players.current.get(playingPath.current)?.stop();
-        playingPath.current = null;
-        setPlayingFile(null);
-        setPlayback({ started: false, pending: false });
         await api.trash(modal.entry.id);
         const remaining = tabsRef.current.filter(
           (file) => !isWithin(file, modal.entry.id),
         );
-        updateTabs(remaining);
-        if (
+        const deletedActive =
           documentRef.current &&
-          isWithin(documentRef.current.path, modal.entry.id)
-        ) {
-          await player.current?.stop();
+          isWithin(documentRef.current.path, modal.entry.id);
+        await removeSessions(
+          tabsRef.current.filter((path) => !remaining.includes(path)),
+        );
+        updateTabs(remaining);
+        if (deletedActive) {
           updateDocument(null);
-          setPlayback({ started: false, pending: false });
           if (remaining.length) await activateFile(remaining[0]);
         }
         setSelection(null);
@@ -804,17 +856,16 @@ export function App() {
 
   const treeRevision = JSON.stringify([
     project?.root,
-    document?.path,
-    document?.code,
+    sessions.map((session) => [session.document.path, session.document.code]),
     treeVersion,
   ]);
   useEffect(() => {
-    const [, activePath, activeCode] = JSON.parse(treeRevision) as [
+    const [, openSources] = JSON.parse(treeRevision) as [
       string | null,
-      string | null,
-      string | null,
+      [string, string][],
       number,
     ];
+    const drafts = new Map(openSources);
     let cancelled = false;
     if (!panelRoot) {
       setControlTree(null);
@@ -824,8 +875,8 @@ export function App() {
     setTreeLoading(true);
     const timer = setTimeout(() => {
       void readControlTree(panelRoot, async (path) => {
-        return activePath === path && activeCode !== null
-          ? activeCode
+        return drafts.has(path)
+          ? Promise.resolve(drafts.get(path) as string)
           : api.read(path);
       }).then((tree) => {
         if (!cancelled && controlWrites.current === 0) {
@@ -841,32 +892,58 @@ export function App() {
   }, [panelRoot, treeRevision]);
 
   function scheduleLiveUpdate(path: string) {
-    const playing = playingPath.current;
-    const running = playing ? players.current.get(playing) : undefined;
-    if (
-      !playing ||
-      !running?.dependsOn(path) ||
-      liveUpdateTimer.current !== null
-    )
-      return;
+    pendingControlPaths.current.add(path);
+    if (liveUpdateTimer.current !== null) return;
     liveUpdateTimer.current = setTimeout(() => {
       liveUpdateTimer.current = null;
       void controlQueue.current
         .then(async () => {
-          if (
-            playingPath.current === playing &&
-            players.current.get(playing) === running
-          )
-            await running.update();
+          const changes = [...pendingControlPaths.current];
+          pendingControlPaths.current.clear();
+          for (const session of sessionsRef.current.filter(
+            (session) => session.playback.started,
+          )) {
+            const running = players.current.get(session.id);
+            if (running && changes.some((file) => running.dependsOn(file)))
+              await running.update();
+          }
         })
         .catch((error) => setError(message(error)));
     }, 60);
   }
 
+  function previewControl(control: Control, change: ControlChange): Control {
+    if (change.type === "set")
+      return {
+        ...control,
+        value: change.value,
+        ...(control.kind === "enum"
+          ? {
+              selectedKey:
+                control.options.find((option) =>
+                  Object.is(option.value, change.value),
+                )?.key ?? control.selectedKey,
+            }
+          : {}),
+      } as Control;
+    if (control.kind !== "multi-enum") return control;
+    const options = change.order.flatMap((key) =>
+      control.options.filter((option) => option.key === key),
+    );
+    return {
+      ...control,
+      options,
+      hasOrder: true,
+      value: options
+        .filter((option) => control.value.includes(option.value))
+        .map((option) => option.value),
+    };
+  }
+
   function editPanelControl(
     path: string,
     name: string,
-    value?: number | boolean,
+    change?: ControlChange,
   ) {
     const key = JSON.stringify([path, name]);
     // All appearances share an optimistic value, including keyboard gestures
@@ -878,9 +955,9 @@ export function App() {
           ? group.controls.flatMap((control) =>
               control.name !== name
                 ? [control]
-                : value === undefined
+                : change === undefined
                   ? []
-                  : [{ ...control, value } as typeof control],
+                  : [previewControl(control, change)],
             )
           : group.controls,
       children: group.children.map(updateTree),
@@ -889,38 +966,34 @@ export function App() {
     controlWrites.current += 1;
     controlQueue.current = controlQueue.current.then(async () => {
       try {
-        const current = documentRef.current;
-        const source =
-          current?.path === path ? current.code : await api.read(path);
+        const open = sessionsRef.current.find(
+          (session) => session.document.path === path,
+        );
+        const source = open ? open.document.code : await api.read(path);
         const control = readControls(source).controls.find(
           (control) => control.name === name,
         );
         if (
           !control ||
-          (value !== undefined && typeof control.value !== typeof value)
+          (change?.type === "reorder" && control.kind !== "multi-enum") ||
+          (change?.type === "set" &&
+            typeof control.value !== typeof change.value)
         )
           throw new Error(
             "This control has changed. Fix its declaration before editing.",
           );
-        if (current?.path === path) {
-          if (value === undefined) player.current?.ignoreControl(name);
-          else player.current?.changeControl(name, value);
-          await flush();
-        } else {
-          const edit =
-            value === undefined
-              ? ignoreControl(source, name)
-              : changeControl(source, name, value);
-          if (edit) {
-            const code = editSource(source, [edit]);
-            await api.save({ path, content: code, expected: source });
-            players.current.get(path)?.replaceCode(code);
-            setEditors((current) =>
-              current[path]
-                ? { ...current, [path]: { path, code, saved: code } }
-                : current,
-            );
-          }
+        const edit =
+          change === undefined
+            ? ignoreControl(source, name)
+            : changeControl(source, name, change);
+        if (edit) {
+          const code = editSource(source, [edit]);
+          if (open) {
+            if (change === undefined)
+              players.current.get(open.id)?.ignoreControl(name);
+            else players.current.get(open.id)?.changeControl(name, change);
+            await flush();
+          } else await api.save({ path, content: code, expected: source });
         }
         setTreeVersion((version) => version + 1);
         setControlErrors((current) => {
@@ -928,7 +1001,7 @@ export function App() {
           delete next[key];
           return next;
         });
-        if (value !== undefined) scheduleLiveUpdate(path);
+        if (change !== undefined) scheduleLiveUpdate(path);
       } catch (error) {
         setControlErrors((current) => ({ ...current, [key]: message(error) }));
       } finally {
@@ -984,18 +1057,21 @@ export function App() {
   // when navigation opens a new tab rather than revealing an existing editor.
   useEffect(() => {
     if (definitionTarget && document?.path === definitionTarget.path) {
-      players.current
-        .get(definitionTarget.path)
-        ?.revealControl(definitionTarget.name);
+      const session = sessionsRef.current.find(
+        (session) => session.document.path === definitionTarget.path,
+      );
+      if (session)
+        players.current.get(session.id)?.revealControl(definitionTarget.name);
       setDefinitionTarget(null);
     }
-  }, [definitionTarget, document?.path]);
+  }, [definitionTarget, document?.path, players, sessionsRef]);
 
   return (
     <div
       className={classNames(styles.app, {
         [styles.sidebarHidden]: !sidebar,
-        [styles.controlsHidden]: !controlsVisible || controllerOpen,
+        [styles.controlsHidden]:
+          !controlsVisible || controllerOpen || graphActive,
       })}
     >
       <div className={styles.titlebar}>
@@ -1025,21 +1101,33 @@ export function App() {
                 path === document?.path
                   ? hasExports(document.code)
                   : Boolean(findEntry(project?.entries ?? [], path)?.exported),
-              dirty:
-                path === document?.path && document.code !== document.saved,
+              dirty: sessions.some(
+                (s) =>
+                  s.document.path === path &&
+                  s.document.code !== s.document.saved,
+              ),
+              playing: sessions.some(
+                (s) => s.document.path === path && s.playback.started,
+              ),
             }))}
             active={document?.path ?? null}
             disabled={busy}
             onSelect={(path) => {
-              setControllerOpen(false);
+              setWorkspaceView("editor");
               void openFile(path);
             }}
             onClose={(path) => void closeTab(path)}
+            graph={{
+              open: graphOpen,
+              active: graphActive,
+              onSelect: () => setWorkspaceView("graph"),
+              onClose: closeGraph,
+            }}
             controller={{
               open: controllerOpen,
               disabled: busy,
-              onSelect: () => setControllerOpen(true),
-              onClose: () => setControllerOpen(false),
+              onSelect: () => {},
+              onClose: () => setWorkspaceView("editor"),
             }}
           />
           <button
@@ -1047,7 +1135,8 @@ export function App() {
             className={styles.iconButton}
             title="Toggle controls"
             aria-label="Toggle controls"
-            aria-expanded={controlsVisible && !controllerOpen}
+            aria-expanded={controlsVisible && !controllerOpen && !graphActive}
+            disabled={graphActive}
             onClick={() => {
               if (controllerOpen) {
                 setControllerOpen(false);
@@ -1212,15 +1301,15 @@ export function App() {
           <div className={styles.sidebarBottom}>
             <button
               type="button"
-              className={styles.localProject}
-              onClick={() =>
-                void api.reveal().catch((error) => setError(message(error)))
-              }
-              title={project?.root}
+              className={styles.graphLink}
+              onClick={() => openGraph()}
+              disabled={!project || busy}
+              aria-label="Open Graph View"
+              aria-current={graphActive ? "page" : undefined}
             >
-              <HardDrive size={16} />
+              <Network size={16} />
               <span>
-                On your computer<small>Changes save automatically</small>
+                Graph View<small>Explore snippet dependencies</small>
               </span>
               <ArrowRight size={13} />
             </button>
@@ -1238,153 +1327,172 @@ export function App() {
 
       <main
         className={classNames(styles.workspace, {
-          [styles.controllerWorkspace]: controllerOpen,
+          [styles.controllerWorkspace]: controllerOpen || graphActive,
         })}
         id="snippet-panel"
         role="tabpanel"
         aria-labelledby={
-          document ? `tab-${encodeURIComponent(document.path)}` : undefined
+          graphActive
+            ? "tab-graph"
+            : document
+              ? `tab-${encodeURIComponent(document.path)}`
+              : undefined
         }
-        aria-label={document ? undefined : "Snippet editor"}
+        aria-label={graphActive || document ? undefined : "Snippet editor"}
       >
-        <header
-          className={styles.editorToolbar}
-          role="toolbar"
-          aria-label="Snippet toolbar"
-        >
-          <div className={styles.fileHeading}>
-            {controllerOpen && panelRoot ? (
-              <>
-                <SlidersHorizontal size={17} />
-                <div>
-                  <strong>{panelRoot.split("/").at(-1)}</strong>
-                  <span title={panelRoot}>Controls · {panelRoot}</span>
-                </div>
-              </>
-            ) : document ? (
-              <>
-                {controllerOpen ? (
+        {!graphActive && (
+          <header
+            className={styles.editorToolbar}
+            role="toolbar"
+            aria-label="Snippet toolbar"
+          >
+            <div className={styles.fileHeading}>
+              {controllerOpen && panelRoot ? (
+                <>
                   <SlidersHorizontal size={17} />
-                ) : hasExports(document.code) ? (
-                  <Package size={17} />
-                ) : (
-                  <FileCode2 size={17} />
-                )}
-                <div>
-                  <strong>{filename}</strong>
-                  <span>
-                    {project?.name}
-                    {parentPath(document.path)
-                      ? ` / ${parentPath(document.path)}`
-                      : ""}
-                  </span>
-                </div>
-              </>
-            ) : (
-              <span className={styles.muted}>Your next idea starts here</span>
-            )}
-          </div>
-          <div className={styles.transport}>
-            {definitionContext?.fullscreen && (
-              <button
-                type="button"
-                className={styles.secondaryButton}
-                onClick={backToControls}
-              >
-                Back to controls
-              </button>
-            )}
-            {playback.started && (
-              <small
-                className={styles.playingTarget}
-                title={playingFile ?? undefined}
-              >
-                Playing {playingFile?.split("/").at(-1)}
-              </small>
-            )}
-            <button
-              type="button"
-              className={styles.iconButton}
-              aria-label="Ask Wien"
-              title={`Ask Wien (${shortcut} ,)`}
-              disabled={!document || busy || controllerOpen}
-              onClick={() => player.current?.assist("bottom")}
-            >
-              <Sparkles size={16} />
-            </button>
-            <button
-              type="button"
-              className={classNames(styles.iconButton, styles.stopButton)}
-              title={`Stop (${shortcut} .)`}
-              aria-label="Stop playback"
-              disabled={!playback.started}
-              onClick={stop}
-            >
-              <Square size={14} fill="currentColor" />
-            </button>
-            <button
-              type="button"
-              className={styles.playButton}
-              disabled={!document || playback.pending || busy}
-              title={
-                document
-                  ? `Play / update ${document.path}`
-                  : "Open a file to play"
-              }
-              onClick={play}
-            >
-              {playback.pending ? (
-                <Loader2 size={14} className={styles.spin} />
+                  <div>
+                    <strong>{panelRoot.split("/").at(-1)}</strong>
+                    <span title={panelRoot}>Controls · {panelRoot}</span>
+                  </div>
+                </>
+              ) : document ? (
+                <>
+                  {controllerOpen ? (
+                    <SlidersHorizontal size={17} />
+                  ) : hasExports(document.code) ? (
+                    <Package size={17} />
+                  ) : (
+                    <FileCode2 size={17} />
+                  )}
+                  <div>
+                    <strong>{filename}</strong>
+                    <span>
+                      {project?.name}
+                      {parentPath(document.path)
+                        ? ` / ${parentPath(document.path)}`
+                        : ""}
+                    </span>
+                  </div>
+                </>
               ) : (
-                <Play size={13} fill="currentColor" />
+                <span className={styles.muted}>Your next idea starts here</span>
               )}
-              <span>
-                {playback.started && playingFile === document?.path
-                  ? "Update"
-                  : "Play"}
-                {controllerOpen &&
-                  document &&
-                  ` ${document.path.split("/").at(-1)}`}
-              </span>
-              <kbd>{shortcut} ↵</kbd>
-            </button>
-            {controllerOpen ? (
-              <button
-                type="button"
-                className={styles.closeButton}
-                title="Close controls"
-                aria-label="Close controls"
-                onClick={() => setControllerOpen(false)}
-              >
-                <X size={15} />
-              </button>
-            ) : (
+            </div>
+            <div className={styles.transport}>
+              {definitionContext?.fullscreen && (
+                <button
+                  type="button"
+                  className={styles.secondaryButton}
+                  onClick={backToControls}
+                >
+                  Back to controls
+                </button>
+              )}
+              {playback.started && (
+                <small
+                  className={styles.playingTarget}
+                  title={playingFile ?? undefined}
+                >
+                  Playing {playingFile?.split("/").at(-1)}
+                </small>
+              )}
               <button
                 type="button"
                 className={styles.iconButton}
-                title="Snippet actions"
-                aria-label="Snippet actions"
-                disabled={!document || busy}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  if (!document) return;
-                  const rect = event.currentTarget.getBoundingClientRect();
-                  setContext({
-                    entry: {
-                      id: document.path,
-                      name: filename ?? document.path,
-                      exported: hasExports(document.code),
-                    },
-                    x: rect.right - 220,
-                    y: rect.bottom + 8,
-                  });
-                }}
+                aria-label="Ask Wien"
+                title={`Ask Wien (${shortcut} ,)`}
+                disabled={!document || busy || controllerOpen}
+                onClick={() => player.current?.assist("bottom")}
               >
-                <MoreHorizontal size={18} />
+                <Sparkles size={16} />
               </button>
-            )}
-          </div>
-        </header>
+              <button
+                type="button"
+                className={classNames(styles.iconButton, styles.stopButton)}
+                title={`Stop (${shortcut} .)`}
+                aria-label="Stop playback"
+                disabled={!playback.started}
+                onClick={stop}
+              >
+                <Square size={14} fill="currentColor" />
+              </button>
+              {sessions.some(
+                (session) =>
+                  session.playback.started &&
+                  session.document.path !== document?.path,
+              ) && (
+                <button
+                  type="button"
+                  className={styles.iconButton}
+                  aria-label="Stop all playback"
+                  title={`Stop all (${shortcut} ⇧ .)`}
+                  onClick={() => void stopAll()}
+                >
+                  <SquareX size={16} />
+                </button>
+              )}
+              <button
+                type="button"
+                className={styles.playButton}
+                disabled={!document || playback.pending || busy}
+                title={
+                  document
+                    ? `Play / update ${document.path}`
+                    : "Open a file to play"
+                }
+                onClick={play}
+              >
+                {playback.pending ? (
+                  <Loader2 size={14} className={styles.spin} />
+                ) : (
+                  <Play size={13} fill="currentColor" />
+                )}
+                <span>
+                  {playback.started ? "Update" : "Play"}
+                  {controllerOpen &&
+                    document &&
+                    ` ${document.path.split("/").at(-1)}`}
+                </span>
+                <kbd>{shortcut} ↵</kbd>
+              </button>
+              {controllerOpen ? (
+                <button
+                  type="button"
+                  className={styles.closeButton}
+                  title="Close controls"
+                  aria-label="Close controls"
+                  onClick={() => setControllerOpen(false)}
+                >
+                  <X size={15} />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className={styles.iconButton}
+                  title="Snippet actions"
+                  aria-label="Snippet actions"
+                  disabled={!document || busy}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    if (!document) return;
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    setContext({
+                      entry: {
+                        id: document.path,
+                        name: filename ?? document.path,
+                        exported: hasExports(document.code),
+                      },
+                      x: rect.right - 220,
+                      y: rect.bottom + 8,
+                    });
+                  }}
+                >
+                  <MoreHorizontal size={18} />
+                </button>
+              )}
+            </div>
+          </header>
+        )}
         {error && (
           <div role="alert" className={styles.errorBanner}>
             <span>{error}</span>
@@ -1410,7 +1518,7 @@ export function App() {
         <ControlsPanel
           key={`${project?.root}/${panelRoot}`}
           fullscreen={controllerOpen}
-          visible={controlsVisible || controllerOpen}
+          visible={!graphActive && (controlsVisible || controllerOpen)}
           tree={controlTree?.path === panelRoot ? controlTree : null}
           root={panelRoot}
           pinned={Boolean(preferences.pinned)}
@@ -1443,53 +1551,51 @@ export function App() {
           }}
         />
 
-        {tabs
-          .filter((path) => editors[path])
-          .map((path) => (
-            <div
-              key={`${project?.root}/${path}`}
-              className={styles.editorSession}
-              data-active={document?.path === path}
-              style={{
-                display:
-                  !controllerOpen && document?.path === path ? "flex" : "none",
+        {sessions.map((session) => (
+          <div
+            key={`${project?.root}/${session.id}/${session.version}`}
+            className={styles.editorSession}
+            data-active={
+              session.document.path === document?.path &&
+              workspaceView === "editor"
+            }
+            style={{
+              display:
+                session.document.path === document?.path &&
+                workspaceView === "editor"
+                  ? "flex"
+                  : "none",
+            }}
+          >
+            <StrudelEditor
+              initialCode={session.document.code}
+              path={session.document.path}
+              active={
+                session.document.path === document?.path &&
+                workspaceView === "editor"
+              }
+              disabled={busy}
+              onLink={(source) => void linkSnippet(source)}
+              onChange={(code) => {
+                const current = sessionsRef.current.find(
+                  (s) => s.id === session.id,
+                );
+                if (current) {
+                  patchSession(current.id, {
+                    document: { ...current.document, code },
+                  });
+                  setSavedStatus("Unsaved changes");
+                }
               }}
-            >
-              <StrudelEditor
-                initialCode={editors[path].code}
-                path={path}
-                disabled={busy || document?.path !== path || controllerOpen}
-                onLink={(source) => void linkSnippet(source)}
-                onChange={(code) => {
-                  const current = documentRef.current;
-                  if (current?.path === path) {
-                    updateDocument({ ...current, code });
-                    setSavedStatus("Unsaved changes");
-                  }
-                }}
-                onState={(state) => {
-                  if (playingPath.current === path) setPlayback(state);
-                }}
-                onReady={(next) => {
-                  if (next) players.current.set(path, next);
-                  else {
-                    players.current.delete(path);
-                    if (playingPath.current === path) {
-                      playingPath.current = null;
-                      setPlayingFile(null);
-                      setPlayback({ started: false, pending: false });
-                    }
-                  }
-                  if (documentRef.current?.path === path) player.current = next;
-                }}
-                onPosition={(line, column) => {
-                  if (documentRef.current?.path === path)
-                    setPosition([line, column]);
-                }}
-              />
-            </div>
-          ))}
-        {!document && !controllerOpen && (
+              onState={(playback) => patchSession(session.id, { playback })}
+              onReady={(next) => setPlayer(session.id, next)}
+              onPosition={(line, column) =>
+                patchSession(session.id, { position: [line, column] })
+              }
+            />
+          </div>
+        ))}
+        {!document && !controllerOpen && !graphActive && (
           <div className={styles.emptyState}>
             <div className={styles.emptyIcon}>
               <Code2 size={30} strokeWidth={1.2} />
@@ -1512,7 +1618,20 @@ export function App() {
             </button>
           </div>
         )}
-        {playback.error && (
+        {graphOpen && project && (
+          <div className={styles.graphPane} hidden={!graphActive}>
+            <GraphView
+              key={project.root}
+              project={project}
+              active={graphActive}
+              focus={graphFocus}
+              drafts={graphDrafts}
+              playingPaths={playingPaths}
+              onOpen={(path) => void openFile(path)}
+            />
+          </div>
+        )}
+        {!graphActive && playback.error && (
           <div className={styles.evaluationError} role="alert">
             <strong>Couldn’t run this code</strong>
             <span>{playback.error.message}</span>
@@ -1521,29 +1640,31 @@ export function App() {
             )}
           </div>
         )}
-        <footer className={styles.statusbar}>
-          <span
-            className={classNames({
-              [styles.saveError]: savedStatus === "Not saved",
-            })}
-          >
-            {savedStatus === "Saving…" ? (
-              <Loader2 size={12} className={styles.spin} />
-            ) : dirty ? (
-              <span className={styles.unsavedDot} />
-            ) : (
-              <Check size={12} />
-            )}
-            {savedStatus}
-          </span>
-          <div>
-            <span>
-              Ln {position[0]}, Col {position[1]}
+        {!graphActive && (
+          <footer className={styles.statusbar}>
+            <span
+              className={classNames({
+                [styles.saveError]: savedStatus === "Not saved",
+              })}
+            >
+              {savedStatus === "Saving…" ? (
+                <Loader2 size={12} className={styles.spin} />
+              ) : dirty ? (
+                <span className={styles.unsavedDot} />
+              ) : (
+                <Check size={12} />
+              )}
+              {savedStatus}
             </span>
-            <span>UTF-8</span>
-            <span className={styles.strudelBadge}>Strudel</span>
-          </div>
-        </footer>
+            <div>
+              <span>
+                Ln {position[0]}, Col {position[1]}
+              </span>
+              <span>UTF-8</span>
+              <span className={styles.strudelBadge}>Strudel</span>
+            </div>
+          </footer>
+        )}
       </main>
 
       {context && (
@@ -1553,6 +1674,10 @@ export function App() {
         >
           {!context.entry.children && (
             <>
+              <button type="button" onClick={() => openGraph(context.entry.id)}>
+                <Network size={14} />
+                View in Graph View
+              </button>
               <button
                 type="button"
                 onClick={() => void toggleExport(context.entry.id)}

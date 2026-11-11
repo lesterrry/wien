@@ -103,7 +103,7 @@ try {
     1,
   );
   await expect(
-    page.getByRole("button", { name: "Stop playback" }),
+    page.getByRole("button", { name: "Stop all playback" }),
   ).toBeEnabled();
   const selected = await page
     .getByLabel("Strudel code editor")
