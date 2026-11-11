@@ -18,7 +18,7 @@ export function NumberKnob({
   control: NumberControl;
   disabled: boolean;
   onChange: (name: string, value: number) => void;
-  onIgnore: (name: string) => void;
+  onIgnore?: (name: string) => void;
 }) {
   const { name, value, integer } = control;
   const step = integer ? 1 : 0.01;
@@ -46,16 +46,18 @@ export function NumberKnob({
         <span className={styles.controlName} title={name}>
           {name}
         </span>
-        <button
-          type="button"
-          className={styles.iconButton}
-          disabled={disabled}
-          aria-label={`Hide ${name} control`}
-          title="Hide control · adds //@ignore"
-          onClick={() => onIgnore(name)}
-        >
-          <X size={13} />
-        </button>
+        {onIgnore && (
+          <button
+            type="button"
+            className={styles.iconButton}
+            disabled={disabled}
+            aria-label={`Hide ${name} control`}
+            title="Hide control · adds //@ignore"
+            onClick={() => onIgnore(name)}
+          >
+            <X size={13} />
+          </button>
+        )}
       </div>
       <div className={styles.controlBody}>
         <button

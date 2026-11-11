@@ -15,7 +15,7 @@ export function NumberSlider({
   control: SliderControl;
   disabled: boolean;
   onChange: (name: string, value: number) => void;
-  onIgnore: (name: string) => void;
+  onIgnore?: (name: string) => void;
 }) {
   const { name, min, max, value, presentation, integer } = control;
   const vertical = presentation === "vertical";
@@ -46,16 +46,18 @@ export function NumberSlider({
         <span className={styles.controlName} title={name}>
           {name}
         </span>
-        <button
-          type="button"
-          className={styles.iconButton}
-          disabled={disabled}
-          aria-label={`Hide ${name} control`}
-          title="Hide control · adds //@ignore"
-          onClick={() => onIgnore(name)}
-        >
-          <X size={13} />
-        </button>
+        {onIgnore && (
+          <button
+            type="button"
+            className={styles.iconButton}
+            disabled={disabled}
+            aria-label={`Hide ${name} control`}
+            title="Hide control · adds //@ignore"
+            onClick={() => onIgnore(name)}
+          >
+            <X size={13} />
+          </button>
+        )}
       </div>
       <output className={styles.controlValue} aria-label={`${name} value`}>
         {String(value)}

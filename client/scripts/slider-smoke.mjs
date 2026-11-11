@@ -61,6 +61,29 @@ try {
   await cutoff.waitFor();
   assert.equal(await page.getByRole("slider").count(), 4);
   assert.equal(await page.getByRole("spinbutton").count(), 2);
+  await page
+    .getByRole("button", { name: "Open full controls", exact: true })
+    .click();
+  await expect(page.getByRole("slider")).toHaveCount(4);
+  await expect(page.getByRole("spinbutton")).toHaveCount(2);
+  await expect(page.getByRole("radio")).toHaveCount(3);
+  const fullEffects = page.getByRole("group", {
+    name: "effects options",
+    exact: true,
+  });
+  await expect(fullEffects.getByRole("checkbox")).toHaveCount(3);
+  await group.getByText("Saw", { exact: true }).click();
+  await expect(saw).toBeChecked();
+  await group.getByText("Triangle", { exact: true }).click();
+  await fullEffects.getByText("Crush", { exact: true }).click();
+  await fullEffects.getByText("Crush", { exact: true }).click();
+  await expect(
+    fullEffects.getByRole("checkbox", { name: "Echo", exact: true }),
+  ).toBeChecked();
+  await page
+    .getByRole("button", { name: "Close controls", exact: true })
+    .click();
+
   assert.equal(await triangle.isChecked(), true);
   await group.getByText("Saw", { exact: true }).click();
   assert.equal(await saw.isChecked(), true);
@@ -260,7 +283,7 @@ try {
   await page.screenshot({ path: path.join(temporary, "sliders.png") });
 
   await page.getByRole("button", { name: /^Play/ }).click();
-  await page.getByText("Playing", { exact: true }).waitFor();
+  await page.getByRole("button", { name: /^Update/ }).waitFor();
   await page.waitForFunction(() => window.getTime() > 0.2);
   const time = await page.evaluate(() => window.getTime());
   await effects.getByText("Chorus", { exact: true }).click();

@@ -2,6 +2,8 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { WorkspaceApi } from "../shared/types";
 
 const api: WorkspaceApi = {
+  assist: (id, request) => ipcRenderer.invoke("assistant:send", id, request),
+  cancelAssist: (id) => ipcRenderer.send("assistant:cancel", id),
   current: () => ipcRenderer.invoke("project:current"),
   open: () => ipcRenderer.invoke("project:open"),
   create: () => ipcRenderer.invoke("project:create"),
@@ -15,6 +17,7 @@ const api: WorkspaceApi = {
   move: (from, to) => ipcRenderer.invoke("project:move", from, to),
   trash: (path) => ipcRenderer.invoke("project:trash", path),
   reveal: () => ipcRenderer.invoke("project:reveal"),
+  openExternalLink: (url) => ipcRenderer.invoke("app:open-external-link", url),
   close: () => ipcRenderer.send("app:close"),
   onBeforeClose: (callback) => {
     ipcRenderer.on("app:before-close", callback);

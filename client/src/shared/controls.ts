@@ -657,3 +657,321 @@ function annotateControl(
     text: `${leading}${annotation}${newline}${indent}`,
   };
 }
+
+interface DeclaratorRange {
+  start: number;
+  end: number;
+}
+
+type LocatedControl = Control & {
+  declaratorStart: number;
+  declaratorEnd: number;
+  statementStart: number;
+  statementEnd: number;
+  declarationStart: number;
+  declarationKind: string;
+  declarationIndex: number;
+  allDeclarators: DeclaratorRange[];
+};
+
+function locateControls(code: string): {
+  located: LocatedControl[];
+  valid: boolean;
+} {
+  const result = readControls(code);
+  if (!result.valid) return { located: [], valid: false };
+  const comments: Comment[] = [];
+  const ast = parse(code, {
+    ecmaVersion: 2022,
+    sourceType: "module",
+    allowAwaitOutsideFunction: true,
+    preserveParens: true,
+    onComment: comments,
+  });
+  const annotationsFor = bindControlAnnotations(code, comments);
+  const located: LocatedControl[] = [];
+  for (const statement of ast.body) {
+    const declaration =
+      statement.type === "ExportNamedDeclaration"
+        ? statement.declaration
+        : statement;
+    if (declaration?.type !== "VariableDeclaration") continue;
+    const leading = annotationsFor(
+      statement.start,
+      statement.start,
+      statement.start,
+    ).filter((comment) => comment.end <= statement.start);
+    const trailing = comments.find(
+      (comment) =>
+        comment.type === "Line" &&
+        comment.start >= statement.end &&
+        /^[ \t]*$/.test(code.slice(statement.end, comment.start)),
+    );
+    const statementStart = Math.min(
+      statement.start,
+      ...leading.map((comment) => comment.start),
+    );
+    const statementEnd = trailing?.end ?? statement.end;
+    const allDeclarators = declaration.declarations.map((item) => ({
+      start: item.start,
+      end: item.end,
+    }));
+    declaration.declarations.forEach((item, declarationIndex) => {
+      const control = result.controls.find(
+        (control) => control.start === item.init?.start,
+      );
+      if (control)
+        located.push({
+          ...control,
+          declaratorStart: item.start,
+          declaratorEnd: item.end,
+          statementStart,
+          statementEnd,
+          declarationStart: declaration.start,
+          declarationKind: declaration.kind,
+          declarationIndex,
+          allDeclarators,
+        });
+    });
+  }
+  return { located, valid: true };
+}
+
+// Find a `//@ignore` line comment that sits between `boundary` and
+// `declaratorStart` with only whitespace/line breaks after it. Returns the
+// start of the comment, so that dragging the binding carries the marker
+// with it, or `declaratorStart` when no marker is present.
+function findIgnorePrefix(
+  code: string,
+  declaratorStart: number,
+  boundary: number,
+): number {
+  const between = code.slice(boundary, declaratorStart);
+  const match =
+    /(?:\/\/\s*@(ignore|slider|multi)\b[^\r\n]*(?:\r?\n[\t ]*)+)+$/.exec(
+      between,
+    );
+  if (!match) return declaratorStart;
+  return declaratorStart - match[0].length;
+}
+
+function moveWithinStatement(
+  code: string,
+  source: LocatedControl,
+  target: LocatedControl,
+  placement: "before" | "after",
+): Edit | undefined {
+  const declarators = source.allDeclarators;
+  const srcIdx = source.declarationIndex;
+  const tgtIdx = target.declarationIndex;
+  if (srcIdx === tgtIdx) return;
+
+  // Each chunk is the declarator plus any `//@ignore` line attached to it.
+  const chunks: DeclaratorRange[] = declarators.map((d, i) => {
+    const boundary = i === 0 ? source.statementStart : declarators[i - 1].end;
+    return {
+      start: findIgnorePrefix(code, d.start, boundary),
+      end: d.end,
+    };
+  });
+
+  const order = declarators.map((_, i) => i);
+  order.splice(srcIdx, 1);
+  const insertAt =
+    placement === "before"
+      ? srcIdx < tgtIdx
+        ? tgtIdx - 1
+        : tgtIdx
+      : srcIdx < tgtIdx
+        ? tgtIdx
+        : tgtIdx + 1;
+  order.splice(insertAt, 0, srcIdx);
+
+  // No-op when the source already occupies the requested slot.
+  if (order.every((v, i) => v === i)) return;
+
+  const comments: Comment[] = [];
+  parse(code, {
+    ecmaVersion: 2022,
+    sourceType: "module",
+    allowAwaitOutsideFunction: true,
+    onComment: comments,
+  });
+  const declarationComments = comments.filter(
+    (comment) =>
+      comment.start >= source.declarationStart &&
+      comment.end <= source.statementEnd &&
+      !declarators.some(
+        (item) => comment.start >= item.start && comment.end <= item.end,
+      ),
+  );
+  if (
+    declarationComments.some((comment) =>
+      isControlAnnotation(comment.value.trim()),
+    )
+  ) {
+    // Put binding-specific comments inside the declaration so they cannot become
+    // shared annotations when their binding moves into the first position.
+    const newline = code.includes("\r\n") ? "\r\n" : "\n";
+    const leading = declarators.map(() => [] as string[]);
+    const trailing = declarators.map(() => [] as string[]);
+    for (const comment of declarationComments) {
+      const previous = declarators.reduce(
+        (found, item, index) => (item.end <= comment.start ? index : found),
+        -1,
+      );
+      const next = declarators.findIndex((item) => item.start >= comment.end);
+      const sameLine =
+        previous >= 0 &&
+        !/[\r\n]/.test(code.slice(declarators[previous].end, comment.start));
+      const text = code.slice(comment.start, comment.end);
+      if (sameLine || next < 0) trailing[Math.max(0, previous)].push(text);
+      else leading[next].push(text);
+    }
+    const prefixEnd = source.declarationStart + source.declarationKind.length;
+    const prefix = code.slice(source.statementStart, prefixEnd);
+    const rows = order.map((index, position) => {
+      const item = declarators[index];
+      return [
+        ...leading[index],
+        code.slice(item.start, item.end) +
+          (position < order.length - 1 ? "," : ";") +
+          (trailing[index].length ? ` ${trailing[index].join(newline)}` : ""),
+      ].join(newline);
+    });
+    return {
+      start: source.statementStart,
+      end: source.statementEnd,
+      text: prefix + newline + rows.join(newline) + newline,
+    };
+  }
+
+  const seps: string[] = [];
+  for (let i = 0; i < chunks.length - 1; i++) {
+    seps.push(code.slice(chunks[i].end, chunks[i + 1].start));
+  }
+
+  const prefix = code.slice(source.statementStart, chunks[0].start);
+  const suffix = code.slice(chunks[chunks.length - 1].end, source.statementEnd);
+
+  let text = prefix;
+  for (let i = 0; i < order.length; i++) {
+    if (i > 0) text += seps[i - 1];
+    text += code.slice(chunks[order[i]].start, chunks[order[i]].end);
+  }
+  text += suffix;
+
+  return { start: source.statementStart, end: source.statementEnd, text };
+}
+
+function moveAcrossStatements(
+  code: string,
+  source: LocatedControl,
+  target: LocatedControl,
+  placement: "before" | "after",
+  sorted: LocatedControl[],
+  srcIdx: number,
+  tgtIdx: number,
+): Edit | undefined {
+  const srcBeforeTgt = srcIdx < tgtIdx;
+
+  if (srcBeforeTgt && placement === "before") {
+    // Move the source statement to just before the target.
+    if (srcIdx + 1 === tgtIdx) return;
+    const nextStart = sorted[srcIdx + 1].statementStart;
+    const prevEnd = sorted[tgtIdx - 1].statementEnd;
+    return {
+      start: source.statementStart,
+      end: target.statementEnd,
+      text:
+        code.slice(nextStart, prevEnd) +
+        code.slice(source.statementEnd, nextStart) +
+        code.slice(source.statementStart, source.statementEnd) +
+        code.slice(prevEnd, target.statementEnd),
+    };
+  }
+
+  if (srcBeforeTgt && placement === "after") {
+    // Move the source statement to just after the target.
+    const nextStart = sorted[srcIdx + 1].statementStart;
+    return {
+      start: source.statementStart,
+      end: target.statementEnd,
+      text:
+        code.slice(nextStart, target.statementEnd) +
+        code.slice(source.statementEnd, nextStart) +
+        code.slice(source.statementStart, source.statementEnd),
+    };
+  }
+
+  if (!srcBeforeTgt && placement === "before") {
+    // Move the source statement to just before the target.
+    const prevEnd = sorted[srcIdx - 1].statementEnd;
+    return {
+      start: target.statementStart,
+      end: source.statementEnd,
+      text:
+        code.slice(source.statementStart, source.statementEnd) +
+        code.slice(prevEnd, source.statementStart) +
+        code.slice(target.statementStart, prevEnd),
+    };
+  }
+
+  // !srcBeforeTgt && placement === "after": move the source statement to
+  // just after the target.
+  if (srcIdx === tgtIdx + 1) return;
+  const nextStart = sorted[tgtIdx + 1].statementStart;
+  const prevEnd = sorted[srcIdx - 1].statementEnd;
+  return {
+    start: target.statementStart,
+    end: source.statementEnd,
+    text:
+      code.slice(target.statementStart, target.statementEnd) +
+      code.slice(target.statementEnd, nextStart) +
+      code.slice(source.statementStart, source.statementEnd) +
+      code.slice(prevEnd, source.statementStart) +
+      code.slice(nextStart, prevEnd),
+  };
+}
+
+// Rearrange the declaration of `name` relative to `targetName`. Bindings
+// inside one comma declaration are reordered as declarators; bindings in
+// separate statements move as whole statements. Returns `undefined` on
+// invalid code, unknown names, self-moves and no-ops.
+export function moveControl(
+  code: string,
+  name: string,
+  targetName: string,
+  placement: "before" | "after",
+): Edit | undefined {
+  if (name === targetName) return;
+  const { located, valid } = locateControls(code);
+  if (!valid) return;
+  const sorted = [...located].sort((a, b) => a.start - b.start);
+  const srcIdx = sorted.findIndex((control) => control.name === name);
+  const tgtIdx = sorted.findIndex((control) => control.name === targetName);
+  if (srcIdx < 0 || tgtIdx < 0) return;
+  const source = sorted[srcIdx];
+  const target = sorted[tgtIdx];
+  if (source.statementStart === target.statementStart) {
+    return moveWithinStatement(code, source, target, placement);
+  }
+  const statements = sorted.filter(
+    (control, index) =>
+      index === 0 ||
+      control.statementStart !== sorted[index - 1].statementStart,
+  );
+  return moveAcrossStatements(
+    code,
+    source,
+    target,
+    placement,
+    statements,
+    statements.findIndex(
+      (control) => control.statementStart === source.statementStart,
+    ),
+    statements.findIndex(
+      (control) => control.statementStart === target.statementStart,
+    ),
+  );
+}

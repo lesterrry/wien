@@ -1,4 +1,6 @@
-import { SlidersHorizontal } from "lucide-react";
+import classNames from "classnames";
+import { Maximize2, SlidersHorizontal } from "lucide-react";
+import { useRef, useState } from "react";
 import type {
   Control,
   ControlChange,
@@ -14,10 +16,10 @@ import styles from "./ControlsPanel.module.css";
 interface ControlCallbacks {
   disabled: boolean;
   onChange: (name: string, change: ControlChange) => void;
-  onIgnore: (name: string) => void;
+  onIgnore?: (name: string) => void;
 }
 
-function ControlInput({
+export function ControlInput({
   control,
   disabled,
   onChange,
@@ -44,6 +46,12 @@ function ControlInput({
   }
 }
 
+type DragState = {
+  name: string;
+  over: string | null;
+  side: "before" | "after";
+};
+
 export function ControlsPanel({
   controls,
   valid,
@@ -52,22 +60,45 @@ export function ControlsPanel({
   disabled,
   onChange,
   onIgnore,
+  onOpenController,
+  onMove,
 }: {
   controls: Control[];
   valid: boolean;
   errors?: string[];
   hasDocument: boolean;
-} & ControlCallbacks) {
-  const hasNumber = controls.some((control) => control.kind === "number");
-  const hasBoolean = controls.some((control) => control.kind === "boolean");
-  const hasSlider = controls.some((control) => control.kind === "slider");
-  const hasEnum = controls.some((control) => control.kind === "enum");
+  disabled: boolean;
+  onChange: (name: string, change: ControlChange) => void;
+  onIgnore: (name: string) => void;
+  onOpenController: () => void;
+  onMove: (
+    name: string,
+    targetName: string,
+    placement: "before" | "after",
+  ) => void;
+}) {
+  const [drag, setDrag] = useState<DragState | null>(null);
+  // Set on pointer-down: only presses that start on the row's own
+  // background may initiate a reorder drag.
+  const dragAllowed = useRef(true);
+  const shortcut = navigator.platform.includes("Mac") ? "⌥" : "Alt";
+
   return (
     <aside className={styles.controlsPanel} aria-label="Snippet controls">
       <div className={styles.controlsTitle}>
         <SlidersHorizontal size={14} />
         <span>Controls</span>
         <small>{controls.length}</small>
+        <button
+          type="button"
+          className={styles.controllerButton}
+          title="Open full controls"
+          aria-label="Open full controls"
+          disabled={!hasDocument || !valid || disabled}
+          onClick={onOpenController}
+        >
+          <Maximize2 size={13} />
+        </button>
       </div>
       <div className={styles.controlsList}>
         {errors?.map((error) => (
@@ -75,15 +106,91 @@ export function ControlsPanel({
             {error}
           </p>
         ))}
-        {controls.map((control) => (
-          <ControlInput
-            key={control.name}
-            control={control}
-            disabled={disabled}
-            onChange={onChange}
-            onIgnore={onIgnore}
-          />
-        ))}
+        {controls.map((control, index) => {
+          const isOver =
+            drag?.over === control.name && drag.name !== control.name;
+          return (
+            <fieldset
+              key={control.name}
+              className={classNames(styles.controlRow, {
+                [styles.rowDragging]: drag?.name === control.name,
+                [styles.dropBefore]: isOver && drag?.side === "before",
+                [styles.dropAfter]: isOver && drag?.side === "after",
+              })}
+              aria-label={`${control.name} control`}
+              draggable={!disabled}
+              tabIndex={disabled ? undefined : 0}
+              title={`Drag to reorder ${control.name} (${shortcut}+↑ / ${shortcut}+↓)`}
+              onPointerDown={(event) => {
+                const target = event.target as HTMLElement | null;
+                dragAllowed.current = !target?.closest(
+                  "button, input, textarea, select, a, legend",
+                );
+              }}
+              onDragStart={(event) => {
+                if (disabled || !dragAllowed.current) {
+                  event.preventDefault();
+                  return;
+                }
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", control.name);
+                setDrag({
+                  name: control.name,
+                  over: null,
+                  side: "before",
+                });
+              }}
+              onDragEnd={() => setDrag(null)}
+              onKeyDown={(event) => {
+                if (event.target !== event.currentTarget) return;
+                if (disabled || !event.altKey) return;
+                if (event.key === "ArrowUp" && index > 0) {
+                  event.preventDefault();
+                  onMove(control.name, controls[index - 1].name, "before");
+                }
+                if (event.key === "ArrowDown" && index < controls.length - 1) {
+                  event.preventDefault();
+                  onMove(control.name, controls[index + 1].name, "after");
+                }
+              }}
+              onDragOver={(event) => {
+                if (!drag || drag.name === control.name) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+                const rect = event.currentTarget.getBoundingClientRect();
+                const side =
+                  event.clientY < rect.top + rect.height / 2
+                    ? "before"
+                    : "after";
+                setDrag({ ...drag, over: control.name, side });
+              }}
+              onDragLeave={(event) => {
+                const next = event.relatedTarget as Node | null;
+                if (next && event.currentTarget.contains(next)) return;
+                if (drag?.over === control.name)
+                  setDrag({ ...drag, over: null });
+              }}
+              onDrop={(event) => {
+                if (!drag || drag.name === control.name) return;
+                event.preventDefault();
+                const rect = event.currentTarget.getBoundingClientRect();
+                const side =
+                  event.clientY < rect.top + rect.height / 2
+                    ? "before"
+                    : "after";
+                onMove(drag.name, control.name, side);
+                setDrag(null);
+              }}
+            >
+              <ControlInput
+                control={control}
+                disabled={disabled}
+                onChange={onChange}
+                onIgnore={onIgnore}
+              />
+            </fieldset>
+          );
+        })}
         {!controls.length && (
           <div className={styles.controlsEmpty}>
             <p>
@@ -106,33 +213,7 @@ export function ControlsPanel({
           </div>
         )}
       </div>
-      <div className={styles.controlsHint}>
-        {hasNumber && (
-          <>
-            Drag or scroll a knob · Shift for precision · Alt for speed
-            <br />
-          </>
-        )}
-        {hasBoolean && (
-          <>
-            Press a switch to toggle
-            <br />
-          </>
-        )}
-        {hasSlider && (
-          <>
-            Drag or scroll · Arrows to adjust · Shift for precision · Home / End
-            <br />
-          </>
-        )}
-        {hasEnum && (
-          <>
-            <span>Choose a label or drag · Arrows to switch</span>
-            <br />
-          </>
-        )}
-        Changes are saved in your code.
-      </div>
+      <div className={styles.controlsHint}>Hold Shift for more precision</div>
     </aside>
   );
 }

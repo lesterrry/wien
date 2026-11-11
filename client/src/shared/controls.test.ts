@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { changeControl, ignoreControl, readControls } from "./controls";
+import {
+  changeControl,
+  ignoreControl,
+  moveControl,
+  readControls,
+} from "./controls";
 import { editSource } from "./modules";
 import { clampSliderValue, validateSliderRange } from "./slider";
 
@@ -691,4 +696,177 @@ test("comma bindings and ignore isolate annotations to the intended array", () =
     ),
     ["a"],
   );
+});
+
+function mustMove(
+  code: string,
+  name: string,
+  target: string,
+  placement: "before" | "after",
+) {
+  const edit = moveControl(code, name, target, placement);
+  assert(
+    edit,
+    `moveControl(${name}, ${target}, ${placement}) returned undefined`,
+  );
+  return edit;
+}
+
+test("moveControl swaps two adjacent top-level declarations", () => {
+  const code = "const a = 1;\nconst b = 2;\nnote('c3')";
+  const edit = moveControl(code, "a", "b", "after");
+  assert(edit);
+  const moved = editSource(code, [edit]);
+  assert.equal(moved, "const b = 2;\nconst a = 1;\nnote('c3')");
+  assert.deepEqual(
+    readControls(moved).controls.map((c) => c.name),
+    ["b", "a"],
+  );
+});
+
+test("moveControl relocates across intervening statements", () => {
+  const code = "const a = 1;\nconst b = 2;\nconst c = 3;";
+  const moved = editSource(code, [mustMove(code, "a", "c", "after")]);
+  assert.equal(moved, "const b = 2;\nconst c = 3;\nconst a = 1;");
+  const reversed = editSource(code, [mustMove(code, "c", "a", "before")]);
+  assert.equal(reversed, "const c = 3;\nconst a = 1;\nconst b = 2;");
+});
+
+test("moveControl reorders declarators inside one comma declaration", () => {
+  const code = "const a = 1, b = 2, c = 3;";
+  const moved = editSource(code, [mustMove(code, "a", "c", "after")]);
+  assert.equal(moved, "const b = 2, c = 3, a = 1;");
+  assert.deepEqual(
+    readControls(moved).controls.map((c) => c.name),
+    ["b", "c", "a"],
+  );
+});
+
+test("moveControl moves a multi-binding declaration with its siblings", () => {
+  const code = "const a = 1, b = 2;\nconst c = 3;";
+  const moved = editSource(code, [mustMove(code, "c", "a", "before")]);
+  assert.equal(moved, "const c = 3;\nconst a = 1, b = 2;");
+  assert.deepEqual(
+    readControls(moved).controls.map((c) => c.name),
+    ["c", "a", "b"],
+  );
+});
+
+test("moveControl preserves preceding //@ignore comments", () => {
+  const code = "//@ignore\nconst hidden = 2;\nconst a = 1;\nconst b = 2;\n";
+  const moved = editSource(code, [mustMove(code, "b", "a", "before")]);
+  assert.equal(
+    moved,
+    "//@ignore\nconst hidden = 2;\nconst b = 2;\nconst a = 1;\n",
+  );
+  assert.deepEqual(
+    readControls(moved).controls.map((c) => c.name),
+    ["b", "a"],
+  );
+});
+
+test("moveControl carries an ignore marker that precedes a declarator", () => {
+  const code =
+    "const a = 1, \n//@ignore\nb = 2, \nc = 3;\nnote('c3').gain(a + c)";
+  const moved = editSource(code, [mustMove(code, "a", "c", "after")]);
+  assert.deepEqual(
+    readControls(moved).controls.map((c) => c.name),
+    ["c", "a"],
+  );
+});
+
+test("moveControl preserves CRLF line endings", () => {
+  const code = "const a = 1;\r\nconst b = 2;\r\n";
+  const moved = editSource(code, [mustMove(code, "a", "b", "after")]);
+  assert.equal(moved, "const b = 2;\r\nconst a = 1;\r\n");
+});
+
+test("moving controls carries leading and inline annotations", () => {
+  for (const newline of ["\n", "\r\n"]) {
+    const code = [
+      waveCode,
+      "// @slider vertical 0..1",
+      "const amount = 0.5;",
+      "const layers = []; // @multi Wave order=Saw,Sine,Triangle",
+      "const count = 2;",
+    ].join(newline);
+    for (const [name, target, placement] of [
+      ["amount", "count", "after"],
+      ["count", "amount", "before"],
+      ["amount", "count", "before"],
+      ["count", "amount", "after"],
+      ["layers", "amount", "before"],
+      ["amount", "layers", "after"],
+    ] as const) {
+      const changed = editSource(code, [
+        mustMove(code, name, target, placement),
+      ]);
+      const parsed = readControls(changed);
+      assert.equal(parsed.valid, true);
+      assert.equal(parsed.errors, undefined);
+      assert.equal(
+        parsed.controls.find((c) => c.name === "amount")?.kind,
+        "slider",
+      );
+      const layers = parsed.controls.find((c) => c.name === "layers");
+      assert(layers?.kind === "multi-enum");
+      assert.deepEqual(
+        layers.options.map((option) => option.key),
+        ["Saw", "Sine", "Triangle"],
+      );
+      assert.equal(
+        parsed.controls.find((c) => c.name === "count")?.kind,
+        "number",
+      );
+      assert.equal((changed.match(/@slider/g) ?? []).length, 1);
+      assert.equal((changed.match(/@multi/g) ?? []).length, 1);
+    }
+  }
+});
+
+test("moving annotated comma bindings preserves per-binding metadata", () => {
+  for (const code of [
+    "const a = 0.5, // @slider vertical 0..1\nb = 2, c = 3;",
+    "const a = 2,\n// @slider vertical 0..1\nb = 0.5, c = 3;",
+    "const a = 2, b = 3, c = 0.5; // @slider vertical 0..1",
+  ]) {
+    for (const [name, target, placement] of [
+      ["a", "c", "after"],
+      ["c", "a", "before"],
+    ] as const) {
+      const original = readControls(code);
+      const changed = editSource(code, [
+        mustMove(code, name, target, placement),
+      ]);
+      const parsed = readControls(changed);
+      assert.equal(parsed.valid, true, changed);
+      assert.equal(parsed.errors, undefined, changed);
+      for (const control of original.controls) {
+        const moved = parsed.controls.find((c) => c.name === control.name);
+        assert.equal(moved?.kind, control.kind, changed);
+        assert.equal(moved?.value, control.value, changed);
+      }
+    }
+  }
+});
+
+test("moving whole comma declarations does not duplicate siblings", () => {
+  const code = "const a = 1, b = 2;\nconst c = 3;\nconst d = 4, e = 5;";
+  for (const [name, target, placement] of [
+    ["a", "c", "after"],
+    ["b", "d", "after"],
+    ["d", "b", "before"],
+    ["e", "a", "before"],
+    ["a", "e", "before"],
+    ["e", "a", "after"],
+  ] as const) {
+    const changed = editSource(code, [mustMove(code, name, target, placement)]);
+    const parsed = readControls(changed);
+    assert.equal(parsed.valid, true, changed);
+    assert.deepEqual(
+      parsed.controls.map((c) => c.name).sort(),
+      ["a", "b", "c", "d", "e"],
+      changed,
+    );
+  }
 });

@@ -12,7 +12,7 @@ export function EnumSwitch({
   control: EnumControl;
   disabled: boolean;
   onChange: (name: string, value: string | number) => void;
-  onIgnore: (name: string) => void;
+  onIgnore?: (name: string) => void;
 }) {
   const groupId = useId();
   const rail = useRef<HTMLDivElement>(null);
@@ -49,16 +49,18 @@ export function EnumSwitch({
         <span className={styles.controlName} title={control.name}>
           {control.name}
         </span>
-        <button
-          type="button"
-          className={styles.iconButton}
-          disabled={disabled}
-          aria-label={`Hide ${control.name} control`}
-          title="Hide control · adds //@ignore"
-          onClick={() => onIgnore(control.name)}
-        >
-          <X size={13} />
-        </button>
+        {onIgnore && (
+          <button
+            type="button"
+            className={styles.iconButton}
+            disabled={disabled}
+            aria-label={`Hide ${control.name} control`}
+            title="Hide control · adds //@ignore"
+            onClick={() => onIgnore(control.name)}
+          >
+            <X size={13} />
+          </button>
+        )}
       </div>
       <div className={styles.scroll}>
         <div

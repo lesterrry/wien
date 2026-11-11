@@ -22,7 +22,7 @@ export function MultiSelect({
   control: MultiEnumControl;
   disabled: boolean;
   onChange: (name: string, value: ControlChange) => void;
-  onIgnore: (name: string) => void;
+  onIgnore?: (name: string) => void;
 }) {
   const group = useRef<HTMLFieldSetElement>(null);
   const pending = useRef<{ key: string; x: number; y: number } | null>(null);
@@ -113,16 +113,18 @@ export function MultiSelect({
         <span className={styles.name} title={control.name}>
           {control.name}
         </span>
-        <button
-          type="button"
-          className={styles.iconButton}
-          disabled={disabled}
-          aria-label={`Hide ${control.name} control`}
-          title="Hide control · adds //@ignore"
-          onClick={() => onIgnore(control.name)}
-        >
-          <X size={13} />
-        </button>
+        {onIgnore && (
+          <button
+            type="button"
+            className={styles.iconButton}
+            disabled={disabled}
+            aria-label={`Hide ${control.name} control`}
+            title="Hide control · adds //@ignore"
+            onClick={() => onIgnore(control.name)}
+          >
+            <X size={13} />
+          </button>
+        )}
       </div>
       <fieldset
         ref={group}

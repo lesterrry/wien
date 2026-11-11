@@ -1,0 +1,146 @@
+syntax = "proto3";
+package strudel.rag.v1;
+
+service StrudelRag {
+  rpc Search(SearchRequest) returns (SearchResponse);
+  rpc GetDocument(GetDocumentRequest) returns (GetDocumentResponse);
+  rpc GetCorpusInfo(GetCorpusInfoRequest) returns (GetCorpusInfoResponse);
+}
+
+enum DocumentKind {
+  DOCUMENT_KIND_UNSPECIFIED = 0;
+  DOCUMENT_KIND_API = 1;
+  DOCUMENT_KIND_THEORY = 2;
+  DOCUMENT_KIND_EXAMPLE = 3;
+}
+enum VerificationStatus {
+  VERIFICATION_STATUS_UNSPECIFIED = 0;
+  VERIFICATION_STATUS_SOURCE_ONLY = 1;
+  VERIFICATION_STATUS_STATICALLY_CHECKED = 2;
+  VERIFICATION_STATUS_EXECUTED = 3;
+}
+enum SearchIntent {
+  SEARCH_INTENT_UNSPECIFIED = 0;
+  SEARCH_INTENT_API = 1;
+  SEARCH_INTENT_MUSICAL = 2;
+  SEARCH_INTENT_EXAMPLE = 3;
+  SEARCH_INTENT_MIXED = 4;
+}
+message LicenseInfo {
+  optional string name = 1;
+  optional string url = 2;
+  optional string attribution = 3;
+}
+message SourceRef {
+  string source_id = 1;
+  optional string source_url = 2;
+  optional string source_path = 3;
+  optional string source_revision = 4;
+  optional LicenseInfo license = 5;
+  optional string fetched_at = 6;
+  optional string etag = 7;
+  optional string last_modified = 8;
+  repeated string notices = 9;
+}
+message CodeBlock {
+  optional string language = 1;
+  string code = 2;
+}
+message ExampleMetadata {
+  repeated string genres = 1;
+  repeated string roles = 2;
+  optional double bpm = 3;
+  optional string key = 4;
+  repeated string required_samples = 5;
+  repeated string related_api = 6;
+  repeated string musical_concepts = 7;
+}
+message Record {
+  string document_id = 1;
+  DocumentKind kind = 2;
+  string title = 3;
+  repeated string heading_path = 4;
+  SourceRef source = 5;
+  optional string language = 6;
+  string content = 7;
+  repeated CodeBlock code_blocks = 8;
+  repeated string tags = 9;
+  optional string parent_document_id = 10;
+  string content_hash = 11;
+  VerificationStatus verification_status = 12;
+  optional string verification_evidence = 13;
+  optional ExampleMetadata example_metadata = 14;
+  optional string chunk_id = 15;
+}
+message SearchFilters {
+  repeated DocumentKind kinds = 1;
+  repeated string source_ids = 2;
+  repeated string tags = 3;
+  repeated string languages = 4;
+}
+message SearchRequest {
+  string query = 1;
+  SearchIntent intent = 2;
+  optional uint32 top_k = 3;
+  SearchFilters filters = 4;
+}
+message SearchHit {
+  Record record = 1;
+  optional uint32 lexical_rank = 2;
+  optional float lexical_score = 3;
+  optional uint32 vector_rank = 4;
+  optional float vector_score = 5;
+  double fusion_score = 6;
+  repeated SourceRef alternate_sources = 7;
+}
+message SearchDiagnostics {
+  string generation = 1;
+  string model = 2;
+  uint32 dimension = 3;
+  uint32 lexical_candidates = 4;
+  uint32 vector_candidates = 5;
+  bool diversity_applied = 6;
+  bool fixture = 7;
+  bool scores_are_probabilities = 8;
+}
+message SearchResponse {
+  repeated SearchHit results = 1;
+  SearchDiagnostics diagnostics = 2;
+}
+message GetDocumentRequest {
+  oneof reference {
+    string document_id = 1;
+    string chunk_id = 2;
+  }
+  bool parent_context = 3;
+}
+message GetDocumentResponse {
+  Record record = 1;
+  string index_version = 2;
+}
+message GetCorpusInfoRequest {}
+message KindCount {
+  DocumentKind kind = 1;
+  uint64 documents = 2;
+  uint64 chunks = 3;
+}
+message SourceInfo {
+  string source_id = 1;
+  optional string revision = 2;
+  optional LicenseInfo license = 3;
+  repeated string coverage_gaps = 4;
+}
+message GetCorpusInfoResponse {
+  bool ready = 1;
+  optional string readiness_reason = 2;
+  uint64 documents = 3;
+  uint64 chunks = 4;
+  repeated KindCount counts_by_kind = 5;
+  repeated SourceInfo sources = 6;
+  optional string model = 7;
+  optional uint32 dimension = 8;
+  optional string fingerprint = 9;
+  optional string index_version = 10;
+  optional string built_at = 11;
+  bool fixture = 12;
+}

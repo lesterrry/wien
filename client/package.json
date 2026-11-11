@@ -12,14 +12,15 @@
     "typecheck": "tsc --noEmit",
     "format": "biome check --write .",
     "test": "pnpm check && pnpm test:unit",
-    "test:unit": "node --import tsx --test src/main/project-fs.test.ts src/shared/modules.test.ts src/shared/controls.test.ts && pnpm test:modules",
-    "test:smoke": "pnpm build && node scripts/smoke.mjs && node scripts/window-smoke.mjs",
+    "test:unit": "node --import tsx --test src/main/project-fs.test.ts src/main/assistant.test.ts src/shared/modules.test.ts src/shared/controls.test.ts && pnpm test:modules",
+    "test:smoke": "pnpm build && node scripts/smoke.mjs && node scripts/window-smoke.mjs && node scripts/assistant-smoke.mjs",
     "build": "pnpm typecheck && electron-vite build",
     "preview": "electron-vite preview",
     "package": "pnpm build && electron-builder --dir",
     "test:modules": "esbuild src/renderer/src/module-compiler.test.ts --bundle --platform=node --main-fields=module,main --format=cjs --outfile=out/tests/modules.cjs && node --test out/tests/modules.cjs"
   },
   "dependencies": {
+    "@codemirror/commands": "^6.11.1",
     "@codemirror/state": "^6.7.6",
     "@codemirror/view": "^6.43.15",
     "@strudel/codemirror": "^1.3.0",
@@ -35,7 +36,9 @@
     "react-arborist": "4.0.1",
     "react-dnd": "^16.0.1",
     "react-dnd-html5-backend": "^16.0.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.6",

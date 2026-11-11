@@ -12,6 +12,7 @@ use utoipa::openapi::{Info, OpenApi, Server};
 use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_swagger_ui::SwaggerUi;
 
+use crate::assistant::{self, AssistRequest, AssistResponse, AssistantConfig};
 use crate::providers::{ModelOptions, ModelResponse, Provider, ProviderError};
 
 const MAX_TEXT_BYTES: usize = 128 * 1024;
@@ -59,9 +60,16 @@ impl IntoResponse for ApiError {
     }
 }
 
-fn documented_routes() -> (Router<Arc<dyn Provider>>, OpenApi) {
+#[derive(Clone)]
+struct AppState {
+    provider: Arc<dyn Provider>,
+    assistant: Arc<AssistantConfig>,
+}
+
+fn documented_routes() -> (Router<AppState>, OpenApi) {
     let (router, mut spec) = OpenApiRouter::new()
         .routes(routes!(generate))
+        .routes(routes!(assist))
         .routes(routes!(health))
         .split_for_parts();
     spec.info = Info::new("Wien local AI server", env!("CARGO_PKG_VERSION"));
@@ -74,12 +82,15 @@ pub fn openapi() -> OpenApi {
     documented_routes().1
 }
 
-pub fn router(provider: Arc<dyn Provider>) -> Router {
+pub fn router(provider: Arc<dyn Provider>, assistant: AssistantConfig) -> Router {
     let (router, spec) = documented_routes();
     router
         .merge(SwaggerUi::new("/docs").url("/openapi.json", spec))
         .layer(DefaultBodyLimit::max(256 * 1024))
-        .with_state(provider)
+        .with_state(AppState {
+            provider,
+            assistant: Arc::new(assistant),
+        })
 }
 
 /// Check server health without calling the model.
@@ -107,10 +118,33 @@ async fn health() -> &'static str {
     )
 )]
 async fn generate(
-    State(provider): State<Arc<dyn Provider>>,
+    State(state): State<AppState>,
     headers: HeaderMap,
     body: Result<Json<GenerateRequest>, JsonRejection>,
 ) -> Result<Json<ModelResponse>, ApiError> {
+    check_local(&headers)?;
+    let request = parse_body(body)?;
+    if request.text.trim().is_empty()
+        || request.text.len() > MAX_TEXT_BYTES
+        || request.options.model.trim().is_empty()
+        || request.options.model.len() > 200
+        || request
+            .options
+            .instructions
+            .as_ref()
+            .is_some_and(|value| value.len() > MAX_TEXT_BYTES)
+    {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+            "Text must be nonempty and at most 128 KiB; model must be 1–200 bytes; instructions at most 128 KiB.",
+        ));
+    }
+    let response = state.provider.send(&request.text, &request.options).await?;
+    Ok(Json(response))
+}
+
+fn check_local(headers: &HeaderMap) -> Result<(), ApiError> {
     // No CORS allowance. Also reject DNS-rebinding hosts and cross-origin browser requests.
     let host = headers
         .get("host")
@@ -130,7 +164,11 @@ async fn generate(
             "Only local requests are accepted.",
         ));
     }
-    let Json(request) = body.map_err(|error| {
+    Ok(())
+}
+
+fn parse_body<T>(body: Result<Json<T>, JsonRejection>) -> Result<T, ApiError> {
+    body.map(|Json(request)| request).map_err(|error| {
         if error.status() == StatusCode::PAYLOAD_TOO_LARGE {
             ApiError::new(
                 StatusCode::PAYLOAD_TOO_LARGE,
@@ -141,26 +179,45 @@ async fn generate(
             ApiError::new(
                 StatusCode::BAD_REQUEST,
                 "invalid_request",
-                "Expected application/json with text and supported model options.",
+                "Expected application/json matching the request schema.",
             )
         }
-    })?;
-    if request.text.trim().is_empty()
-        || request.text.len() > MAX_TEXT_BYTES
-        || request.options.model.trim().is_empty()
-        || request.options.model.len() > 200
-        || request
-            .options
-            .instructions
-            .as_ref()
-            .is_some_and(|value| value.len() > MAX_TEXT_BYTES)
-    {
+    })
+}
+
+/// Ask the editor assistant; selection is context, edits replace the entire current file.
+#[utoipa::path(
+    post, path = "/v1/assist",
+    request_body(content = AssistRequest, example = json!({
+        "prompt": "Make the bass softer. Reply briefly.",
+        "file": {"path": "first-light.strudel", "content": "note(\"a1\").s(\"sawtooth\").gain(0.2)", "cursor": {"anchor": 0, "head": 10}}
+    })),
+    responses(
+        (status = 200, description = "Short answer and optional complete replacement code", body = AssistResponse),
+        (status = 400, description = "Invalid prompt, file or cursor offsets", body = ApiError),
+        (status = 403, description = "Non-local browser origin", body = ApiError),
+        (status = 413, description = "Request body too large", body = ApiError),
+        (status = 429, description = "Provider usage limit", body = ApiError),
+        (status = 502, description = "Invalid or incomplete model response", body = ApiError),
+        (status = 503, description = "Local Codex login required", body = ApiError),
+        (status = 504, description = "Provider timeout", body = ApiError)
+    )
+)]
+async fn assist(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: Result<Json<AssistRequest>, JsonRejection>,
+) -> Result<Json<AssistResponse>, ApiError> {
+    check_local(&headers)?;
+    let request = parse_body(body)?;
+    if !request.is_valid() {
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
             "invalid_request",
-            "Text must be nonempty and at most 128 KiB; model must be 1–200 bytes; instructions at most 128 KiB.",
+            "Expected a prompt up to 16 KiB, file content up to 128 KiB, and valid UTF-16 cursor offsets.",
         ));
     }
-    let response = provider.send(&request.text, &request.options).await?;
-    Ok(Json(response))
+    Ok(Json(
+        assistant::send(state.provider.as_ref(), &state.assistant, &request).await?,
+    ))
 }
