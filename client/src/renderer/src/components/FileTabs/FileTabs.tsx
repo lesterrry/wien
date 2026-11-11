@@ -1,5 +1,5 @@
 import classNames from "classnames";
-import { FileCode2, Package, X } from "lucide-react";
+import { FileCode2, Package, SlidersHorizontal, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import styles from "./FileTabs.module.css";
 
@@ -15,20 +15,29 @@ export function FileTabs({
   disabled,
   onSelect,
   onClose,
+  controller,
 }: {
   tabs: FileTab[];
   active: string | null;
   disabled: boolean;
   onSelect: (path: string) => void;
   onClose: (path: string) => void;
+  controller?: {
+    open: boolean;
+    disabled: boolean;
+    onSelect: () => void;
+    onClose: () => void;
+  };
 }) {
   const list = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (active)
-      list.current
-        ?.querySelector('[aria-selected="true"]')
-        ?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [active]);
+    const target = controller?.open
+      ? list.current?.querySelector('[data-controller-tab="true"]')
+      : active
+        ? list.current?.querySelector('[aria-selected="true"]')
+        : null;
+    target?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [active, controller?.open]);
 
   return (
     <div
@@ -38,7 +47,7 @@ export function FileTabs({
       ref={list}
     >
       {tabs.map((tab, index) => {
-        const selected = tab.path === active;
+        const selected = !controller?.open && tab.path === active;
         const filename = tab.path.split("/").at(-1);
         const duplicateName = tabs.some(
           (other) =>
@@ -112,6 +121,36 @@ export function FileTabs({
           </div>
         );
       })}
+      {controller?.open && (
+        <div
+          className={classNames(styles.fileTab, styles.active)}
+          role="presentation"
+          data-controller-tab="true"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected="true"
+            aria-label="Controls view"
+            tabIndex={0}
+            className={styles.fileTabSelect}
+            onClick={controller.onSelect}
+          >
+            <SlidersHorizontal size={13} />
+            <span className={styles.fileTabName}>Controls</span>
+          </button>
+          <button
+            type="button"
+            className={styles.fileTabClose}
+            aria-label="Close controls view"
+            title="Close controls view"
+            disabled={controller.disabled}
+            onClick={controller.onClose}
+          >
+            <X size={12} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
