@@ -1,0 +1,53 @@
+.panel {
+  border-top: 1px solid var(--color-border);
+  padding: 12px 8px 0;
+  color: var(--color-secondary);
+  font-size: 11px;
+}
+
+.panel form {
+  display: flex;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.panel input {
+  width: 100%;
+  min-width: 0;
+  padding: 6px;
+  color: var(--color-primary);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+}
+
+.panel button {
+  padding: 6px;
+  color: var(--color-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+}
+
+.panel button:hover,
+.panel button[aria-pressed="true"] {
+  background: var(--color-hover);
+}
+
+.panel ul {
+  max-height: 150px;
+  overflow: auto;
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+}
+
+.panel li button {
+  width: 100%;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.panel small {
+  display: block;
+  color: var(--color-muted);
+}

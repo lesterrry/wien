@@ -2,6 +2,12 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { WorkspaceApi } from "../shared/types";
 
 const api: WorkspaceApi = {
+  versions: () => ipcRenderer.invoke("versions:list"),
+  createVersion: (message) => ipcRenderer.invoke("versions:create", message),
+  selectVersion: (oid) => ipcRenderer.invoke("versions:select", oid),
+  versionActive: () => ipcRenderer.invoke("versions:active"),
+  versionChanged: () => ipcRenderer.invoke("versions:changed"),
+  restoreVersion: () => ipcRenderer.invoke("versions:restore"),
   assist: (id, request) => ipcRenderer.invoke("assistant:send", id, request),
   cancelAssist: (id) => ipcRenderer.send("assistant:cancel", id),
   current: () => ipcRenderer.invoke("project:current"),

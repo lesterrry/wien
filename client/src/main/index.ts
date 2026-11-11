@@ -6,6 +6,7 @@ import { externalWebUrl } from "../shared/links";
 import type { SaveRequest } from "../shared/types";
 import { askAssistant } from "./assistant";
 import { ProjectFs } from "./project-fs";
+import { ProjectVersions } from "./project-versions";
 import { starterFiles } from "./starter";
 
 if (!app.isPackaged && process.env.WIEN_USER_DATA) {
@@ -14,6 +15,8 @@ if (!app.isPackaged && process.env.WIEN_USER_DATA) {
 
 let window: BrowserWindow | null = null;
 let project: ProjectFs;
+let versions: ProjectVersions;
+let versionUnavailable: string | null = null;
 let closing = false;
 let closePending = false;
 let quitting = false;
@@ -26,10 +29,28 @@ const stateFile = () => path.join(app.getPath("userData"), "workspace.json");
 async function selectProject(root: string) {
   const realRoot = await fs.realpath(root);
   const next = new ProjectFs(realRoot);
+  const nextVersions = new ProjectVersions(realRoot, app.getPath("userData"));
+  let savedHistory: string | undefined;
+  let recoveryError: string | null = null;
+  try {
+    savedHistory = await nextVersions.recover(true);
+  } catch (error) {
+    recoveryError = `Version recovery is unavailable: ${String(error)}. The recovery copy has been retained.`;
+  }
+  if (savedHistory) {
+    await dialog.showMessageBox({
+      type: "info",
+      title: "Project recovered",
+      message: "The working state was restored.",
+      detail: `Files changed during the interrupted version view were preserved at ${savedHistory}.`,
+    });
+  }
   const info = await next.project();
   await fs.mkdir(app.getPath("userData"), { recursive: true });
   await fs.writeFile(stateFile(), JSON.stringify({ root: realRoot }));
   project = next;
+  versions = nextVersions;
+  versionUnavailable = recoveryError;
   return info;
 }
 
@@ -47,22 +68,29 @@ async function initializeProject() {
   if (!app.isPackaged && process.env.WIEN_PROJECT) {
     return selectProject(process.env.WIEN_PROJECT);
   }
+  let savedRoot: string | undefined;
   try {
     const saved = JSON.parse(await fs.readFile(stateFile(), "utf8"));
-    await selectProject(saved.root);
-    return;
+    if (typeof saved.root === "string") {
+      await fs.access(saved.root);
+      savedRoot = saved.root;
+    }
   } catch {
     // Missing or moved project: open the welcome workspace.
+  }
+  if (savedRoot) {
+    await selectProject(savedRoot);
+    return;
   }
   const parent = path.join(app.getPath("userData"), "projects");
   const root = path.join(parent, "First session");
   await fs.mkdir(parent, { recursive: true });
-  try {
-    await fs.access(root);
-    await selectProject(root);
-  } catch {
-    await createStarter(root);
-  }
+  const exists = await fs.access(root).then(
+    () => true,
+    () => false,
+  );
+  if (exists) await selectProject(root);
+  else await createStarter(root);
 }
 
 function registerIpc() {
@@ -114,6 +142,18 @@ function registerIpc() {
     });
   };
   handle("project:current", () => project.project());
+  const availableVersions = () => {
+    if (versionUnavailable) throw new Error(versionUnavailable);
+    return versions;
+  };
+  handle("versions:list", () => availableVersions().list());
+  handle("versions:create", (message: string) =>
+    availableVersions().create(message),
+  );
+  handle("versions:select", (oid: string) => availableVersions().select(oid));
+  handle("versions:active", () => versions.active());
+  handle("versions:changed", () => versions.changed());
+  handle("versions:restore", () => versions.recover());
   handle("project:read", (relative: string) => project.read(relative));
   handle("project:save", (request: SaveRequest) => project.save(request));
   handle("project:graph", (path: string, code: string) =>

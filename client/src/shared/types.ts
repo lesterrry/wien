@@ -20,7 +20,19 @@ export interface SaveRequest {
   expected: string;
 }
 
+export interface VersionEntry {
+  oid: string;
+  message: string;
+  timestamp: number;
+}
+
 export interface WorkspaceApi {
+  versions(): Promise<VersionEntry[]>;
+  createVersion(message: string): Promise<void>;
+  selectVersion(oid: string): Promise<void>;
+  versionActive(): Promise<boolean>;
+  versionChanged(): Promise<boolean>;
+  restoreVersion(): Promise<void>;
   assist(id: string, request: AssistRequest): Promise<AssistResponse>;
   cancelAssist(id: string): void;
   current(): Promise<Project>;

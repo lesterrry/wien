@@ -43,6 +43,7 @@ import {
   joinPath,
   type Project,
   parentPath,
+  type VersionEntry,
 } from "../../../../shared/types";
 import { ControllerPanel } from "../ControllerPanel/ControllerPanel";
 import { ControlsPanel } from "../ControlsPanel/ControlsPanel";
@@ -50,6 +51,7 @@ import { Dialog } from "../Dialog/Dialog";
 import { Explorer } from "../Explorer/Explorer";
 import { FileTabs } from "../FileTabs/FileTabs";
 import { type Player, StrudelEditor } from "../StrudelEditor/StrudelEditor";
+import { VersionsPanel } from "../VersionsPanel/VersionsPanel";
 import styles from "./App.module.css";
 
 interface Document {
@@ -97,6 +99,11 @@ const message = (error: unknown) =>
 export function App() {
   const [editorVersion, setEditorVersion] = useState(0);
   const [project, setProject] = useState<Project | null>(null);
+  const [versions, setVersions] = useState<VersionEntry[]>([]);
+  const [versionError, setVersionError] = useState<string | null>(null);
+  const [selectedVersion, setSelectedVersion] = useState<string | null>(null);
+  const [recoveryBlocked, setRecoveryBlocked] = useState(false);
+  const recoveryBlockedRef = useRef(false);
   const [document, setDocument] = useState<Document | null>(null);
   const [tabs, setTabs] = useState<string[]>([]);
   const tabsRef = useRef<string[]>([]);
@@ -145,6 +152,13 @@ export function App() {
     },
     [updateTabs],
   );
+
+  const blockRecovery = useCallback(() => {
+    recoveryBlockedRef.current = true;
+    setRecoveryBlocked(true);
+    updateTabs([]);
+    updateDocument(null);
+  }, [updateDocument, updateTabs]);
 
   const flush = useCallback(async () => {
     if (saving.current) return saving.current;
@@ -311,6 +325,24 @@ export function App() {
   );
 
   useEffect(() => {
+    if (!project?.root) return;
+    let cancelled = false;
+    setVersions([]);
+    setVersionError(null);
+    void api
+      .versions()
+      .then((entries) => {
+        if (!cancelled) setVersions(entries);
+      })
+      .catch((error) => {
+        if (!cancelled) setVersionError(message(error));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [project?.root]);
+
+  useEffect(() => {
     void api
       .current()
       .then(async (project) => {
@@ -355,6 +387,23 @@ export function App() {
         void run(async () => {
           try {
             await flush();
+            await Promise.all(foreignSaves.current.values());
+            if (selectedVersion && !recoveryBlockedRef.current) {
+              try {
+                if (
+                  (await api.versionChanged()) &&
+                  !window.confirm("Discard edits made in this version?")
+                ) {
+                  api.cancelClose();
+                  return;
+                }
+                await api.restoreVersion();
+                setSelectedVersion(null);
+              } catch (error) {
+                blockRecovery();
+                setError(message(error));
+              }
+            }
             await player.current?.stop();
             api.finishClose();
           } catch (error) {
@@ -363,7 +412,7 @@ export function App() {
           }
         });
       }),
-    [flush, run],
+    [blockRecovery, flush, run, selectedVersion],
   );
 
   const play = useCallback(() => {
@@ -511,8 +560,36 @@ export function App() {
   async function switchProject(create: boolean) {
     await run(async () => {
       await flush();
+      await Promise.all(foreignSaves.current.values());
+      if (selectedVersion && !recoveryBlockedRef.current) {
+        try {
+          if (
+            (await api.versionChanged()) &&
+            !window.confirm("Discard edits made in this version?")
+          )
+            return;
+          await api.restoreVersion();
+          setSelectedVersion(null);
+          const restored = await api.current();
+          setProject(restored);
+          updateTabs([]);
+          updateDocument(null);
+          setEditorVersion((version) => version + 1);
+          const first = restored.entries.find((entry) => !entry.children);
+          if (first) {
+            const code = await api.read(first.id);
+            updateDocument({ path: first.id, code, saved: code });
+          }
+        } catch (error) {
+          blockRecovery();
+          setError(message(error));
+        }
+      }
       const next = await (create ? api.create() : api.open());
       if (!next) return;
+      recoveryBlockedRef.current = false;
+      setRecoveryBlocked(false);
+      setSelectedVersion(null);
       await player.current?.stop();
       updateTabs([]);
       updateDocument(null);
@@ -526,6 +603,62 @@ export function App() {
         updateDocument({ path: first.id, code, saved: code });
       }
     });
+  }
+
+  async function changeVersion(oid: string | null) {
+    await run(async () => {
+      await flush();
+      await Promise.all(foreignSaves.current.values());
+      if (
+        selectedVersion &&
+        (await api.versionChanged()) &&
+        !window.confirm("Discard edits made in this version?")
+      )
+        return;
+      await player.current?.stop();
+      setPlayback({ started: false, pending: false });
+      try {
+        if (oid) await api.selectVersion(oid);
+        else await api.restoreVersion();
+      } catch (error) {
+        if (await api.versionActive()) {
+          blockRecovery();
+          setSelectedVersion(oid ?? selectedVersion ?? "recovery");
+        }
+        throw error;
+      }
+      recoveryBlockedRef.current = false;
+      setRecoveryBlocked(false);
+      setSelectedVersion(oid);
+      const next = await api.current();
+      setProject(next);
+      updateTabs([]);
+      updateDocument(null);
+      setSelection(null);
+      setEditorVersion((version) => version + 1);
+      const first = next.entries.find((entry) => !entry.children);
+      if (first) {
+        const code = await api.read(first.id);
+        updateDocument({ path: first.id, code, saved: code });
+      }
+    });
+  }
+
+  async function createVersion(versionMessage: string) {
+    let saved = false;
+    await run(async () => {
+      await flush();
+      await Promise.all(foreignSaves.current.values());
+      try {
+        await api.createVersion(versionMessage);
+      } catch (error) {
+        setVersionError(message(error));
+        throw error;
+      }
+      setVersions(await api.versions());
+      saved = true;
+    });
+    return saved;
   }
 
   async function submitModal() {
@@ -817,6 +950,24 @@ export function App() {
                 y: Math.min(y, window.innerHeight - 225),
               })
             }
+          />
+          <VersionsPanel
+            versions={versions}
+            selected={selectedVersion}
+            disabled={busy}
+            recoveryBlocked={recoveryBlocked}
+            error={versionError}
+            onRetry={() => {
+              void api
+                .versions()
+                .then((entries) => {
+                  setVersions(entries);
+                  setVersionError(null);
+                })
+                .catch((error) => setVersionError(message(error)));
+            }}
+            onCreate={createVersion}
+            onSelect={(oid) => void changeVersion(oid)}
           />
           <div className={styles.sidebarBottom}>
             <button
