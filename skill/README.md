@@ -56,8 +56,10 @@ without fetching sources.
 
 The project-wide [`compose.yaml`](../compose.yaml) contains the `server` and
 `skill` services. Run `just run-server` from the repository root to build and
-start both with attached logs; Ctrl-C stops both. The assistant does not yet call
-RAG. The commands below operate on `skill` alone.
+start both with attached logs; Ctrl-C stops both. Wien `/v1/assist` calls RAG
+through the shared protobuf contract and provides the bundled skill and genre
+guides to the model. It requires a ready index. The commands below operate on
+`skill` alone.
 Its [Dockerfile](Dockerfile) builds the production CLI with
 `--locked` and no fixture feature, then runs it as UID/GID 10001 in a slim
 runtime with CA certificates. Rust and protobuf build tooling stay out of the

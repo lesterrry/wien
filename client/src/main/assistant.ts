@@ -1,6 +1,15 @@
 import type { AssistRequest, AssistResponse } from "../shared/assistant";
 
 const errors: Record<string, string> = {
+  rag_not_ready:
+    "The music reference index is not ready. Build the RAG index and restart skill.",
+  rag_unavailable:
+    "The music reference service is unavailable. Check just run-server.",
+  rag_unauthorized:
+    "The music reference service rejected authentication. Check the server configuration.",
+  rag_timeout: "The music reference search took too long. Try again.",
+  assistant_limit:
+    "The assistant reached its search limit. Try a narrower request.",
   provider_auth_required: "Sign in with codex login, then try again.",
   provider_rate_limited: "Model usage limit reached. Try again later.",
   provider_timeout: "The model took too long. Try again.",

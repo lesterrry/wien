@@ -1,5 +1,15 @@
+pub mod error;
+pub mod tools;
+
+use crate::{
+    genres,
+    providers::turn::{TurnRequest, user_input},
+};
+use error::AssistError;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::{collections::HashSet, time::Duration};
+use tools::{AssistantTools, ToolError};
 use utoipa::ToSchema;
 
 use crate::providers::{ModelOptions, Provider, ProviderError, ReasoningEffort};
@@ -127,22 +137,103 @@ pub struct AssistResponse {
     pub code: Option<String>,
 }
 
+pub fn instructions() -> String {
+    format!(
+        "{}\n\nGenre index:\n{}\n\n{}\n\n{}",
+        genres::SKILL,
+        genres::INDEX,
+        MASTER_PROMPT,
+        include_str!("../prompts/rag.md")
+    )
+}
+
 pub async fn send(
     provider: &dyn Provider,
     config: &AssistantConfig,
+    tools: &dyn AssistantTools,
     request: &AssistRequest,
-) -> Result<AssistResponse, ProviderError> {
+) -> Result<AssistResponse, AssistError> {
+    tokio::time::timeout(
+        Duration::from_secs(120),
+        run(provider, config, tools, request),
+    )
+    .await
+    .map_err(|_| AssistError::Provider(ProviderError::Timeout))?
+}
+
+async fn run(
+    provider: &dyn Provider,
+    config: &AssistantConfig,
+    tools: &dyn AssistantTools,
+    request: &AssistRequest,
+) -> Result<AssistResponse, AssistError> {
     let options = ModelOptions {
         model: config.model.clone(),
         reasoning_effort: Some(ReasoningEffort::Low),
-        instructions: Some(MASTER_PROMPT.into()),
+        instructions: Some(instructions()),
     };
-    let text = model_context(request)
-        .ok_or(ProviderError::InvalidResponse)?
-        .to_string();
-    let response = provider.send(&text, &options).await?;
+    let mut context = model_context(request).ok_or(ProviderError::InvalidResponse)?;
+    let corpus = tools.call("strudel_rag_get_corpus_info", json!({})).await?;
+    if corpus["ready"] != true {
+        return Err(ToolError::NotReady.into());
+    }
+    if corpus.to_string().len() > 64 * 1024 {
+        return Err(ToolError::ResultTooLarge.into());
+    }
+    context["rag_corpus"] = corpus;
+    let mut turn = TurnRequest {
+        input: vec![user_input(&context.to_string())],
+        tools: tools::definitions(),
+        options,
+    };
+    let mut call_ids = HashSet::new();
+    for _ in 0..8 {
+        if serde_json::to_vec(&turn.input)
+            .map_err(|_| ProviderError::InvalidResponse)?
+            .len()
+            > 512 * 1024
+        {
+            return Err(AssistError::Limit);
+        }
+        let response = provider.turn(&turn).await?;
+        if response.calls.is_empty() {
+            return parse_response(&response.response.text).map_err(Into::into);
+        }
+        if call_ids.len() + response.calls.len() > 12 {
+            return Err(AssistError::Limit);
+        }
+        turn.input.extend(response.output);
+        for call in response.calls {
+            if !call_ids.insert(call.call_id.clone()) {
+                return Err(ProviderError::InvalidResponse.into());
+            }
+            let result = match serde_json::from_str::<Value>(&call.arguments) {
+                Ok(arguments) => tools.call(&call.name, arguments).await,
+                Err(_) => Err(ToolError::InvalidArguments),
+            };
+            let result = result.and_then(|value| {
+                if value.to_string().len() > 64 * 1024 {
+                    Err(ToolError::ResultTooLarge)
+                } else {
+                    Ok(value)
+                }
+            });
+            let output = match result {
+                Ok(value) => value,
+                Err(error) if error.recoverable() => {
+                    json!({"error":{"code":error.code(), "message":error.message()}})
+                }
+                Err(error) => return Err(error.into()),
+            };
+            turn.input.push(json!({"type":"function_call_output", "call_id":call.call_id, "output":output.to_string()}));
+        }
+    }
+    Err(AssistError::Limit)
+}
+
+fn parse_response(text: &str) -> Result<AssistResponse, ProviderError> {
     let result: AssistResponse =
-        serde_json::from_str(&response.text).map_err(|_| ProviderError::InvalidResponse)?;
+        serde_json::from_str(text).map_err(|_| ProviderError::InvalidResponse)?;
     if result.message.trim().is_empty()
         || result.message.chars().count() > 2000
         || result

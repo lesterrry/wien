@@ -1,0 +1,16 @@
+# Server build includes the shared proto and bundled skill, never credentials/data.
+**
+!server/
+!server/Cargo.toml
+!server/Cargo.lock
+!server/build.rs
+!server/config.toml
+!server/src/
+!server/src/**
+!server/prompts/
+!server/prompts/**
+!skill/
+!skill/proto/
+!skill/proto/**
+!skill/skills/
+!skill/skills/**

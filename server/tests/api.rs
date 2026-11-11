@@ -1,3 +1,4 @@
+mod support;
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
@@ -47,7 +48,7 @@ fn app(error: Option<ProviderError>) -> (Router, Arc<AtomicUsize>) {
         calls: calls.clone(),
         error,
     });
-    (api::router(provider, Default::default()), calls)
+    (support::router(provider, Default::default()), calls)
 }
 
 fn request(body: Value) -> Request<Body> {

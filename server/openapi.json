@@ -115,7 +115,7 @@
             }
           },
           "503": {
-            "description": "Local Codex login required",
+            "description": "Codex login or RAG unavailable; retrieval index may not be ready",
             "content": {
               "application/json": {
                 "schema": {

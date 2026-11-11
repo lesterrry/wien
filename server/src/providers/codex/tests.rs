@@ -15,7 +15,7 @@ fn options() -> ModelOptions {
     }
 }
 
-async fn fixture(server: &MockServer, timeout: Duration) -> (TempDir, Codex) {
+pub(super) async fn fixture(server: &MockServer, timeout: Duration) -> (TempDir, Codex) {
     let dir = tempfile::tempdir().unwrap();
     let auth_file = dir.path().join("auth.json");
     write_auth(&auth_file, FAKE_TOKEN).await;
@@ -41,7 +41,7 @@ fn completed_event() -> Value {
     }})
 }
 
-fn sse(events: &[Value]) -> ResponseTemplate {
+pub(super) fn sse(events: &[Value]) -> ResponseTemplate {
     let body = events
         .iter()
         .map(|event| format!("data: {event}\n\n"))

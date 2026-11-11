@@ -15,6 +15,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|| PathBuf::from("server/config.toml"));
     let config = Config::load(&config_path).map_err(|error| error.to_string())?;
     let provider = config.provider.build()?;
+    let tools = std::sync::Arc::new(wien_server::assistant::tools::Tools(
+        wien_server::rag::RagClient::from_env()?,
+    ));
     let address = std::net::SocketAddr::new(host, port);
     println!("Starting Wien server on http://{address}");
     let listener = tokio::net::TcpListener::bind(address)
@@ -28,7 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })?;
     println!("Wien server: http://{}", listener.local_addr()?);
     println!("API docs: http://{}/docs/", listener.local_addr()?);
-    axum::serve(listener, api::router(provider, config.assistant))
+    axum::serve(listener, api::router(provider, config.assistant, tools))
         .with_graceful_shutdown(shutdown())
         .await?;
     Ok(())

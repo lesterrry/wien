@@ -17,8 +17,17 @@ tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "rt-multi
 utoipa = "6"
 utoipa-axum = "0.3"
 utoipa-swagger-ui = { version = "10", features = ["axum", "vendored"] }
+prost = "0.14"
+tonic = { version = "0.14", features = ["transport", "tls-native-roots", "tls-ring"] }
+tonic-prost = "0.14"
+
+[build-dependencies]
+prost-build = "0.14"
+tonic-prost-build = "0.14"
+protoc-bin-vendored = "3.3"
 
 [dev-dependencies]
 tempfile = "3"
 tower = { version = "0.5", features = ["util"] }
 wiremock = "0.6"
+tokio-stream = { version = "0.1", features = ["net"] }

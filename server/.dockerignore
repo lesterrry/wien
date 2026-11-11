@@ -1,9 +1,0 @@
-# Only build inputs and the non-secret default config enter the image context.
-**
-!Cargo.toml
-!Cargo.lock
-!config.toml
-!src/
-!src/**
-!prompts/
-!prompts/**

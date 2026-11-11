@@ -1,14 +1,16 @@
 # syntax=docker/dockerfile:1
 
 FROM rust:1-bookworm AS build
-WORKDIR /build
+WORKDIR /build/server
 
-COPY Cargo.toml Cargo.lock ./
-COPY src/ ./src/
-COPY prompts/ ./prompts/
+COPY server/Cargo.toml server/Cargo.lock server/build.rs ./
+COPY server/src/ ./src/
+COPY server/prompts/ ./prompts/
+COPY skill/proto/ /build/skill/proto/
+COPY skill/skills/ /build/skill/skills/
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
-    --mount=type=cache,target=/build/target \
+    --mount=type=cache,target=/build/server/target \
     cargo build --locked --release --bin wien-server \
     && install -m 0755 target/release/wien-server /usr/local/bin/wien-server
 
@@ -19,7 +21,7 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY --from=build /usr/local/bin/wien-server /usr/local/bin/wien-server
-COPY config.toml ./config.toml
+COPY server/config.toml ./config.toml
 
 ENV WIEN_SERVER_HOST=0.0.0.0 \
     WIEN_SERVER_PORT=3001 \

@@ -12,7 +12,9 @@ use utoipa::openapi::{Info, OpenApi, Server};
 use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_swagger_ui::SwaggerUi;
 
-use crate::assistant::{self, AssistRequest, AssistResponse, AssistantConfig};
+use crate::assistant::{
+    self, AssistRequest, AssistResponse, AssistantConfig, error::AssistError, tools::AssistantTools,
+};
 use crate::providers::{ModelOptions, ModelResponse, Provider, ProviderError};
 
 const MAX_TEXT_BYTES: usize = 128 * 1024;
@@ -54,6 +56,24 @@ impl From<ProviderError> for ApiError {
     }
 }
 
+impl From<AssistError> for ApiError {
+    fn from(error: AssistError) -> Self {
+        match error {
+            AssistError::Provider(error) => error.into(),
+            AssistError::Tool(error) => Self::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                error.code(),
+                error.message(),
+            ),
+            AssistError::Limit => Self::new(
+                StatusCode::BAD_GATEWAY,
+                "assistant_limit",
+                "Assistant tool or context budget exceeded. Try a narrower request.",
+            ),
+        }
+    }
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         (self.status, Json(self)).into_response()
@@ -64,6 +84,7 @@ impl IntoResponse for ApiError {
 struct AppState {
     provider: Arc<dyn Provider>,
     assistant: Arc<AssistantConfig>,
+    tools: Arc<dyn AssistantTools>,
 }
 
 fn documented_routes() -> (Router<AppState>, OpenApi) {
@@ -82,13 +103,18 @@ pub fn openapi() -> OpenApi {
     documented_routes().1
 }
 
-pub fn router(provider: Arc<dyn Provider>, assistant: AssistantConfig) -> Router {
+pub fn router(
+    provider: Arc<dyn Provider>,
+    assistant: AssistantConfig,
+    tools: Arc<dyn AssistantTools>,
+) -> Router {
     let (router, spec) = documented_routes();
     router
         .merge(SwaggerUi::new("/docs").url("/openapi.json", spec))
         .layer(DefaultBodyLimit::max(256 * 1024))
         .with_state(AppState {
             provider,
+            tools,
             assistant: Arc::new(assistant),
         })
 }
@@ -199,7 +225,7 @@ fn parse_body<T>(body: Result<Json<T>, JsonRejection>) -> Result<T, ApiError> {
         (status = 413, description = "Request body too large", body = ApiError),
         (status = 429, description = "Provider usage limit", body = ApiError),
         (status = 502, description = "Invalid or incomplete model response", body = ApiError),
-        (status = 503, description = "Local Codex login required", body = ApiError),
+        (status = 503, description = "Codex login or RAG unavailable; retrieval index may not be ready", body = ApiError),
         (status = 504, description = "Provider timeout", body = ApiError)
     )
 )]
@@ -218,6 +244,12 @@ async fn assist(
         ));
     }
     Ok(Json(
-        assistant::send(state.provider.as_ref(), &state.assistant, &request).await?,
+        assistant::send(
+            state.provider.as_ref(),
+            &state.assistant,
+            state.tools.as_ref(),
+            &request,
+        )
+        .await?,
     ))
 }
