@@ -1,7 +1,7 @@
 import { Check, GripVertical, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
-  ControlValue,
+  ControlChange,
   MultiEnumControl,
 } from "../../../../shared/controls";
 import styles from "./MultiSelect.module.css";
@@ -21,7 +21,7 @@ export function MultiSelect({
 }: {
   control: MultiEnumControl;
   disabled: boolean;
-  onChange: (name: string, value: ControlValue) => void;
+  onChange: (name: string, value: ControlChange) => void;
   onIgnore: (name: string) => void;
 }) {
   const group = useRef<HTMLFieldSetElement>(null);
@@ -99,6 +99,7 @@ export function MultiSelect({
     const active = dragging.current;
     if (active && !current.current.disabled)
       current.current.onChange(current.current.control.name, {
+        type: "reorder",
         order: orderedKeys(active.key, active.index),
       });
     cancel();
@@ -154,7 +155,10 @@ export function MultiSelect({
             ),
           );
           if (nextIndex !== index) {
-            onChange(control.name, { order: orderedKeys(key, nextIndex) });
+            onChange(control.name, {
+              type: "reorder",
+              order: orderedKeys(key, nextIndex),
+            });
             requestAnimationFrame(() => target.focus());
           }
         }}
@@ -228,7 +232,7 @@ export function MultiSelect({
                     const values = selected
                       ? control.value.filter((value) => value !== option.value)
                       : [...control.value, option.value];
-                    onChange(control.name, values);
+                    onChange(control.name, { type: "set", value: values });
                   }}
                 />
                 <span className={styles.check} aria-hidden="true">

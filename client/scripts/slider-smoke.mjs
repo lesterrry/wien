@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { _electron as electron } from "@playwright/test";
+import { _electron as electron, expect } from "@playwright/test";
 
 const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "wien-sliders-"));
 const environment = { ...process.env, WIEN_USER_DATA: temporary };
@@ -114,6 +114,37 @@ try {
   assert.equal(await repeats.getAttribute("aria-valuenow"), "2");
   await repeats.press("Shift+ArrowDown");
   assert.equal(await repeats.getAttribute("aria-valuenow"), "1");
+  // Both numeric controls share wheel handling, including sub-step accumulation.
+  await repeats.evaluate((element) => {
+    for (let i = 0; i < 5; i++)
+      element.dispatchEvent(
+        new WheelEvent("wheel", {
+          deltaY: -100,
+          shiftKey: true,
+          cancelable: true,
+        }),
+      );
+  });
+  await expect(repeats).toHaveAttribute("aria-valuenow", "2");
+  await repeats.press("ArrowDown");
+  await speed.press("Home");
+  await speed.evaluate((element) => {
+    element.dispatchEvent(
+      new WheelEvent("wheel", { deltaY: -3, deltaMode: 1, cancelable: true }),
+    );
+  });
+  await expect(speed).toHaveValue("0.2575");
+  await speed.evaluate((element) => {
+    element.dispatchEvent(
+      new WheelEvent("wheel", {
+        deltaY: -100,
+        ctrlKey: true,
+        cancelable: true,
+      }),
+    );
+  });
+  await expect(speed).toHaveValue("0.2575");
+  await speed.press("End");
   const effects = page.getByRole("group", { name: "effects options" });
   const chorus = effects.getByRole("checkbox", { name: "Chorus" });
   const echo = effects.getByRole("checkbox", { name: "Echo" });

@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import type { NumberControl } from "../../../../shared/controls";
+import { useNumericWheel } from "../../hooks/useNumericWheel";
 import styles from "./NumberKnob.module.css";
 
 const numberFormat = new Intl.NumberFormat("en-US", {
@@ -31,31 +32,14 @@ export function NumberKnob({
     if (Number.isFinite(next))
       onChange(name, integer ? Math.round(next) : Number(next.toFixed(5)));
   };
-  useEffect(() => {
-    const element = knob.current;
-    if (!element) return;
-    let currentValue = value;
-    const wheel = (event: WheelEvent) => {
-      if (disabled || event.ctrlKey || !event.deltaY || drag.current) return;
-      event.preventDefault();
-      // Normalize mouse notches and smooth trackpad scrolling to the same scale.
-      const distance =
-        event.deltaMode === WheelEvent.DOM_DELTA_LINE
-          ? event.deltaY / 3
-          : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
-            ? event.deltaY
-            : event.deltaY / 100;
-      const next =
-        currentValue -
-        distance * step * 2 * (event.shiftKey ? 0.1 : event.altKey ? 10 : 1);
-      if (!Number.isFinite(next)) return;
-      currentValue = next;
-      onChange(name, integer ? Math.round(next) : Number(next.toFixed(5)));
-    };
-    // React wheel handlers are passive; a native listener lets us stop panel scrolling.
-    element.addEventListener("wheel", wheel, { passive: false });
-    return () => element.removeEventListener("wheel", wheel);
-  }, [disabled, integer, name, onChange, step, value]);
+  useNumericWheel({
+    target: knob,
+    value,
+    step,
+    disabled,
+    onChange: change,
+    isInteracting: () => drag.current !== null,
+  });
   return (
     <div className={styles.numberControl}>
       <div className={styles.controlHeading}>

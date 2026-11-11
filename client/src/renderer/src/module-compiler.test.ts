@@ -169,11 +169,17 @@ test("the playable slider example produces numeric Strudel parameters", async ()
 
 test("playground enum edits change the lead and combine selected effects", async () => {
   const source = await readFile("../examples/sliders.strudel", "utf8");
-  const edit = changeControl(source, "waveform", "sawtooth");
+  const edit = changeControl(source, "waveform", {
+    type: "set",
+    value: "sawtooth",
+  });
   assert(edit);
   const changed = editSource(source, [edit]);
   assert.match(changed, /const waveform = Wave.Saw/);
-  const effectsEdit = changeControl(changed, "effects", ["echo", "crush"]);
+  const effectsEdit = changeControl(changed, "effects", {
+    type: "set",
+    value: ["echo", "crush"],
+  });
   assert(effectsEdit);
   const updated = editSource(changed, [effectsEdit]);
   assert.match(updated, /const effects = \[Fx.Echo, Fx.Crush\]/);

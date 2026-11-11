@@ -1,8 +1,9 @@
 import classNames from "classnames";
 import { X } from "lucide-react";
-import { type CSSProperties, useEffect, useRef } from "react";
+import { type CSSProperties, useRef } from "react";
 import type { SliderControl } from "../../../../shared/controls";
 import { clampSliderValue } from "../../../../shared/slider";
+import { useNumericWheel } from "../../hooks/useNumericWheel";
 import styles from "./NumberSlider.module.css";
 
 export function NumberSlider({
@@ -27,30 +28,17 @@ export function NumberSlider({
         clampSliderValue(min, max, integer ? Math.round(next) : next),
       );
   };
-  useEffect(() => {
-    const element = input.current;
-    if (!element) return;
-    let currentValue = value;
-    const wheel = (event: WheelEvent) => {
-      if (disabled || event.ctrlKey || !event.deltaY) return;
-      event.preventDefault();
-      const distance =
-        event.deltaMode === WheelEvent.DOM_DELTA_LINE
-          ? event.deltaY / 3
-          : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
-            ? event.deltaY
-            : event.deltaY / 100;
-      const next =
-        currentValue -
-        distance * step * 2 * (event.shiftKey ? 0.1 : event.altKey ? 10 : 1);
-      currentValue = integer
+  useNumericWheel({
+    target: input,
+    value,
+    step,
+    disabled,
+    onChange: change,
+    normalize: (next) =>
+      integer
         ? Math.min(max, Math.max(min, next))
-        : clampSliderValue(min, max, next);
-      onChange(name, integer ? Math.round(currentValue) : currentValue);
-    };
-    element.addEventListener("wheel", wheel, { passive: false });
-    return () => element.removeEventListener("wheel", wheel);
-  }, [disabled, integer, min, max, name, onChange, step, value]);
+        : clampSliderValue(min, max, next),
+  });
 
   return (
     <div className={styles.sliderControl} data-control-style={control.style}>

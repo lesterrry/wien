@@ -1,11 +1,48 @@
 import { SlidersHorizontal } from "lucide-react";
-import type { Control, ControlValue } from "../../../../shared/controls";
+import type {
+  Control,
+  ControlChange,
+  ControlValue,
+} from "../../../../shared/controls";
 import { BooleanSwitch } from "../BooleanSwitch/BooleanSwitch";
 import { EnumSwitch } from "../EnumSwitch/EnumSwitch";
 import { MultiSelect } from "../MultiSelect/MultiSelect";
 import { NumberKnob } from "../NumberKnob/NumberKnob";
 import { NumberSlider } from "../NumberSlider/NumberSlider";
 import styles from "./ControlsPanel.module.css";
+
+interface ControlCallbacks {
+  disabled: boolean;
+  onChange: (name: string, change: ControlChange) => void;
+  onIgnore: (name: string) => void;
+}
+
+function ControlInput({
+  control,
+  disabled,
+  onChange,
+  onIgnore,
+}: ControlCallbacks & { control: Control }) {
+  const props = { disabled, onIgnore };
+  const setValue = (name: string, value: ControlValue) =>
+    onChange(name, { type: "set", value });
+  switch (control.kind) {
+    case "multi-enum":
+      return <MultiSelect {...props} control={control} onChange={onChange} />;
+    case "enum":
+      return <EnumSwitch {...props} control={control} onChange={setValue} />;
+    case "slider":
+      return <NumberSlider {...props} control={control} onChange={setValue} />;
+    case "number":
+      return <NumberKnob {...props} control={control} onChange={setValue} />;
+    case "boolean":
+      return <BooleanSwitch {...props} control={control} onChange={setValue} />;
+    default: {
+      const unsupported: never = control;
+      throw new Error(`Unsupported control: ${unsupported}`);
+    }
+  }
+}
 
 export function ControlsPanel({
   controls,
@@ -20,10 +57,7 @@ export function ControlsPanel({
   valid: boolean;
   errors?: string[];
   hasDocument: boolean;
-  disabled: boolean;
-  onChange: (name: string, value: ControlValue) => void;
-  onIgnore: (name: string) => void;
-}) {
+} & ControlCallbacks) {
   const hasNumber = controls.some((control) => control.kind === "number");
   const hasBoolean = controls.some((control) => control.kind === "boolean");
   const hasSlider = controls.some((control) => control.kind === "slider");
@@ -41,49 +75,15 @@ export function ControlsPanel({
             {error}
           </p>
         ))}
-        {controls.map((control) =>
-          control.kind === "multi-enum" ? (
-            <MultiSelect
-              key={control.name}
-              control={control}
-              disabled={disabled}
-              onChange={onChange}
-              onIgnore={onIgnore}
-            />
-          ) : control.kind === "enum" ? (
-            <EnumSwitch
-              key={control.name}
-              control={control}
-              disabled={disabled}
-              onChange={onChange}
-              onIgnore={onIgnore}
-            />
-          ) : control.kind === "slider" ? (
-            <NumberSlider
-              key={control.name}
-              control={control}
-              disabled={disabled}
-              onChange={onChange}
-              onIgnore={onIgnore}
-            />
-          ) : control.kind === "number" ? (
-            <NumberKnob
-              key={control.name}
-              control={control}
-              disabled={disabled}
-              onChange={onChange}
-              onIgnore={onIgnore}
-            />
-          ) : (
-            <BooleanSwitch
-              key={control.name}
-              control={control}
-              disabled={disabled}
-              onChange={onChange}
-              onIgnore={onIgnore}
-            />
-          ),
-        )}
+        {controls.map((control) => (
+          <ControlInput
+            key={control.name}
+            control={control}
+            disabled={disabled}
+            onChange={onChange}
+            onIgnore={onIgnore}
+          />
+        ))}
         {!controls.length && (
           <div className={styles.controlsEmpty}>
             <p>

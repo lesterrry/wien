@@ -4,26 +4,33 @@ import { bindingNames, type Edit, editSource } from "./modules";
 import { multiAnnotation, multiSettings } from "./multi-annotations";
 import { validateSliderRange } from "./slider";
 
-export interface NumberControl {
-  kind: "number";
+interface ControlSource {
   name: string;
+  start: number;
+  end: number;
+  ignoreAt: number;
+}
+
+interface NumericControl extends ControlSource {
   value: number;
   integer: boolean;
-  start: number;
-  end: number;
-  ignoreAt: number;
 }
 
-export interface BooleanControl {
+interface EnumSource extends ControlSource {
+  objectName: string;
+  options: { key: string; value: string | number }[];
+}
+
+export interface NumberControl extends NumericControl {
+  kind: "number";
+}
+
+export interface BooleanControl extends ControlSource {
   kind: "boolean";
-  name: string;
   value: boolean;
-  start: number;
-  end: number;
-  ignoreAt: number;
 }
 
-export interface SliderControl extends Omit<NumberControl, "kind"> {
+export interface SliderControl extends NumericControl {
   kind: "slider";
   presentation: "horizontal" | "vertical";
   min: number;
@@ -31,33 +38,28 @@ export interface SliderControl extends Omit<NumberControl, "kind"> {
   style?: string;
 }
 
-export interface EnumControl
-  extends Omit<NumberControl, "kind" | "value" | "integer"> {
+export interface EnumControl extends EnumSource {
   kind: "enum";
   value: string | number;
-  objectName: string;
   selectedKey: string;
-  options: { key: string; value: string | number }[];
 }
 
-export interface MultiEnumControl
-  extends Omit<EnumControl, "kind" | "value" | "selectedKey"> {
+export interface MultiEnumControl extends EnumSource {
   kind: "multi-enum";
   value: (string | number)[];
   annotation?: { start: number; end: number };
   hasOrder: boolean;
 }
 
-export interface MultiOrderChange {
-  order: readonly string[];
-}
-
 export type ControlValue =
   | number
   | boolean
   | string
-  | readonly (string | number)[]
-  | MultiOrderChange;
+  | readonly (string | number)[];
+
+export type ControlChange =
+  | { type: "set"; value: ControlValue }
+  | { type: "reorder"; order: readonly string[] };
 export type Control =
   | NumberControl
   | BooleanControl
@@ -211,6 +213,125 @@ function booleanValue(node: Expression): boolean | undefined {
   }
 }
 
+function bindControlAnnotations(code: string, comments: Comment[]) {
+  // A contiguous group of annotation comments belongs to the next declaration.
+  const annotationsAt = (position: number) => {
+    const annotations: Comment[] = [];
+    let cursor = position;
+    for (let i = comments.length - 1; i >= 0; i--) {
+      const comment = comments[i];
+      if (comment.end > cursor) continue;
+      if (!/^\s*$/.test(code.slice(comment.end, cursor))) break;
+      if (comment.type !== "Line" || !isControlAnnotation(comment.value.trim()))
+        break;
+      const lineStart = code.lastIndexOf("\n", comment.start - 1) + 1;
+      if (!/^\s*$/.test(code.slice(lineStart, comment.start))) break;
+      annotations.unshift(comment);
+      cursor = comment.start;
+    }
+    return annotations;
+  };
+  const trailingAt = (position: number) => {
+    const comment = comments.find(
+      (comment) =>
+        comment.start >= position &&
+        /^[ \t,;]*$/.test(code.slice(position, comment.start)),
+    );
+    return comment?.type === "Line" && isControlAnnotation(comment.value.trim())
+      ? [comment]
+      : [];
+  };
+  return (statementStart: number, bindingStart: number, bindingEnd: number) => [
+    ...annotationsAt(statementStart),
+    ...annotationsAt(bindingStart),
+    ...trailingAt(bindingEnd),
+  ];
+}
+
+interface EnumDefinition {
+  options: EnumControl["options"];
+  end: number;
+}
+
+function readMultiControl(
+  initializer: Expression,
+  source: ControlSource,
+  comments: Comment[],
+  enums: Map<string, EnumDefinition>,
+  sharedAnnotationBefore?: number,
+): MultiEnumControl | undefined {
+  const array = unwrapped(initializer);
+  const multiComment = comments
+    .filter((comment) => /^@multi\b/.test(comment.value.trim()))
+    .at(-1);
+  if (
+    !multiComment &&
+    !(array.type === "ArrayExpression" && array.elements.length)
+  )
+    return;
+  const settings = multiComment
+    ? multiSettings(multiComment.value.trim())
+    : undefined;
+  if (
+    multiComment &&
+    comments.some((comment) => !comment.value.trim().startsWith("@multi"))
+  )
+    throw new Error("Use @multi for an enum array.");
+  if (array.type !== "ArrayExpression")
+    throw new Error("@multi requires an array.");
+  const references = array.elements.map((element) =>
+    element && element.type !== "SpreadElement"
+      ? enumReference(element)
+      : undefined,
+  );
+  const objectName = settings?.objectName ?? references[0]?.objectName;
+  const definition = objectName && enums.get(objectName);
+  if (!objectName || !definition || definition.end > source.start) {
+    if (multiComment)
+      throw new Error(
+        "The enum must be declared above this array in the same file.",
+      );
+    return;
+  }
+  const selected = references.map((reference) =>
+    reference?.objectName === objectName
+      ? definition.options.find((option) => option.key === reference.key)
+      : undefined,
+  );
+  if (!selected.every((option) => option !== undefined))
+    throw new Error(
+      "Every array element must refer to a field of the same enum.",
+    );
+  const values = selected.map((option) => option.value);
+  if (new Set(values).size !== values.length)
+    throw new Error("Select each enum option only once.");
+  const order = [...new Set(settings?.order ?? [])];
+  const options = [
+    ...order.flatMap((key) =>
+      definition.options.filter((option) => option.key === key),
+    ),
+    ...definition.options.filter((option) => !order.includes(option.key)),
+  ];
+  // Shared declaration annotations are left intact when one binding is edited.
+  const annotation =
+    multiComment &&
+    !(
+      sharedAnnotationBefore !== undefined &&
+      multiComment.end <= sharedAnnotationBefore
+    )
+      ? { start: multiComment.start, end: multiComment.end }
+      : undefined;
+  return {
+    ...source,
+    kind: "multi-enum",
+    objectName,
+    options,
+    value: values,
+    annotation,
+    hasOrder: settings?.order !== undefined,
+  };
+}
+
 export function readControls(code: string): {
   controls: Control[];
   valid: boolean;
@@ -225,26 +346,7 @@ export function readControls(code: string): {
       preserveParens: true,
       onComment: comments,
     });
-    // A contiguous group of annotation comments belongs to the next declaration.
-    const annotationsAt = (position: number) => {
-      const annotations: Comment[] = [];
-      let cursor = position;
-      for (let i = comments.length - 1; i >= 0; i--) {
-        const comment = comments[i];
-        if (comment.end > cursor) continue;
-        if (!/^\s*$/.test(code.slice(comment.end, cursor))) break;
-        if (
-          comment.type !== "Line" ||
-          !isControlAnnotation(comment.value.trim())
-        )
-          break;
-        const lineStart = code.lastIndexOf("\n", comment.start - 1) + 1;
-        if (!/^\s*$/.test(code.slice(lineStart, comment.start))) break;
-        annotations.unshift(comment);
-        cursor = comment.start;
-      }
-      return annotations;
-    };
+    const annotationsFor = bindControlAnnotations(code, comments);
     const controls: Control[] = [];
     const errors: string[] = [];
     const names = new Map<string, number>();
@@ -266,10 +368,7 @@ export function readControls(code: string): {
               : [];
       for (const name of bindings) names.set(name, (names.get(name) ?? 0) + 1);
     }
-    const enums = new Map<
-      string,
-      { options: EnumControl["options"]; end: number }
-    >();
+    const enums = new Map<string, EnumDefinition>();
     if (!names.has("Object")) {
       for (const statement of ast.body) {
         const node =
@@ -290,17 +389,6 @@ export function readControls(code: string): {
         }
       }
     }
-    const trailingAt = (position: number) => {
-      const comment = comments.find(
-        (comment) =>
-          comment.start >= position &&
-          /^[ \t,;]*$/.test(code.slice(position, comment.start)),
-      );
-      return comment?.type === "Line" &&
-        isControlAnnotation(comment.value.trim())
-        ? [comment]
-        : [];
-    };
     for (const statement of ast.body) {
       const declaration =
         statement.type === "ExportNamedDeclaration"
@@ -310,11 +398,11 @@ export function readControls(code: string): {
       for (const item of declaration.declarations) {
         if (item.id.type !== "Identifier") continue;
         const name = item.id.name;
-        const annotationComments = [
-          ...annotationsAt(statement.start),
-          ...annotationsAt(item.start),
-          ...trailingAt(item.end),
-        ];
+        const annotationComments = annotationsFor(
+          statement.start,
+          item.start,
+          item.end,
+        );
         const annotations = annotationComments.map((comment) =>
           comment.value.trim(),
         );
@@ -327,89 +415,21 @@ export function readControls(code: string): {
         const numeric = numberValue(item.init);
         const integer =
           Number.isInteger(numeric) && !usesDecimalLiteral(item.init);
-        const array = unwrapped(item.init);
-        const multiComment = annotationComments
-          .filter((comment) => /^@multi\b/.test(comment.value.trim()))
-          .at(-1);
-        if (
-          multiComment ||
-          (array.type === "ArrayExpression" && array.elements.length)
-        ) {
-          try {
-            const settings = multiComment
-              ? multiSettings(multiComment.value.trim())
-              : undefined;
-            if (
-              multiComment &&
-              annotations.some((annotation) => !annotation.startsWith("@multi"))
-            )
-              throw new Error("Use @multi for an enum array.");
-            if (array.type !== "ArrayExpression")
-              throw new Error("@multi requires an array.");
-            const references = array.elements.map((element) =>
-              element && element.type !== "SpreadElement"
-                ? enumReference(element)
-                : undefined,
-            );
-            const objectName =
-              settings?.objectName ?? references[0]?.objectName;
-            const source = objectName && enums.get(objectName);
-            if (!objectName || !source || source.end > start) {
-              if (multiComment)
-                throw new Error(
-                  "The enum must be declared above this array in the same file.",
-                );
-            } else {
-              const selected = references.map((reference) =>
-                reference?.objectName === objectName
-                  ? source.options.find(
-                      (option) => option.key === reference.key,
-                    )
-                  : undefined,
-              );
-              if (!selected.every((option) => option !== undefined))
-                throw new Error(
-                  "Every array element must refer to a field of the same enum.",
-                );
-              const values = selected.map((option) => option.value);
-              if (new Set(values).size !== values.length)
-                throw new Error("Select each enum option only once.");
-              const order = [...new Set(settings?.order ?? [])];
-              const options = [
-                ...order.flatMap((key) =>
-                  source.options.filter((option) => option.key === key),
-                ),
-                ...source.options.filter(
-                  (option) => !order.includes(option.key),
-                ),
-              ];
-              // Shared declaration annotations are left intact when one binding is edited.
-              const annotation =
-                multiComment &&
-                !(
-                  declaration.declarations.length > 1 &&
-                  multiComment.end <= statement.start
-                )
-                  ? { start: multiComment.start, end: multiComment.end }
-                  : undefined;
-              controls.push({
-                kind: "multi-enum",
-                name,
-                objectName,
-                options,
-                value: values,
-                start,
-                end,
-                ignoreAt,
-                annotation,
-                hasOrder: settings?.order !== undefined,
-              });
-              continue;
-            }
-          } catch (error) {
-            errors.push(`${name}: ${(error as Error).message}`);
+        try {
+          const multi = readMultiControl(
+            item.init,
+            { name, start, end, ignoreAt },
+            annotationComments,
+            enums,
+            declaration.declarations.length > 1 ? statement.start : undefined,
+          );
+          if (multi) {
+            controls.push(multi);
             continue;
           }
+        } catch (error) {
+          errors.push(`${name}: ${(error as Error).message}`);
+          continue;
         }
         if (annotations.length) {
           try {
@@ -496,22 +516,19 @@ export function readControls(code: string): {
 export function changeControl(
   code: string,
   name: string,
-  value: ControlValue,
+  change: ControlChange,
 ): Edit | undefined {
+  const value = change.type === "set" ? change.value : undefined;
   if (typeof value === "number" && !Number.isFinite(value)) return;
   const control = readControls(code).controls.find(
     (control) => control.name === name,
   );
   if (!control || Object.is(control.value, value)) return;
   if (control.kind === "multi-enum") {
-    const reordering =
-      typeof value === "object" &&
-      value !== null &&
-      !Array.isArray(value) &&
-      "order" in value;
+    const reordering = change.type === "reorder";
     if (!reordering && !Array.isArray(value)) return;
     const keys = reordering
-      ? value.order
+      ? change.order
       : control.options.map((option) => option.key);
     if (
       keys.length !== control.options.length ||
@@ -573,6 +590,7 @@ export function changeControl(
       ),
     };
   }
+  if (change.type !== "set") return;
   if (control.kind === "enum") {
     const option = control.options.find((option) =>
       Object.is(option.value, value),

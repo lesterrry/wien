@@ -30,7 +30,7 @@ const object = { value: 2 };
 
 test("numeric edits preserve surrounding code, accept negative and large values, and reject non-finite values", () => {
   const code = "const gain = ((-0.25)); // voice\nnote('c3').gain(gain)";
-  const edit = changeControl(code, "gain", -123456.75);
+  const edit = changeControl(code, "gain", { type: "set", value: -123456.75 });
   assert(edit);
   const changed = editSource(code, [edit]);
   assert.equal(
@@ -38,9 +38,18 @@ test("numeric edits preserve surrounding code, accept negative and large values,
     "const gain = -123456.75; // voice\nnote('c3').gain(gain)",
   );
   assert.equal(readControls(changed).controls[0].value, -123456.75);
-  assert.equal(changeControl(code, "gain", Infinity), undefined);
-  assert.equal(changeControl(code, "gain", NaN), undefined);
-  assert.equal(changeControl(code, "gain", -0.25), undefined);
+  assert.equal(
+    changeControl(code, "gain", { type: "set", value: Infinity }),
+    undefined,
+  );
+  assert.equal(
+    changeControl(code, "gain", { type: "set", value: NaN }),
+    undefined,
+  );
+  assert.equal(
+    changeControl(code, "gain", { type: "set", value: -0.25 }),
+    undefined,
+  );
 });
 
 test("ignore adds a reversible comment above the declaration and preserves CRLF", () => {
@@ -90,7 +99,10 @@ test("incomplete code and ambiguous var redeclarations cannot leave stale contro
     valid: false,
   });
   assert.deepEqual(readControls("var gain = 1; var gain = 2;").controls, []);
-  assert.equal(changeControl("const renamed = 2", "gain", 3), undefined);
+  assert.equal(
+    changeControl("const renamed = 2", "gain", { type: "set", value: 3 }),
+    undefined,
+  );
   assert.equal(ignoreControl("const gain =", "gain"), undefined);
 });
 
@@ -125,11 +137,17 @@ const plain = 3;
     ],
   );
   assert.equal(controls[3].kind, "number");
-  const edit = changeControl(code, "cutoff", 2500);
+  const edit = changeControl(code, "cutoff", { type: "set", value: 2500 });
   assert(edit);
   assert.equal(editSource(code, [edit]), code.replace("(600 * 2)", "2500"));
-  assert.equal(changeControl(code, "cutoff", 8001), undefined);
-  assert.equal(changeControl(code, "cutoff", true), undefined);
+  assert.equal(
+    changeControl(code, "cutoff", { type: "set", value: 8001 }),
+    undefined,
+  );
+  assert.equal(
+    changeControl(code, "cutoff", { type: "set", value: true }),
+    undefined,
+  );
   const ignored = ignoreControl(code, "pan");
   assert(ignored);
   assert.deepEqual(
@@ -269,7 +287,7 @@ test("inline sliders accept every argument order without leaking to the next bin
           [100, 8000, "fire", "vertical"],
         );
       assert.equal(result.controls[1].kind, "number");
-      const edit = changeControl(code, "cutoff", 2000);
+      const edit = changeControl(code, "cutoff", { type: "set", value: 2000 });
       assert(edit);
       assert.equal(editSource(code, [edit]), code.replace("1200", "2000"));
       const hide = ignoreControl(code, "cutoff");
@@ -302,7 +320,7 @@ test("all names use the same default range, and explicit ranges override it", ()
     assert.equal(control.kind, "slider");
     if (control.kind === "slider")
       assert.deepEqual([control.min, control.max], [min, max]);
-    const edit = changeControl(code, name, max);
+    const edit = changeControl(code, name, { type: "set", value: max });
     assert(edit);
     const next = readControls(editSource(code, [edit])).controls[0];
     if (next.kind === "slider")
@@ -352,16 +370,28 @@ test("enum selection is inferred from frozen objects and preserves symbolic refe
     { key: "Triangle", value: "triangle" },
     { key: "Saw", value: "sawtooth" },
   ]);
-  const edit = changeControl(code, "waveform", "sawtooth");
+  const edit = changeControl(code, "waveform", {
+    type: "set",
+    value: "sawtooth",
+  });
   assert(edit);
   assert.equal(editSource(code, [edit]), code.replace("Wave.Sine", "Wave.Saw"));
   assert.equal(
     readControls(editSource(code, [edit])).controls[0].value,
     "sawtooth",
   );
-  assert.equal(changeControl(code, "waveform", "missing"), undefined);
-  assert.equal(changeControl(code, "waveform", true), undefined);
-  assert.equal(changeControl(code, "waveform", "sine"), undefined);
+  assert.equal(
+    changeControl(code, "waveform", { type: "set", value: "missing" }),
+    undefined,
+  );
+  assert.equal(
+    changeControl(code, "waveform", { type: "set", value: true }),
+    undefined,
+  );
+  assert.equal(
+    changeControl(code, "waveform", { type: "set", value: "sine" }),
+    undefined,
+  );
   const hide = ignoreControl(code, "waveform");
   assert(hide);
   assert.equal(readControls(editSource(code, [hide])).controls.length, 0);
@@ -375,7 +405,7 @@ test("enum selection is inferred from frozen objects and preserves symbolic refe
 test("enum numeric values and quoted labels remain valid JavaScript after selection", () => {
   const code =
     'const Speed = Object.freeze({ Normal: 1, "Half speed": 0.5 }); const speed = Speed.Normal;';
-  const edit = changeControl(code, "speed", 0.5);
+  const edit = changeControl(code, "speed", { type: "set", value: 0.5 });
   assert(edit);
   const changed = editSource(code, [edit]);
   assert.match(changed, /speed = Speed\["Half speed"\]/);
@@ -424,7 +454,10 @@ test("enum discovery rejects arbitrary objects, ambiguous options and shadowed g
 
 test("multi-enum edits follow the enum declaration order", () => {
   const code = `${waveCode}\nconst layers = [Wave.Saw, Wave.Sine]; // bass`;
-  const edit = changeControl(code, "layers", ["sawtooth", "triangle", "sine"]);
+  const edit = changeControl(code, "layers", {
+    type: "set",
+    value: ["sawtooth", "triangle", "sine"],
+  });
   assert(edit);
   const changed = editSource(code, [edit]);
   assert.match(changed, /\[Wave.Sine, Wave.Triangle, Wave.Saw\]; \/\/ bass/);
@@ -432,8 +465,11 @@ test("multi-enum edits follow the enum declaration order", () => {
     readControls(changed).controls.map(({ kind, value }) => [kind, value]),
     [["multi-enum", ["sine", "triangle", "sawtooth"]]],
   );
-  assert(changeControl(code, "layers", []));
-  assert.equal(changeControl(code, "layers", ["other"]), undefined);
+  assert(changeControl(code, "layers", { type: "set", value: [] }));
+  assert.equal(
+    changeControl(code, "layers", { type: "set", value: ["other"] }),
+    undefined,
+  );
   for (const expression of [
     "[]",
     "[Wave.Sine, Other.Saw]",
@@ -456,19 +492,25 @@ test("fractional knobs and sliders keep their mode at whole values", () => {
     [false, false, false, true, true],
   );
   for (const name of ["gain", "pan"]) {
-    const edit = changeControl(code, name, 0);
+    const edit = changeControl(code, name, { type: "set", value: 0 });
     assert(edit);
     const updated = editSource(code, [edit]);
     assert.match(updated, / = 0\.0;/);
-    assert(changeControl(updated, name, 0.1));
+    assert(changeControl(updated, name, { type: "set", value: 0.1 }));
   }
-  assert.equal(changeControl(code, "repeats", 2.5), undefined);
-  assert.equal(changeControl(code, "count", 1.5), undefined);
+  assert.equal(
+    changeControl(code, "repeats", { type: "set", value: 2.5 }),
+    undefined,
+  );
+  assert.equal(
+    changeControl(code, "count", { type: "set", value: 1.5 }),
+    undefined,
+  );
 });
 
 test("clearing all choices adds a durable enum annotation and preserves comments and CRLF", () => {
   const code = `${waveCode}\r\n  let layers = [Wave.Sine]; // voice\r\nconst other = 2;`;
-  const edit = changeControl(code, "layers", []);
+  const edit = changeControl(code, "layers", { type: "set", value: [] });
   assert(edit);
   const cleared = editSource(code, [edit]);
   assert.match(
@@ -480,8 +522,14 @@ test("clearing all choices adds a durable enum annotation and preserves comments
   );
   assert.equal(control?.kind, "multi-enum");
   assert.deepEqual(control?.value, []);
-  assert.equal(changeControl(cleared, "layers", []), undefined);
-  const enabled = changeControl(cleared, "layers", ["sawtooth"]);
+  assert.equal(
+    changeControl(cleared, "layers", { type: "set", value: [] }),
+    undefined,
+  );
+  const enabled = changeControl(cleared, "layers", {
+    type: "set",
+    value: ["sawtooth"],
+  });
   assert(enabled);
   assert.match(
     editSource(cleared, [enabled]),
@@ -498,7 +546,10 @@ test("explicit empty arrays read both inline and leading annotations", () => {
     const result = readControls(code);
     assert.equal(result.errors, undefined);
     assert.equal(result.controls[0].kind, "multi-enum");
-    const edit = changeControl(code, "layers", ["sawtooth", "sine"]);
+    const edit = changeControl(code, "layers", {
+      type: "set",
+      value: ["sawtooth", "sine"],
+    });
     assert(edit);
     const updated = editSource(code, [edit]);
     assert.match(updated, /\[Wave.Sine, Wave.Saw\]/);
@@ -514,6 +565,7 @@ test("explicit empty arrays read both inline and leading annotations", () => {
 test("reordering stores all choices including disabled entries in one source edit", () => {
   const code = `${waveCode}\nconst layers = [Wave.Sine, Wave.Saw]; // voice`;
   const moved = changeControl(code, "layers", {
+    type: "reorder",
     order: ["Saw", "Triangle", "Sine"],
   });
   assert(moved);
@@ -527,15 +579,14 @@ test("reordering stores all choices including disabled entries in one source edi
     control.options.map((option) => option.key),
     ["Saw", "Triangle", "Sine"],
   );
-  const off = changeControl(changed, "layers", []);
+  const off = changeControl(changed, "layers", { type: "set", value: [] });
   assert(off);
   const cleared = editSource(changed, [off]);
   assert.match(cleared, /order=Saw,Triangle,Sine/);
-  const enabled = changeControl(cleared, "layers", [
-    "sine",
-    "triangle",
-    "sawtooth",
-  ]);
+  const enabled = changeControl(cleared, "layers", {
+    type: "set",
+    value: ["sine", "triangle", "sawtooth"],
+  });
   assert(enabled);
   assert.match(
     editSource(cleared, [enabled]),
@@ -548,12 +599,21 @@ test("reordering stores all choices including disabled entries in one source edi
   };
   assert.equal(editSource(changed, [inverse]), code);
   assert.equal(
-    changeControl(changed, "layers", { order: ["Saw", "Triangle", "Sine"] }),
+    changeControl(changed, "layers", {
+      type: "reorder",
+      order: ["Saw", "Triangle", "Sine"],
+    }),
     undefined,
   );
-  assert.equal(changeControl(code, "layers", { order: ["Sine"] }), undefined);
   assert.equal(
-    changeControl(code, "layers", { order: ["Sine", "Sine", "Saw"] }),
+    changeControl(code, "layers", { type: "reorder", order: ["Sine"] }),
+    undefined,
+  );
+  assert.equal(
+    changeControl(code, "layers", {
+      type: "reorder",
+      order: ["Sine", "Sine", "Saw"],
+    }),
     undefined,
   );
 });
@@ -562,13 +622,17 @@ test("disabled-only reorders and quoted enum keys survive annotation round trips
   const code =
     'const Fx = Object.freeze({ Echo: "echo", "Soft, wide chorus": "chorus", Crush: "crush" });\nlet effects = [Fx.Echo];';
   const edit = changeControl(code, "effects", {
+    type: "reorder",
     order: ["Echo", "Crush", "Soft, wide chorus"],
   });
   assert(edit);
   const changed = editSource(code, [edit]);
   assert.match(changed, /order=Echo,Crush,"Soft, wide chorus"/);
   assert.match(changed, /effects = \[Fx.Echo\]/);
-  const add = changeControl(changed, "effects", ["chorus", "echo"]);
+  const add = changeControl(changed, "effects", {
+    type: "set",
+    value: ["chorus", "echo"],
+  });
   assert(add);
   assert.match(
     editSource(changed, [add]),
@@ -585,7 +649,7 @@ test("reading order metadata normalizes removed and new fields without executing
     control.options.map((option) => option.key),
     ["Saw", "Sine", "Triangle"],
   );
-  const edit = changeControl(code, "layers", ["sine"]);
+  const edit = changeControl(code, "layers", { type: "set", value: ["sine"] });
   assert(edit);
   assert.match(editSource(code, [edit]), /order=Saw,Sine,Triangle/);
   for (const declaration of [
@@ -600,7 +664,10 @@ test("reading order metadata normalizes removed and new fields without executing
 
 test("comma bindings and ignore isolate annotations to the intended array", () => {
   const code = `${waveCode}\n// @multi Wave\nconst a = [Wave.Sine], b = [Wave.Saw];`;
-  const edit = changeControl(code, "b", { order: ["Saw", "Triangle", "Sine"] });
+  const edit = changeControl(code, "b", {
+    type: "reorder",
+    order: ["Saw", "Triangle", "Sine"],
+  });
   assert(edit);
   const changed = editSource(code, [edit]);
   assert.equal(readControls(changed).valid, true);
