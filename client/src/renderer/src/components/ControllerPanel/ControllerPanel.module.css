@@ -179,53 +179,23 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  padding-left: 2px;
+  margin: 0;
+  padding: 0 0 0 2px;
+  border: 0;
+  min-width: 0;
+  min-inline-size: 0;
   border-radius: 6px;
+  cursor: grab;
 }
 
-.controlRow > :not(.dragHandle) {
+.controlRow > * {
   flex: 1;
   min-width: 0;
 }
 
-.dragHandle {
-  display: grid;
-  place-items: center;
-  width: 16px;
-  height: 22px;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--color-muted);
-  cursor: grab;
-  opacity: 0;
-  transition:
-    opacity 120ms ease,
-    color 120ms ease;
-}
-
-.controlRow:hover .dragHandle:not(:disabled),
-.dragHandle:focus-visible:not(:disabled) {
-  opacity: 1;
-}
-
-.dragHandle:hover:not(:disabled) {
-  color: var(--color-primary);
-  background: var(--color-hover);
-}
-
-.dragHandle:focus-visible {
+.controlRow:focus-visible {
   outline: 2px solid var(--color-brand);
-  outline-offset: 1px;
-}
-
-.dragHandle:active:not(:disabled) {
-  cursor: grabbing;
-}
-
-.dragHandle:disabled {
-  cursor: not-allowed;
+  outline-offset: 2px;
 }
 
 .rowDragging {
@@ -254,6 +224,6 @@
 
 /* Cross-file hover: pointer feedback only — the row never becomes a
    valid drop target, so there is no visual indicator line. */
-.dropForbidden .dragHandle {
+.dropForbidden {
   cursor: not-allowed;
 }

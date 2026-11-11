@@ -1,6 +1,6 @@
 import classNames from "classnames";
-import { GripVertical, Maximize2, SlidersHorizontal } from "lucide-react";
-import { useState } from "react";
+import { Maximize2, SlidersHorizontal } from "lucide-react";
+import { useRef, useState } from "react";
 import type { Control } from "../../../../shared/controls";
 import { BooleanSwitch } from "../BooleanSwitch/BooleanSwitch";
 import { NumberKnob } from "../NumberKnob/NumberKnob";
@@ -36,6 +36,9 @@ export function ControlsPanel({
   ) => void;
 }) {
   const [drag, setDrag] = useState<DragState | null>(null);
+  // Set on pointer-down: only presses that start on the row's own
+  // background may initiate a reorder drag.
+  const dragAllowed = useRef(true);
   const shortcut = navigator.platform.includes("Mac") ? "⌥" : "Alt";
 
   return (
@@ -60,14 +63,49 @@ export function ControlsPanel({
           const isOver =
             drag?.over === control.name && drag.name !== control.name;
           return (
-            // biome-ignore lint/a11y/noStaticElementInteractions: this row is a pointer-only drop target; the drag handle button below provides the keyboard-accessible equivalent (Alt+↑ / Alt+↓).
-            <div
+            <fieldset
               key={control.name}
               className={classNames(styles.controlRow, {
                 [styles.rowDragging]: drag?.name === control.name,
                 [styles.dropBefore]: isOver && drag?.side === "before",
                 [styles.dropAfter]: isOver && drag?.side === "after",
               })}
+              aria-label={`${control.name} control`}
+              draggable={!disabled}
+              tabIndex={disabled ? undefined : 0}
+              title={`Drag to reorder ${control.name} (${shortcut}+↑ / ${shortcut}+↓)`}
+              onPointerDown={(event) => {
+                const target = event.target as HTMLElement | null;
+                dragAllowed.current = !target?.closest(
+                  "button, input, textarea, select, a, legend",
+                );
+              }}
+              onDragStart={(event) => {
+                if (disabled || !dragAllowed.current) {
+                  event.preventDefault();
+                  return;
+                }
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", control.name);
+                setDrag({
+                  name: control.name,
+                  over: null,
+                  side: "before",
+                });
+              }}
+              onDragEnd={() => setDrag(null)}
+              onKeyDown={(event) => {
+                if (event.target !== event.currentTarget) return;
+                if (disabled || !event.altKey) return;
+                if (event.key === "ArrowUp" && index > 0) {
+                  event.preventDefault();
+                  onMove(control.name, controls[index - 1].name, "before");
+                }
+                if (event.key === "ArrowDown" && index < controls.length - 1) {
+                  event.preventDefault();
+                  onMove(control.name, controls[index + 1].name, "after");
+                }
+              }}
               onDragOver={(event) => {
                 if (!drag || drag.name === control.name) return;
                 event.preventDefault();
@@ -97,43 +135,6 @@ export function ControlsPanel({
                 setDrag(null);
               }}
             >
-              <button
-                type="button"
-                className={styles.dragHandle}
-                draggable={!disabled}
-                aria-label={`Reorder ${control.name}`}
-                title={`Reorder ${control.name} (${shortcut}+↑ / ${shortcut}+↓)`}
-                onDragStart={(event) => {
-                  if (disabled) {
-                    event.preventDefault();
-                    return;
-                  }
-                  event.dataTransfer.effectAllowed = "move";
-                  event.dataTransfer.setData("text/plain", control.name);
-                  setDrag({
-                    name: control.name,
-                    over: null,
-                    side: "before",
-                  });
-                }}
-                onDragEnd={() => setDrag(null)}
-                onKeyDown={(event) => {
-                  if (disabled || !event.altKey) return;
-                  if (event.key === "ArrowUp" && index > 0) {
-                    event.preventDefault();
-                    onMove(control.name, controls[index - 1].name, "before");
-                  }
-                  if (
-                    event.key === "ArrowDown" &&
-                    index < controls.length - 1
-                  ) {
-                    event.preventDefault();
-                    onMove(control.name, controls[index + 1].name, "after");
-                  }
-                }}
-              >
-                <GripVertical size={12} />
-              </button>
               {control.kind === "number" ? (
                 <NumberKnob
                   control={control}
@@ -149,7 +150,7 @@ export function ControlsPanel({
                   onIgnore={onIgnore}
                 />
               )}
-            </div>
+            </fieldset>
           );
         })}
         {!controls.length && (

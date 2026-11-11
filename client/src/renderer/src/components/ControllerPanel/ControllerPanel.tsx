@@ -1,6 +1,6 @@
 import type { ReplState } from "@strudel/codemirror";
 import classNames from "classnames";
-import { GripVertical, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type Control,
@@ -78,6 +78,11 @@ export function ControllerPanel({
   const [loading, setLoading] = useState(true);
   const [drag, setDrag] = useState<DragState | null>(null);
   const shortcut = navigator.platform.includes("Mac") ? "⌥" : "Alt";
+
+  // Set on pointer-down: only presses that start on the row's own
+  // background may initiate a reorder drag. Nested buttons (knob,
+  // switch, ignore) keep their own gestures.
+  const dragAllowed = useRef(true);
 
   // Latest code, readable from effects without adding it to a dependency
   // array (which would otherwise re-fetch imports on every keystroke).
@@ -241,8 +246,7 @@ export function ControllerPanel({
                       drag?.over === control.name && drag.name !== control.name;
                     const sameFile = drag?.file === file.path;
                     return (
-                      // biome-ignore lint/a11y/noStaticElementInteractions: this row is a pointer-only drop target; the drag handle button below provides the keyboard-accessible equivalent (Alt+↑ / Alt+↓), scoped to this file group.
-                      <div
+                      <fieldset
                         key={control.name}
                         className={classNames(styles.controlRow, {
                           [styles.rowDragging]:
@@ -253,6 +257,59 @@ export function ControllerPanel({
                             sameFile && overThisRow && drag?.side === "after",
                           [styles.dropForbidden]: !!drag && !sameFile,
                         })}
+                        aria-label={`${control.name} control`}
+                        draggable={!disabled}
+                        tabIndex={disabled ? undefined : 0}
+                        title={`Drag to reorder ${control.name} (${shortcut}+↑ / ${shortcut}+↓)`}
+                        onPointerDown={(event) => {
+                          const target = event.target as HTMLElement | null;
+                          dragAllowed.current = !target?.closest(
+                            "button, input, textarea, select, a, legend",
+                          );
+                        }}
+                        onDragStart={(event) => {
+                          if (disabled || !dragAllowed.current) {
+                            event.preventDefault();
+                            return;
+                          }
+                          event.dataTransfer.effectAllowed = "move";
+                          event.dataTransfer.setData(
+                            "text/plain",
+                            control.name,
+                          );
+                          setDrag({
+                            file: file.path,
+                            name: control.name,
+                            over: null,
+                            side: "before",
+                          });
+                        }}
+                        onDragEnd={() => setDrag(null)}
+                        onKeyDown={(event) => {
+                          if (event.target !== event.currentTarget) return;
+                          if (disabled || !event.altKey) return;
+                          if (event.key === "ArrowUp" && index > 0) {
+                            event.preventDefault();
+                            void handleMove(
+                              file.path,
+                              control.name,
+                              file.controls[index - 1].name,
+                              "before",
+                            );
+                          }
+                          if (
+                            event.key === "ArrowDown" &&
+                            index < file.controls.length - 1
+                          ) {
+                            event.preventDefault();
+                            void handleMove(
+                              file.path,
+                              control.name,
+                              file.controls[index + 1].name,
+                              "after",
+                            );
+                          }
+                        }}
                         onDragOver={(event) => {
                           if (!drag || drag.file !== file.path) {
                             event.dataTransfer.dropEffect = "none";
@@ -267,11 +324,7 @@ export function ControllerPanel({
                             event.clientY < rect.top + rect.height / 2
                               ? "before"
                               : "after";
-                          setDrag({
-                            ...drag,
-                            over: control.name,
-                            side,
-                          });
+                          setDrag({ ...drag, over: control.name, side });
                         }}
                         onDragLeave={(event) => {
                           const next = event.relatedTarget as Node | null;
@@ -303,57 +356,6 @@ export function ControllerPanel({
                           setDrag(null);
                         }}
                       >
-                        <button
-                          type="button"
-                          className={styles.dragHandle}
-                          draggable={!disabled}
-                          aria-label={`Reorder ${control.name}`}
-                          title={`Reorder ${control.name} (${shortcut}+↑ / ${shortcut}+↓)`}
-                          onDragStart={(event) => {
-                            if (disabled) {
-                              event.preventDefault();
-                              return;
-                            }
-                            event.dataTransfer.effectAllowed = "move";
-                            event.dataTransfer.setData(
-                              "text/plain",
-                              control.name,
-                            );
-                            setDrag({
-                              file: file.path,
-                              name: control.name,
-                              over: null,
-                              side: "before",
-                            });
-                          }}
-                          onDragEnd={() => setDrag(null)}
-                          onKeyDown={(event) => {
-                            if (disabled || !event.altKey) return;
-                            if (event.key === "ArrowUp" && index > 0) {
-                              event.preventDefault();
-                              void handleMove(
-                                file.path,
-                                control.name,
-                                file.controls[index - 1].name,
-                                "before",
-                              );
-                            }
-                            if (
-                              event.key === "ArrowDown" &&
-                              index < file.controls.length - 1
-                            ) {
-                              event.preventDefault();
-                              void handleMove(
-                                file.path,
-                                control.name,
-                                file.controls[index + 1].name,
-                                "after",
-                              );
-                            }
-                          }}
-                        >
-                          <GripVertical size={12} />
-                        </button>
                         {control.kind === "number" ? (
                           <NumberKnob
                             control={control}
@@ -371,7 +373,7 @@ export function ControllerPanel({
                             }
                           />
                         )}
-                      </div>
+                      </fieldset>
                     );
                   })}
                 </div>
