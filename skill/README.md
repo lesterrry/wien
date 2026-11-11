@@ -52,6 +52,81 @@ unchanged source and index identities remain stable and cached embeddings are
 reused. `index --rebuild` forces a fresh generation from normalized snapshots
 without fetching sources.
 
+## Docker Compose from the repository root
+
+The project-wide [`compose.yaml`](../compose.yaml) currently contains only the
+`skill` service. Its [Dockerfile](Dockerfile) builds the production CLI with
+`--locked` and no fixture feature, then runs it as UID/GID 10001 in a slim
+runtime with CA certificates. Rust and protobuf build tooling stay out of the
+runtime image.
+
+Run these commands from the repository root:
+
+```sh
+# Keep this token for subsequent commands, or put it in the ignored root .env.
+export STRUDEL_RAG_BEARER_TOKEN="$(openssl rand -hex 32)"
+export OPENAI_API_KEY='your-key'
+docker compose up -d --build skill
+docker compose exec skill strudel-rag remote info
+```
+
+The container listens on `0.0.0.0:50051`, which requires the bearer token.
+Compose refuses an empty token and publishes gRPC only on host
+`127.0.0.1:${STRUDEL_RAG_PORT:-50051}`. Host clients use the same token and
+`STRUDEL_RAG_ENDPOINT=http://127.0.0.1:50051` (adjust for a custom host port).
+Other containers on the Compose network can use `http://skill:50051` with that
+token. This is cleartext gRPC, not TLS; do not expose it to an untrusted network.
+
+Set embedding credentials before starting the service so both indexing jobs and
+live searches inherit them. Omit the API key for a keyless local endpoint and
+set its base URL/model before startup. If credentials change after startup,
+recreate the service with `docker compose up -d --force-recreate skill`;
+`docker compose restart` alone does not refresh its environment.
+
+### Populate the persistent corpus
+
+The named volume `skill-data` is mounted at `/var/lib/strudel-rag` and stores
+source snapshots, indexes, and embedding caches. The existing `skill/saved_html/`
+directory is mounted read-only at `/app/saved_html` so the bundled source
+manifest can import the downloaded theory pages. Neither those pages nor host
+data, local config, or credentials are copied into the build context.
+
+On an empty volume the server starts, but `remote info` reports `ready: false`
+and search is unavailable. The image healthcheck verifies an authenticated
+`remote info` RPC, **not index readiness**. Ingestion and indexing never run
+automatically at startup.
+
+```sh
+# Import real sources; upstream Strudel access is required.
+docker compose run --rm skill ingest
+
+docker compose run --rm skill index
+
+# The server holds an immutable generation; reopen it after indexing.
+docker compose restart skill
+docker compose exec skill strudel-rag remote info
+docker compose exec skill strudel-rag remote health
+```
+
+Compose forwards `OPENAI_API_KEY`, `STRUDEL_RAG_EMBEDDING_API_KEY` (takes
+precedence), `STRUDEL_RAG_EMBEDDING_BASE_URL`, and `STRUDEL_RAG_EMBEDDING_MODEL`.
+Defaults match `config.example.toml`. `index` and live searches require access
+to the configured embedding endpoint; starting the empty server does not.
+For an embedding service on the host under Docker Desktop, use
+`http://host.docker.internal:PORT/v1`, not container-local `127.0.0.1`.
+Changing embedding identity requires `index --rebuild`; recreate the service
+with `docker compose up -d --force-recreate skill` to apply changed environment.
+For additional TOML settings, mount your configuration read-only at
+`/app/strudel-rag.toml`; keep data paths under `/var/lib/strudel-rag`.
+
+`docker compose down` stops the service and preserves the named volume.
+`docker compose down --volumes` **deletes the corpus, index, and cache**.
+The image's entrypoint is `strudel-rag`, so one-off commands use
+`docker compose run --rm skill doctor` without repeating the binary name.
+To build just the image: `docker build -t wien-skill ./skill`. Direct
+`docker run` deployments must likewise supply a bearer token, writable data
+storage, and the saved-HTML mount if importing the theory source.
+
 ## Real sources and embeddings
 
 ```sh

@@ -11,6 +11,11 @@
   guide, preserving user constraints, and keeping creative defaults separate
   from API/source evidence. Installation documentation now requires copying
   the companion references with `SKILL.md`.
+- Multi-stage production RAG-server Dockerfile with an allowlisted build
+  context, non-root runtime, and authenticated gRPC liveness check.
+- Project-wide Compose containing only `skill`, with required bearer
+  authentication, localhost port publishing, persistent data, and read-only
+  saved theory pages; documented explicit ingestion/indexing and restarts.
 
 ## 0.1.0 — 2026-11-11
 
