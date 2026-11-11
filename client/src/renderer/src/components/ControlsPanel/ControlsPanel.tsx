@@ -1,4 +1,4 @@
-import { SlidersHorizontal } from "lucide-react";
+import { Maximize2, SlidersHorizontal } from "lucide-react";
 import type { Control } from "../../../../shared/controls";
 import { BooleanSwitch } from "../BooleanSwitch/BooleanSwitch";
 import { NumberKnob } from "../NumberKnob/NumberKnob";
@@ -11,6 +11,7 @@ export function ControlsPanel({
   disabled,
   onChange,
   onIgnore,
+  onOpenController,
 }: {
   controls: Control[];
   valid: boolean;
@@ -18,15 +19,24 @@ export function ControlsPanel({
   disabled: boolean;
   onChange: (name: string, value: number | boolean) => void;
   onIgnore: (name: string) => void;
+  onOpenController: () => void;
 }) {
-  const hasNumber = controls.some((control) => control.kind === "number");
-  const hasBoolean = controls.some((control) => control.kind === "boolean");
   return (
     <aside className={styles.controlsPanel} aria-label="Snippet controls">
       <div className={styles.controlsTitle}>
         <SlidersHorizontal size={14} />
         <span>Controls</span>
         <small>{controls.length}</small>
+        <button
+          type="button"
+          className={styles.controllerButton}
+          title="Open full controls"
+          aria-label="Open full controls"
+          disabled={!hasDocument || !valid || disabled}
+          onClick={onOpenController}
+        >
+          <Maximize2 size={13} />
+        </button>
       </div>
       <div className={styles.controlsList}>
         {controls.map((control) =>
@@ -70,21 +80,7 @@ export function ControlsPanel({
           </div>
         )}
       </div>
-      <div className={styles.controlsHint}>
-        {hasNumber && (
-          <>
-            Drag a knob to adjust · Shift for precision
-            <br />
-          </>
-        )}
-        {hasBoolean && (
-          <>
-            Press a switch to toggle
-            <br />
-          </>
-        )}
-        Changes are saved in your code.
-      </div>
+      <div className={styles.controlsHint}>Hold Shift for more precision</div>
     </aside>
   );
 }

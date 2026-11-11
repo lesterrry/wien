@@ -13,14 +13,19 @@ import {
   webaudioOutput,
 } from "@strudel/webaudio";
 import classNames from "classnames";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useDrop } from "react-dnd";
 import { changeControl, ignoreControl } from "../../../../shared/controls";
 import type { Entry } from "../../../../shared/types";
 import { compileGraph } from "../../module-compiler";
+import {
+  type AssistantPlacement,
+  AssistantPopover,
+} from "../AssistantPopover/AssistantPopover";
 import styles from "./StrudelEditor.module.css";
 
 export interface Player {
+  assist(placement?: AssistantPlacement): void;
   play(): Promise<void>;
   stop(): Promise<void>;
   replaceCode(code: string): void;
@@ -58,6 +63,10 @@ export function StrudelEditor({
   onReady: (player: Player | null) => void;
   onPosition: (line: number, column: number) => void;
 }) {
+  const [view, setView] = useState<EditorView | null>(null);
+  const [assistantInvocation, setAssistantInvocation] = useState(0);
+  const [assistantPlacement, setAssistantPlacement] =
+    useState<AssistantPlacement>("cursor");
   const root = useRef<HTMLDivElement>(null);
   const editor = useRef<EditorView | null>(null);
   const readOnly = useRef(new Compartment());
@@ -179,6 +188,10 @@ export function StrudelEditor({
       requested = null;
     };
     callbacks.current.onReady({
+      assist: (placement = "cursor") => {
+        setAssistantPlacement(placement);
+        setAssistantInvocation((value) => value + 1);
+      },
       play: () => evaluate(true),
       stop: () => {
         cancelLive();
@@ -213,6 +226,7 @@ export function StrudelEditor({
         }),
     });
     editor.current = mirror.editor;
+    setView(mirror.editor);
     return () => {
       alive = false;
       cancelLive();
@@ -234,15 +248,26 @@ export function StrudelEditor({
   }, [disabled]);
 
   return (
-    <div
-      className={classNames(styles.editor, {
-        [styles.linkDropActive]: isOver && canDrop,
-      })}
-      ref={(node) => {
-        root.current = node;
-        drop(node);
-      }}
-      data-drop-hint="Release to import snippet"
-    />
+    <>
+      <div
+        className={classNames(styles.editor, {
+          [styles.linkDropActive]: isOver && canDrop,
+        })}
+        ref={(node) => {
+          root.current = node;
+          drop(node);
+        }}
+        data-drop-hint="Release to import snippet"
+      />
+      {view && (
+        <AssistantPopover
+          view={view}
+          path={path}
+          invocation={assistantInvocation}
+          placement={assistantPlacement}
+          disabled={disabled}
+        />
+      )}
+    </>
   );
 }

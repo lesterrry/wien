@@ -48,9 +48,36 @@
   color: var(--color-brand);
 }
 
+.controlsEmpty code + code {
+  margin-top: 4px;
+}
+
 .controlsHint {
   padding: 15px 18px;
   font-size: 10px;
   line-height: 1.8;
   color: var(--color-muted);
+}
+
+.controllerButton {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+}
+
+.controllerButton:hover:not(:disabled) {
+  color: var(--color-primary);
+  background: var(--color-active);
+}
+
+.controllerButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }

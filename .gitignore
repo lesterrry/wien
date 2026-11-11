@@ -16,6 +16,8 @@ credentials.json
 *.pem
 *.key
 
+.pnpm-store/
+
 # Skill ignore
 /skill/target/
 /skill/data/

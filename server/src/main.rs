@@ -12,10 +12,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|| PathBuf::from("server/config.toml"));
     let config = Config::load(&config_path).map_err(|error| error.to_string())?;
     let provider = config.provider.build()?;
-    let listener = tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, port)).await?;
+    let address = (Ipv4Addr::LOCALHOST, port);
+    println!("Starting Wien server on http://127.0.0.1:{port}");
+    let listener = tokio::net::TcpListener::bind(address)
+        .await
+        .map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AddrInUse {
+                format!("Cannot start Wien: 127.0.0.1:{port} is already in use.")
+            } else {
+                format!("Cannot bind Wien server to 127.0.0.1:{port}: {error}")
+            }
+        })?;
     println!("Wien server: http://{}", listener.local_addr()?);
     println!("API docs: http://{}/docs/", listener.local_addr()?);
-    axum::serve(listener, api::router(provider))
+    axum::serve(listener, api::router(provider, config.assistant))
         .with_graceful_shutdown(shutdown())
         .await?;
     Ok(())
