@@ -1,6 +1,6 @@
 ---
 name: strudel-rag
-description: Grounded Strudel composition and editing for Wien: retrieve verified APIs and musical examples, preserve project modules, apply genre-aware arrangement, and quality-check generated tracks.
+description: Grounded Strudel composition and editing for Wien with 20 bundled electronic-music genre guides: retrieve verified APIs and musical examples, preserve project modules, apply genre-aware arrangement, and quality-check generated tracks.
 ---
 
 # Strudel RAG — Wien music composition skill
@@ -44,31 +44,19 @@ Extract or infer a compact brief: primary genre/subgenre, mood, energy arc, appr
 
 Build the track around **one memorable identity**: a rhythmic motif, bass contour, chord voicing, timbral gesture, or call-and-response. Define a small motif and deliberately develop it; do not confuse more notes, more effects, or more tracks with better music.
 
-## 4. Genre feature reserve (creative fallback, not source evidence)
+## 4. Electronic-music genre guides (creative guidance, not source evidence)
 
-This reserve is a **heuristic palette** to prevent generic, genre-blind outputs. It is not a corpus, proof of canonical BPM, or a reason to override the user. Each profile gives a *typical starting range*, rhythmic grammar, sound palette, and an arrangement signature. Hybridize consciously; preserve at least two distinctive traits of the requested primary genre. Avoid copying named recordings or artists' exact melodies.
+Use the [genre guide index](references/genres/README.md) to select from **20 bundled guides**. It lists working tempos, distinguishing traits, and links to practical instructions for groove, bass, harmony, sound design, arrangement, and review. This is a representative selection, not a popularity ranking or exhaustive taxonomy.
 
-| Genre | Working tempo / feel | Rhythm and low end | Harmony, sound, and signature |
-| --- | --- | --- | --- |
-| House / deep house | ~118–128 BPM, straight 4/4 | Four-on-floor kick, offbeat hats, syncopated bass | Warm extended chords, restrained stabs, filter evolution, 8/16-bar phrases |
-| Techno / minimal | ~125–145 BPM, driving 4/4 | Repetitive kick, percussion polymeters, controlled sub | Sparse tonal cells, evolving timbre, gradual automation, tension/release |
-| UK garage / 2-step | ~128–138 BPM, shuffled | Displaced kicks, snare backbeat, swung hats, elastic sub | Chopped chords/vox-like gestures, short fills, syncopated negative space |
-| Drum & bass / jungle | ~160–180 BPM, breakbeat | Syncopated breaks, ghost hits, sub or reese bass | Contrasting half-time perception, edited breaks, 16/32-bar changes |
-| Hip-hop / boom bap | ~75–100 BPM, laid-back | Backbeat, swung hats, sampled-feel drum variations | Dusty keys/chops, short bass phrases, sparse hook, head-nod groove |
-| Trap / modern hip-hop | ~130–160 BPM often half-time | Half-time snare, hat rolls, sliding/808-style bass | Minimal dark motifs, dramatic rests, restrained melodic layering |
-| Ambient / drone | Free or ~50–100 BPM | Sparse/no percussion, slow pulses | Long evolving pads, drones, spectral movement, spacious transitions |
-| Lo-fi / chillhop | ~65–95 BPM, relaxed | Soft imperfect drums, rounded bass | Jazzy extensions, muted keys, subtle texture, non-mechanical variation |
-| Synthwave / retrowave | ~85–120 BPM, straight | Steady kick/snare, pulsing octave bass | Analog-style arps/pads, memorable synth lead, broad sectional lifts |
-| Trance / progressive | ~125–140 BPM, 4/4 | Rolling bass and steady kick | Arpeggios, long builds, harmonic lift, controlled breakdown/drop |
-| Dub / reggae | ~65–90 BPM or double-time feel | One-drop/steppers variants, deep bass, offbeat skank | Space, delay throws, sparse chord accents, conversational arrangement |
-| Funk / disco | ~95–125 BPM, syncopated | Interlocking bass and drums, ghost notes | Choppy chords, rhythmic hooks, dynamic accents, call-and-response |
-| Jazz / neo-soul | Flexible ~65–120 BPM | Expressive pocket, subtle swing or laid-back backbeat | Extended/altered chords, voice leading, tasteful fills, harmonic movement |
-| Afro house / amapiano | ~105–125 BPM, groove-led | Layered percussion, syncopated bass; log-drum character for amapiano | Cyclic motifs, spacious keys, interlocking percussion, gradual layering |
-| Breakbeat / electro | ~110–140 BPM, broken | Syncopated kicks/snares, punchy bass | Staccato synths, robotic or acid gestures, stop-start dynamics |
-| IDM / experimental | Flexible | Unusual subdivisions, controlled irregularity | Timbral micro-variation, evolving structures, deliberate motif coherence |
-| Pop / indie electronic | ~90–130 BPM, song-led | Clear groove serving hook | Strong motif, contrast between verse/chorus, memorable harmonic resolution |
+1. After extracting the brief, read the index and the **one primary genre guide** before composing or making a genre-dependent edit. Resolve links relative to this `SKILL.md`; the guides are local companion files, not documents returned by `remote get`.
+2. Pick **2–4 identity anchors** from the guide (groove, bass behavior, timbre, arrangement). For a hybrid, read at most one secondary guide and borrow 1–2 traits deliberately; preserve at least two anchors of the primary genre. Do not load all guides by default.
+3. Turn the guide's composition recipe into a concrete drum/bass/hook plan, then choose its short-loop or full-track arrangement path to match the request. For a targeted edit, apply only the relevant guidance and preserve unrelated layers.
+4. Use the guide's **Reference lookup prompts** to retrieve exact APIs and examples through section 1. These Markdown files are heuristics, not verified Strudel syntax, API documentation, licensed sample packs, or evidence about any recording. Verify timing, sample availability, and effects separately.
+5. Review the result against the guide's **Mix and quality checks** as well as section 7. State which anchors and working defaults you used; do not claim an auditory review without audio.
 
-**Reserve selection algorithm:** choose primary profile → identify 2–4 anchor traits (groove, bass behavior, timbre, arrangement) → optionally choose 1–2 secondary traits from a compatible profile → explicitly reject clichés that conflict with the brief. If a genre is absent, derive a provisional profile from musical evidence if available; otherwise state assumptions. BPM ranges are approximate suggestions, not factual metadata about a specific track.
+Explicit user requirements and the current project outrank every guide. Tempos, beat placements, and section lengths are approximate creative starting points, not genre boundaries. Distinguish a musical bar from a Strudel cycle; verify their mapping before translating any recipe. Never copy an artist's exact melody or assume access to a named sample.
+
+For an unlisted genre, use retrieved musical evidence where available; otherwise state a provisional profile and assumptions rather than forcing the nearest preset. If companion files are unavailable, report that limitation and proceed from the brief and available evidence without pretending to have read them.
 
 ## 5. Composition and arrangement workflow
 

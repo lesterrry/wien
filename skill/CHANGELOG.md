@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Twenty bundled electronic-music genre guides with practical groove/bass
+  recipes, sound palettes, arrangement options, quality checks, and retrieval
+  prompts, plus a linked genre selection index.
+- SKILL instructions for loading one primary guide and an optional hybrid
+  guide, preserving user constraints, and keeping creative defaults separate
+  from API/source evidence. Installation documentation now requires copying
+  the companion references with `SKILL.md`.
+
 ## 0.1.0 — 2026-11-11
 
 ### Added
