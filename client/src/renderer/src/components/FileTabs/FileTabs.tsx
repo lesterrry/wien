@@ -1,6 +1,13 @@
 import classNames from "classnames";
-import { FileCode2, Package, SlidersHorizontal, X } from "lucide-react";
+import {
+  FileCode2,
+  Network,
+  Package,
+  SlidersHorizontal,
+  X,
+} from "lucide-react";
 import { useEffect, useRef } from "react";
+import { AnimatedBorder } from "../AnimatedBorder/AnimatedBorder";
 import styles from "./FileTabs.module.css";
 
 export interface FileTab {
@@ -17,12 +24,19 @@ export function FileTabs({
   onSelect,
   onClose,
   controller,
+  graph,
 }: {
   tabs: FileTab[];
   active: string | null;
   disabled: boolean;
   onSelect: (path: string) => void;
   onClose: (path: string) => void;
+  graph: {
+    open: boolean;
+    active: boolean;
+    onSelect: () => void;
+    onClose: () => void;
+  };
   controller?: {
     open: boolean;
     disabled: boolean;
@@ -32,13 +46,11 @@ export function FileTabs({
 }) {
   const list = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const target = controller?.open
-      ? list.current?.querySelector('[data-controller-tab="true"]')
-      : active
-        ? list.current?.querySelector('[aria-selected="true"]')
-        : null;
-    target?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [active, controller?.open]);
+    if (!active && !controller?.open && !graph.active) return;
+    list.current
+      ?.querySelector('[aria-selected="true"]')
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [active, controller?.open, graph.active]);
 
   return (
     <div
@@ -46,9 +58,33 @@ export function FileTabs({
       role="tablist"
       aria-label="Open snippets"
       ref={list}
+      onKeyDown={(event) => {
+        if (
+          !(event.target instanceof HTMLButtonElement) ||
+          event.target.getAttribute("role") !== "tab"
+        )
+          return;
+        const buttons = [
+          ...(list.current?.querySelectorAll<HTMLButtonElement>(
+            '[role="tab"]:not(:disabled)',
+          ) ?? []),
+        ];
+        const index = buttons.indexOf(event.target);
+        let next: number;
+        if (event.key === "ArrowRight") next = (index + 1) % buttons.length;
+        else if (event.key === "ArrowLeft")
+          next = (index + buttons.length - 1) % buttons.length;
+        else if (event.key === "Home") next = 0;
+        else if (event.key === "End") next = buttons.length - 1;
+        else return;
+        event.preventDefault();
+        buttons[next]?.focus();
+        buttons[next]?.click();
+      }}
     >
-      {tabs.map((tab, index) => {
-        const selected = !controller?.open && tab.path === active;
+      {tabs.map((tab) => {
+        const selected =
+          !controller?.open && !graph.active && tab.path === active;
         const filename = tab.path.split("/").at(-1);
         const duplicateName = tabs.some(
           (other) =>
@@ -60,13 +96,12 @@ export function FileTabs({
           <div
             className={classNames(styles.fileTab, {
               [styles.active]: selected,
-              [styles.playing]: tab.playing,
             })}
             key={tab.path}
             role="presentation"
             data-playing={tab.playing || undefined}
           >
-            <span className={styles.playingRim} aria-hidden="true" />
+            <AnimatedBorder active={tab.playing} />
             <button
               type="button"
               role="tab"
@@ -80,21 +115,6 @@ export function FileTabs({
               title={`${tab.path}${tab.playing ? " · Playing" : ""}`}
               className={styles.fileTabSelect}
               onClick={() => onSelect(tab.path)}
-              onKeyDown={(event) => {
-                let next: number;
-                if (event.key === "ArrowRight")
-                  next = (index + 1) % tabs.length;
-                else if (event.key === "ArrowLeft")
-                  next = (index + tabs.length - 1) % tabs.length;
-                else if (event.key === "Home") next = 0;
-                else if (event.key === "End") next = tabs.length - 1;
-                else return;
-                event.preventDefault();
-                list.current
-                  ?.querySelectorAll<HTMLButtonElement>('[role="tab"]')
-                  [next]?.focus();
-                onSelect(tabs[next].path);
-              }}
             >
               <Icon size={13} />
               <span className={styles.fileTabName}>{filename}</span>
@@ -126,6 +146,40 @@ export function FileTabs({
           </div>
         );
       })}
+      {graph.open && (
+        <div
+          className={classNames(styles.fileTab, {
+            [styles.active]: graph.active,
+          })}
+          role="presentation"
+        >
+          <button
+            type="button"
+            role="tab"
+            id="tab-graph"
+            aria-label="Graph View"
+            aria-selected={graph.active}
+            aria-controls="snippet-panel"
+            tabIndex={graph.active ? 0 : -1}
+            disabled={disabled}
+            className={styles.fileTabSelect}
+            onClick={graph.onSelect}
+          >
+            <Network size={13} />
+            <span className={styles.fileTabName}>Graph View</span>
+          </button>
+          <button
+            type="button"
+            className={styles.fileTabClose}
+            aria-label="Close Graph View"
+            title="Close Graph View"
+            disabled={disabled}
+            onClick={graph.onClose}
+          >
+            <X size={12} />
+          </button>
+        </div>
+      )}
       {controller?.open && (
         <div
           className={classNames(styles.fileTab, styles.active)}

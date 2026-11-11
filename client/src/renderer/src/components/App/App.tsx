@@ -10,9 +10,9 @@ import {
   FilePlus2,
   FolderOpen,
   FolderPlus,
-  HardDrive,
   Loader2,
   MoreHorizontal,
+  Network,
   Package,
   PanelLeftClose,
   PanelLeftOpen,
@@ -49,6 +49,7 @@ import { ControlsPanel } from "../ControlsPanel/ControlsPanel";
 import { Dialog } from "../Dialog/Dialog";
 import { Explorer } from "../Explorer/Explorer";
 import { FileTabs } from "../FileTabs/FileTabs";
+import { GraphView } from "../GraphView/GraphView";
 import { StrudelEditor } from "../StrudelEditor/StrudelEditor";
 import styles from "./App.module.css";
 
@@ -127,7 +128,36 @@ export function App() {
   const [modal, setModal] = useState<Modal | null>(null);
   const [value, setValue] = useState("");
   const [modalError, setModalError] = useState<string | null>(null);
-  const [controllerOpen, setControllerOpen] = useState(false);
+  const [workspaceView, setWorkspaceView] = useState<
+    "editor" | "controls" | "graph"
+  >("editor");
+  const controllerOpen = workspaceView === "controls";
+  const graphActive = workspaceView === "graph";
+  const [graphOpen, setGraphOpen] = useState(false);
+  const [graphFocus, setGraphFocus] = useState<{
+    path: string | null;
+    revision: number;
+  }>({ path: null, revision: 0 });
+  const openGraph = (path: string | null = null) => {
+    setContext(null);
+    setGraphOpen(true);
+    setWorkspaceView("graph");
+    setGraphFocus((focus) => ({ path, revision: focus.revision + 1 }));
+  };
+  const closeGraph = useCallback(() => {
+    setGraphOpen(false);
+    setWorkspaceView((view) => (view === "graph" ? "editor" : view));
+  }, []);
+  const playingPaths = new Set(
+    sessions
+      .filter((session) => session.playback.started)
+      .map((session) => session.document.path),
+  );
+  const graphDrafts = Object.fromEntries(
+    sessions
+      .filter((s) => s.document.code !== s.document.saved)
+      .map((s) => [s.document.path, s.document.code]),
+  );
 
   const updateTabs = useCallback((next: string[]) => {
     tabsRef.current = next;
@@ -223,6 +253,7 @@ export function App() {
 
   const openFile = useCallback(
     async (path: string) => {
+      setWorkspaceView("editor");
       if (documentRef.current?.path === path) return;
       await run(() => activateFile(path));
     },
@@ -391,7 +422,7 @@ export function App() {
         event.preventDefault();
         event.stopPropagation();
         if (!event.repeat && !busyRef.current && !modal) {
-          setControllerOpen(false);
+          setWorkspaceView("editor");
           player.current?.assist();
         }
         return;
@@ -405,7 +436,9 @@ export function App() {
       if (event.key === "w") {
         event.preventDefault();
         event.stopPropagation();
-        if (documentRef.current) void closeTab(documentRef.current.path);
+        if (graphActive) closeGraph();
+        else if (controllerOpen) setWorkspaceView("editor");
+        else if (documentRef.current) void closeTab(documentRef.current.path);
         else api.close();
       }
       if (event.key === "s") {
@@ -415,12 +448,12 @@ export function App() {
       if (event.key === "Enter") {
         event.preventDefault();
         event.stopPropagation();
-        play();
+        if (!graphActive) play();
       }
       if (event.key === "." || event.code === "Period") {
         event.preventDefault();
         event.stopPropagation();
-        if (event.shiftKey) void stopAll();
+        if (event.shiftKey || graphActive) void stopAll();
         else stop();
       }
       if (event.key === "b") {
@@ -430,7 +463,19 @@ export function App() {
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [closeTab, flush, play, stop, stopAll, modal, player, documentRef]);
+  }, [
+    closeTab,
+    closeGraph,
+    graphActive,
+    controllerOpen,
+    flush,
+    play,
+    stop,
+    stopAll,
+    modal,
+    player,
+    documentRef,
+  ]);
 
   useEffect(() => {
     if (!context && !projectMenu) return;
@@ -450,8 +495,8 @@ export function App() {
   }, [context, projectMenu]);
 
   useEffect(() => {
-    if (!document) setControllerOpen(false);
-  }, [document]);
+    if (!document && controllerOpen) setWorkspaceView("editor");
+  }, [document, controllerOpen]);
 
   function showModal(next: Modal) {
     setContext(null);
@@ -528,6 +573,8 @@ export function App() {
       updateTabs([]);
       updateDocument(null);
       setProject(next);
+      setGraphOpen(false);
+      setWorkspaceView("editor");
       setSearch("");
       setSelection(null);
       const first = next.entries.find((entry) => !entry.children);
@@ -549,6 +596,7 @@ export function App() {
         const path = await api.add(modal.parent, value, modal.folder);
         await refresh();
         if (!modal.folder) {
+          setWorkspaceView("editor");
           const code = await api.read(path);
           updateDocument({ path, code, saved: code });
         }
@@ -626,7 +674,8 @@ export function App() {
     <div
       className={classNames(styles.app, {
         [styles.sidebarHidden]: !sidebar,
-        [styles.controlsHidden]: !controlsVisible || controllerOpen,
+        [styles.controlsHidden]:
+          !controlsVisible || controllerOpen || graphActive,
       })}
     >
       <div className={styles.titlebar}>
@@ -668,15 +717,21 @@ export function App() {
             active={document?.path ?? null}
             disabled={busy}
             onSelect={(path) => {
-              setControllerOpen(false);
+              setWorkspaceView("editor");
               void openFile(path);
             }}
             onClose={(path) => void closeTab(path)}
+            graph={{
+              open: graphOpen,
+              active: graphActive,
+              onSelect: () => setWorkspaceView("graph"),
+              onClose: closeGraph,
+            }}
             controller={{
               open: controllerOpen,
               disabled: busy,
               onSelect: () => {},
-              onClose: () => setControllerOpen(false),
+              onClose: () => setWorkspaceView("editor"),
             }}
           />
           <button
@@ -684,7 +739,8 @@ export function App() {
             className={styles.iconButton}
             title="Toggle controls"
             aria-label="Toggle controls"
-            aria-expanded={controlsVisible}
+            aria-expanded={controlsVisible && !graphActive}
+            disabled={graphActive}
             onClick={() => setControlsVisible(!controlsVisible)}
           >
             {controlsVisible ? (
@@ -844,15 +900,15 @@ export function App() {
           <div className={styles.sidebarBottom}>
             <button
               type="button"
-              className={styles.localProject}
-              onClick={() =>
-                void api.reveal().catch((error) => setError(message(error)))
-              }
-              title={project?.root}
+              className={styles.graphLink}
+              onClick={() => openGraph()}
+              disabled={!project || busy}
+              aria-label="Open Graph View"
+              aria-current={graphActive ? "page" : undefined}
             >
-              <HardDrive size={16} />
+              <Network size={16} />
               <span>
-                On your computer<small>Changes save automatically</small>
+                Graph View<small>Explore snippet dependencies</small>
               </span>
               <ArrowRight size={13} />
             </button>
@@ -873,127 +929,133 @@ export function App() {
         id="snippet-panel"
         role="tabpanel"
         aria-labelledby={
-          document ? `tab-${encodeURIComponent(document.path)}` : undefined
+          graphActive
+            ? "tab-graph"
+            : document
+              ? `tab-${encodeURIComponent(document.path)}`
+              : undefined
         }
-        aria-label={document ? undefined : "Snippet editor"}
+        aria-label={graphActive || document ? undefined : "Snippet editor"}
       >
-        <header
-          className={styles.editorToolbar}
-          role="toolbar"
-          aria-label="Snippet toolbar"
-        >
-          <div className={styles.fileHeading}>
-            {document ? (
-              <>
-                {controllerOpen ? (
-                  <SlidersHorizontal size={17} />
-                ) : hasExports(document.code) ? (
-                  <Package size={17} />
-                ) : (
-                  <FileCode2 size={17} />
-                )}
-                <div>
-                  <strong>{filename}</strong>
-                  <span>
-                    {project?.name}
-                    {parentPath(document.path)
-                      ? ` / ${parentPath(document.path)}`
-                      : ""}
-                  </span>
-                </div>
-              </>
-            ) : (
-              <span className={styles.muted}>Your next idea starts here</span>
-            )}
-          </div>
-          <div className={styles.transport}>
-            <button
-              type="button"
-              className={styles.iconButton}
-              aria-label="Ask Wien"
-              title={`Ask Wien (${shortcut} ,)`}
-              disabled={!document || busy}
-              onClick={() => {
-                setControllerOpen(false);
-                player.current?.assist("bottom");
-              }}
-            >
-              <Sparkles size={16} />
-            </button>
-            <button
-              type="button"
-              className={classNames(styles.iconButton, styles.stopButton)}
-              title={`Stop (${shortcut} .)`}
-              aria-label="Stop playback"
-              disabled={!playback.started}
-              onClick={stop}
-            >
-              <Square size={14} fill="currentColor" />
-            </button>
-            {sessions.some(
-              (s) => s.playback.started && s.document.path !== document?.path,
-            ) && (
-              <button
-                type="button"
-                className={styles.iconButton}
-                aria-label="Stop all playback"
-                title={`Stop all (${shortcut} ⇧ .)`}
-                onClick={() => void stopAll()}
-              >
-                <SquareX size={16} />
-              </button>
-            )}
-            <button
-              type="button"
-              className={styles.playButton}
-              disabled={!document || playback.pending || busy}
-              onClick={play}
-            >
-              {playback.pending ? (
-                <Loader2 size={14} className={styles.spin} />
+        {!graphActive && (
+          <header
+            className={styles.editorToolbar}
+            role="toolbar"
+            aria-label="Snippet toolbar"
+          >
+            <div className={styles.fileHeading}>
+              {document ? (
+                <>
+                  {controllerOpen ? (
+                    <SlidersHorizontal size={17} />
+                  ) : hasExports(document.code) ? (
+                    <Package size={17} />
+                  ) : (
+                    <FileCode2 size={17} />
+                  )}
+                  <div>
+                    <strong>{filename}</strong>
+                    <span>
+                      {project?.name}
+                      {parentPath(document.path)
+                        ? ` / ${parentPath(document.path)}`
+                        : ""}
+                    </span>
+                  </div>
+                </>
               ) : (
-                <Play size={13} fill="currentColor" />
+                <span className={styles.muted}>Your next idea starts here</span>
               )}
-              <span>{playback.started ? "Update" : "Play"}</span>
-              <kbd>{shortcut} ↵</kbd>
-            </button>
-            {controllerOpen && document ? (
-              <button
-                type="button"
-                className={styles.closeButton}
-                title="Close controls"
-                aria-label="Close controls"
-                onClick={() => setControllerOpen(false)}
-              >
-                <X size={15} />
-              </button>
-            ) : (
+            </div>
+            <div className={styles.transport}>
               <button
                 type="button"
                 className={styles.iconButton}
-                title="Snippet actions"
-                aria-label="Snippet actions"
+                aria-label="Ask Wien"
+                title={`Ask Wien (${shortcut} ,)`}
                 disabled={!document || busy}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  if (!document) return;
-                  const rect = event.currentTarget.getBoundingClientRect();
-                  setContext({
-                    entry: {
-                      id: document.path,
-                      name: filename ?? document.path,
-                      exported: hasExports(document.code),
-                    },
-                    x: rect.right - 220,
-                    y: rect.bottom + 8,
-                  });
+                onClick={() => {
+                  setWorkspaceView("editor");
+                  player.current?.assist("bottom");
                 }}
               >
-                <MoreHorizontal size={18} />
+                <Sparkles size={16} />
               </button>
-            )}
-          </div>
-        </header>
+              <button
+                type="button"
+                className={classNames(styles.iconButton, styles.stopButton)}
+                title={`Stop (${shortcut} .)`}
+                aria-label="Stop playback"
+                disabled={!playback.started}
+                onClick={stop}
+              >
+                <Square size={14} fill="currentColor" />
+              </button>
+              {sessions.some(
+                (s) => s.playback.started && s.document.path !== document?.path,
+              ) && (
+                <button
+                  type="button"
+                  className={styles.iconButton}
+                  aria-label="Stop all playback"
+                  title={`Stop all (${shortcut} ⇧ .)`}
+                  onClick={() => void stopAll()}
+                >
+                  <SquareX size={16} />
+                </button>
+              )}
+              <button
+                type="button"
+                className={styles.playButton}
+                disabled={!document || playback.pending || busy}
+                onClick={play}
+              >
+                {playback.pending ? (
+                  <Loader2 size={14} className={styles.spin} />
+                ) : (
+                  <Play size={13} fill="currentColor" />
+                )}
+                <span>{playback.started ? "Update" : "Play"}</span>
+                <kbd>{shortcut} ↵</kbd>
+              </button>
+              {controllerOpen && document ? (
+                <button
+                  type="button"
+                  className={styles.closeButton}
+                  title="Close controls"
+                  aria-label="Close controls"
+                  onClick={() => setWorkspaceView("editor")}
+                >
+                  <X size={15} />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className={styles.iconButton}
+                  title="Snippet actions"
+                  aria-label="Snippet actions"
+                  disabled={!document || busy}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    if (!document) return;
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    setContext({
+                      entry: {
+                        id: document.path,
+                        name: filename ?? document.path,
+                        exported: hasExports(document.code),
+                      },
+                      x: rect.right - 220,
+                      y: rect.bottom + 8,
+                    });
+                  }}
+                >
+                  <MoreHorizontal size={18} />
+                </button>
+              )}
+            </div>
+          </header>
+        )}
         {error && (
           <div role="alert" className={styles.errorBanner}>
             <span>{error}</span>
@@ -1021,7 +1083,8 @@ export function App() {
             key={`${project?.root}/${session.id}/${session.version}`}
             style={{
               display:
-                session.document.path === document?.path && !controllerOpen
+                session.document.path === document?.path &&
+                workspaceView === "editor"
                   ? "contents"
                   : "none",
             }}
@@ -1030,7 +1093,8 @@ export function App() {
               initialCode={session.document.code}
               path={session.document.path}
               active={
-                session.document.path === document?.path && !controllerOpen
+                session.document.path === document?.path &&
+                workspaceView === "editor"
               }
               disabled={busy}
               onLink={(source) => void linkSnippet(source)}
@@ -1053,7 +1117,7 @@ export function App() {
             />
           </div>
         ))}
-        {!document && (
+        {!document && !graphActive && (
           <div className={styles.emptyState}>
             <div className={styles.emptyIcon}>
               <Code2 size={30} strokeWidth={1.2} />
@@ -1076,6 +1140,19 @@ export function App() {
             </button>
           </div>
         )}
+        {graphOpen && project && (
+          <div className={styles.graphPane} hidden={!graphActive}>
+            <GraphView
+              key={project.root}
+              project={project}
+              active={graphActive}
+              focus={graphFocus}
+              drafts={graphDrafts}
+              playingPaths={playingPaths}
+              onOpen={(path) => void openFile(path)}
+            />
+          </div>
+        )}
         {controllerOpen && document && (
           <ControllerPanel
             document={document}
@@ -1088,7 +1165,7 @@ export function App() {
             onError={setError}
           />
         )}
-        {playback.error && (
+        {!graphActive && playback.error && (
           <div className={styles.evaluationError} role="alert">
             <strong>Couldn’t run this code</strong>
             <span>{playback.error.message}</span>
@@ -1097,32 +1174,34 @@ export function App() {
             )}
           </div>
         )}
-        <footer className={styles.statusbar}>
-          <span
-            className={classNames({
-              [styles.saveError]: savedStatus === "Not saved",
-            })}
-          >
-            {savedStatus === "Saving…" ? (
-              <Loader2 size={12} className={styles.spin} />
-            ) : dirty ? (
-              <span className={styles.unsavedDot} />
-            ) : (
-              <Check size={12} />
-            )}
-            {savedStatus}
-          </span>
-          <div>
-            <span>
-              Ln {position[0]}, Col {position[1]}
+        {!graphActive && (
+          <footer className={styles.statusbar}>
+            <span
+              className={classNames({
+                [styles.saveError]: savedStatus === "Not saved",
+              })}
+            >
+              {savedStatus === "Saving…" ? (
+                <Loader2 size={12} className={styles.spin} />
+              ) : dirty ? (
+                <span className={styles.unsavedDot} />
+              ) : (
+                <Check size={12} />
+              )}
+              {savedStatus}
             </span>
-            <span>UTF-8</span>
-            <span className={styles.strudelBadge}>Strudel</span>
-          </div>
-        </footer>
+            <div>
+              <span>
+                Ln {position[0]}, Col {position[1]}
+              </span>
+              <span>UTF-8</span>
+              <span className={styles.strudelBadge}>Strudel</span>
+            </div>
+          </footer>
+        )}
       </main>
 
-      {controlsVisible && !controllerOpen && (
+      {controlsVisible && !controllerOpen && !graphActive && (
         <ControlsPanel
           key={`${project?.root}/${document?.path}`}
           controls={controlState.controls}
@@ -1131,7 +1210,7 @@ export function App() {
           disabled={busy}
           onChange={(name, value) => player.current?.changeControl(name, value)}
           onIgnore={(name) => player.current?.ignoreControl(name)}
-          onOpenController={() => setControllerOpen(true)}
+          onOpenController={() => setWorkspaceView("controls")}
         />
       )}
 
@@ -1142,6 +1221,10 @@ export function App() {
         >
           {!context.entry.children && (
             <>
+              <button type="button" onClick={() => openGraph(context.entry.id)}>
+                <Network size={14} />
+                View in Graph View
+              </button>
               <button
                 type="button"
                 onClick={() => void toggleExport(context.entry.id)}
