@@ -91,6 +91,15 @@ try {
   assert.equal(calls.length, 0);
   await input.press("Enter");
   await expect.poll(() => calls.length).toBe(1);
+  const rim = dialog.locator("span[aria-hidden=true]").first();
+  await expect
+    .poll(() =>
+      rim.evaluate(
+        (element) => getComputedStyle(element, "::before").animationPlayState,
+      ),
+    )
+    .toBe("running");
+  await expect(rim).toHaveCSS("opacity", "0.9");
   assert.deepEqual(calls[0], {
     prompt: "Make a soft bass",
     file: {
@@ -102,6 +111,14 @@ try {
   const edited = 'const gain = 0.1\nnote("a1").s("triangle").gain(gain)';
   reply({ message: "A softer bass, ready to play.", code: edited });
   await expect(dialog).toContainText("A softer bass, ready to play.");
+  await expect
+    .poll(() =>
+      rim.evaluate(
+        (element) => getComputedStyle(element, "::before").animationPlayState,
+      ),
+    )
+    .toBe("paused");
+  await expect(rim).toHaveCSS("opacity", "0");
   await expect(code).toHaveText(edited.replaceAll("\n", ""));
   await expect(page.getByRole("button", { name: /^Play/ })).toBeVisible();
   await expect
@@ -205,7 +222,7 @@ try {
   await expect(dialog).toBeHidden();
   await expect(code).toHaveText('note("c2")');
 
-  // Navigation unmounts the assistant and cancels its request.
+  // Navigation hides the editor and cancels its assistant request.
   await page.keyboard.press(`${mod}+,`);
   await input.fill("Wait for navigation");
   await input.press("Enter");
@@ -216,6 +233,10 @@ try {
     .click();
   await expect(dialog).toBeHidden();
   afterSwitch({ message: "Wrong tab.", code: edited });
+  await expect(
+    page.getByRole("tab", { name: "instruments/glass.strudel", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await expect(code).toBeEditable();
   await expect(code).not.toHaveText(edited.replaceAll("\n", ""));
 
   await code.click();

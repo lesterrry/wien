@@ -16,6 +16,7 @@
 }
 
 .fileTab {
+  position: relative;
   -webkit-app-region: no-drag;
   display: flex;
   align-items: center;

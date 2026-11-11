@@ -202,7 +202,7 @@
   padding-top: 12px;
 }
 
-.localProject {
+.graphLink {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -214,16 +214,16 @@
   font-size: 11px;
 }
 
-.localProject:hover,
+.graphLink:hover,
 .helpButton:hover {
   background: var(--color-hover);
 }
 
-.localProject > span {
+.graphLink > span {
   flex: 1;
 }
 
-.localProject small {
+.graphLink small {
   display: block;
   font-size: 10px;
   color: var(--color-muted);
@@ -545,4 +545,19 @@
   .playButton kbd {
     display: none;
   }
+}
+
+.graphPane {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.graphPane[hidden] {
+  display: none;
+}
+
+.graphLink[aria-current="page"] {
+  background: var(--color-active);
+  color: var(--color-primary);
 }

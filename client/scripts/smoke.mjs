@@ -79,7 +79,7 @@ try {
     await page.waitForFunction(
       () =>
         document
-          .querySelector(".cm-content")
+          .querySelector('[aria-label="Strudel code editor"]')
           ?.getAttribute("contenteditable") === "true",
     );
     await code.click();
@@ -87,8 +87,8 @@ try {
     await page.keyboard.insertText(value);
     await page.waitForFunction(
       (expected) =>
-        document.querySelector(".cm-content")?.textContent ===
-        expected.replaceAll("\n", ""),
+        document.querySelector('[aria-label="Strudel code editor"]')
+          ?.textContent === expected.replaceAll("\n", ""),
       value,
     );
   }
@@ -341,7 +341,7 @@ note("c3*8").s("sine").gain(gain)`);
     .click();
   await page.waitForFunction(() =>
     document
-      .querySelector(".cm-content")
+      .querySelector('[aria-label="Strudel code editor"]')
       ?.textContent.startsWith("export default "),
   );
   await page
@@ -354,7 +354,8 @@ note("c3*8").s("sine").gain(gain)`);
     .click();
   await page.waitForFunction(
     (expected) =>
-      document.querySelector(".cm-content")?.textContent === expected,
+      document.querySelector('[aria-label="Strudel code editor"]')
+        ?.textContent === expected,
     originalRoot,
   );
 
@@ -373,7 +374,7 @@ note("c3*8").s("sine").gain(gain)`);
   await glassFile.dragTo(code, { targetPosition: { x: 160, y: 15 } });
   await page.waitForFunction(() =>
     document
-      .querySelector(".cm-content")
+      .querySelector('[aria-label="Strudel code editor"]')
       ?.textContent.includes("import glass from './instruments/glass.strudel'"),
   );
   await page
@@ -440,7 +441,7 @@ note("c3*8").s("sine").gain(gain)`);
   );
   await page.waitForFunction(() =>
     document
-      .querySelector(".cm-content")
+      .querySelector('[aria-label="Strudel code editor"]')
       ?.textContent.includes("'./sketches/glass.strudel'"),
   );
   await fs.access(path.join(projectRoot, "sketches/glass.strudel"));
