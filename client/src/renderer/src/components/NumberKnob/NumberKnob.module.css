@@ -3,7 +3,10 @@
 }
 
 .numberControl {
-  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  height: 176px;
+  margin: 0;
   border: 1px solid var(--color-border);
   border-radius: 9px;
   padding: 7px 9px 10px;
@@ -11,6 +14,8 @@
 
 .controlHeading {
   display: flex;
+  height: 22px;
+  flex-shrink: 0;
   align-items: center;
   gap: 6px;
   margin-bottom: 6px;
@@ -32,9 +37,12 @@
 }
 
 .controlBody {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: 88px 18px;
+  flex: 1;
+  align-content: center;
   align-items: center;
+  justify-items: center;
   gap: 9px;
   padding: 4px 0 2px;
 }
@@ -87,7 +95,10 @@
   font-size: 13px;
   font-variant-numeric: tabular-nums;
   text-align: center;
-  overflow-wrap: anywhere;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 @media (max-width: 1050px) {

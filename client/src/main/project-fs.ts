@@ -2,6 +2,11 @@ import { randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
 import path from "node:path";
 import {
+  type PanelPreferences,
+  parsePanelPreferences,
+  relocatePanelPreferences,
+} from "../shared/control-tree";
+import {
   addImport,
   editSource,
   hasExports,
@@ -126,6 +131,51 @@ export class ProjectFs {
     const { mode } = await fs.stat(target);
     try {
       await fs.writeFile(temporary, content, { flag: "wx", mode });
+      await fs.rename(temporary, target);
+    } finally {
+      await fs.rm(temporary, { force: true });
+    }
+  }
+
+  private async controlSettingsPath() {
+    const target = path.join(this.root, ".wien-controls.json");
+    const stat = await fs
+      .lstat(target)
+      .catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return null;
+        throw error;
+      });
+    if (
+      stat &&
+      (!stat.isFile() || stat.isSymbolicLink() || stat.size > 256 * 1024)
+    )
+      throw new Error("Invalid panel settings file.");
+    return { target, exists: Boolean(stat) };
+  }
+
+  async readControlPreferences(): Promise<PanelPreferences | null> {
+    const { target, exists } = await this.controlSettingsPath();
+    if (!exists) return null;
+    const preferences = parsePanelPreferences(
+      JSON.parse(await fs.readFile(target, "utf8")),
+    );
+    if (!preferences)
+      throw new Error(
+        "Invalid panel settings. Restore .wien-controls.json before changing panel settings.",
+      );
+    return preferences;
+  }
+
+  async saveControlPreferences(value: unknown): Promise<void> {
+    const preferences = parsePanelPreferences(value);
+    if (!preferences) throw new Error("Invalid panel settings.");
+    const content = `${JSON.stringify({ version: 1, ...preferences }, null, 2)}\n`;
+    if (Buffer.byteLength(content) > 256 * 1024)
+      throw new Error("Panel settings are too large.");
+    const { target } = await this.controlSettingsPath();
+    const temporary = path.join(this.root, `.wien-controls-${randomUUID()}`);
+    try {
+      await fs.writeFile(temporary, content, { flag: "wx" });
       await fs.rename(temporary, target);
     } finally {
       await fs.rm(temporary, { force: true });
@@ -283,7 +333,19 @@ export class ProjectFs {
       }
     };
     await visit(await this.readDirectory(""));
-    await this.applyEdits(changes, () => fs.rename(source, destination));
+    const preferences = await this.readControlPreferences();
+    await this.applyEdits(changes, async () => {
+      await fs.rename(source, destination);
+      try {
+        if (preferences)
+          await this.saveControlPreferences(
+            relocatePanelPreferences(preferences, from, to),
+          );
+      } catch (error) {
+        await fs.rename(destination, source);
+        throw error;
+      }
+    });
   }
 
   async trash(

@@ -3,15 +3,16 @@ import {
   ChevronDown,
   ChevronRight,
   Maximize2,
+  Minimize2,
   Pin,
   SlidersHorizontal,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   type ControlGroup,
-  controlSources,
+  flatPanelLayout,
+  flattenControlGroups,
   type PanelLayout,
-  sourceLabel,
 } from "../../../../shared/control-tree";
 import type { Control } from "../../../../shared/controls";
 import { BooleanSwitch } from "../BooleanSwitch/BooleanSwitch";
@@ -29,7 +30,7 @@ export function ControlsPanel({
   pinned,
   loading,
   disabled,
-  layout,
+  layout: savedLayout,
   errors,
   onPin,
   onLayout,
@@ -38,7 +39,12 @@ export function ControlsPanel({
   onDefinition,
   onMove,
   onOpenController,
+  onReloadSource,
+  fullscreen,
+  visible,
 }: {
+  fullscreen: boolean;
+  visible: boolean;
   tree: ControlGroup | null;
   root: string | null;
   pinned: boolean;
@@ -57,6 +63,7 @@ export function ControlsPanel({
     targetName: string,
     placement: "before" | "after",
   ) => void;
+  onReloadSource: (path: string) => void;
   onOpenController: () => void;
 }) {
   const [drag, setDrag] = useState<{
@@ -66,6 +73,13 @@ export function ControlsPanel({
     side: "before" | "after";
   } | null>(null);
   const dragAllowed = useRef(true);
+  const list = useRef<HTMLDivElement>(null);
+  const scrollPositions = useRef({ sidebar: 0, fullscreen: 0 });
+  useLayoutEffect(() => {
+    if (list.current)
+      list.current.scrollTop =
+        scrollPositions.current[fullscreen ? "fullscreen" : "sidebar"];
+  }, [fullscreen]);
   const shortcut = navigator.platform.includes("Mac") ? "⌥" : "Alt";
   const [search, setSearch] = useState("");
   const [menu, setMenu] = useState<Menu | null>(null);
@@ -85,14 +99,13 @@ export function ControlsPanel({
       window.removeEventListener("keydown", key);
     };
   }, [menu]);
+  useEffect(() => {
+    if (!visible) setMenu(null);
+  }, [visible]);
   const query = search.trim().toLocaleLowerCase();
-  const names = tree ? controlSources(tree) : new Map<string, Set<string>>();
-  const hidden: ControlGroup[] = [];
-  function collectHidden(group: ControlGroup) {
-    if (layout.hidden[group.id]) hidden.push(group);
-    group.children.forEach(collectHidden);
-  }
-  if (tree) collectHidden(tree);
+  const groups = tree ? flattenControlGroups(tree) : [];
+  const layout = flatPanelLayout(savedLayout, groups);
+  const hidden = groups.filter((group) => layout.hidden[group.id]);
   const matches = (path: string, name: string) =>
     `${path} ${name}`.toLocaleLowerCase().includes(query);
   function contains(group: ControlGroup): boolean {
@@ -101,13 +114,13 @@ export function ControlsPanel({
       !query ||
       matches(group.path, "") ||
       group.controls.some((control) => matches(group.path, control.name)) ||
-      Boolean(group.issues?.some((issue) => matches(group.path, issue.name))) ||
-      group.children.some(contains)
+      Boolean(group.issues?.some((issue) => matches(group.path, issue.name)))
     );
   }
+  const matchingGroups = groups.filter(contains);
   function renderGroup(group: ControlGroup) {
     if (!contains(group)) return null;
-    const collapsed = !query && (layout.collapsed[group.id] ?? group.repeated);
+    const collapsed = !query && Boolean(layout.collapsed[group.id]);
     return (
       <section
         key={group.id}
@@ -138,11 +151,6 @@ export function ControlsPanel({
         >
           {collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
           <span>{group.path.split("/").at(-1)}</span>
-          {group.repeated && (
-            <small title="Shared controls, repeated import">
-              Repeated import
-            </small>
-          )}
         </button>
         {!collapsed && (
           <div className={styles.groupBody}>
@@ -158,161 +166,184 @@ export function ControlsPanel({
                   <strong>{issue.name}</strong>: {issue.message}
                 </p>
               ))}
-            {group.controls
-              .filter((control) => matches(group.path, control.name))
-              .map((control) => {
-                const index = group.controls.indexOf(control);
-                const isOver =
-                  drag?.file === group.path &&
-                  drag?.over === control.name &&
-                  drag.name !== control.name;
-                const peers = names.get(control.name) ?? new Set<string>();
-                const error =
-                  errors[JSON.stringify([group.path, control.name])];
-                return (
-                  <fieldset
-                    key={control.name}
-                    className={classNames(styles.controlRow, styles.control, {
-                      [styles.rowDragging]:
-                        drag?.file === group.path &&
-                        drag?.name === control.name,
-                      [styles.dropBefore]: isOver && drag?.side === "before",
-                      [styles.dropAfter]: isOver && drag?.side === "after",
-                    })}
-                    aria-label={`${control.name} control`}
-                    draggable={!disabled}
-                    tabIndex={disabled ? undefined : 0}
-                    title={`Drag to reorder ${control.name} (${shortcut}+↑ / ${shortcut}+↓)`}
-                    onPointerDown={(event) => {
-                      const target = event.target as HTMLElement | null;
-                      dragAllowed.current = !target?.closest(
-                        "button, input, textarea, select, a, legend",
-                      );
-                    }}
-                    onDragStart={(event) => {
-                      if (disabled || !dragAllowed.current) {
-                        event.preventDefault();
-                        return;
-                      }
-                      event.dataTransfer.effectAllowed = "move";
-                      event.dataTransfer.setData("text/plain", control.name);
-                      setDrag({
-                        file: group.path,
-                        name: control.name,
-                        over: null,
-                        side: "before",
-                      });
-                    }}
-                    onDragEnd={() => setDrag(null)}
-                    onKeyDown={(event) => {
-                      if (event.target !== event.currentTarget) return;
-                      if (disabled || !event.altKey) return;
-                      if (event.key === "ArrowUp" && index > 0) {
-                        event.preventDefault();
-                        onMove(
-                          group.path,
-                          control.name,
-                          group.controls[index - 1].name,
-                          "before",
-                        );
-                      }
-                      if (
-                        event.key === "ArrowDown" &&
-                        index < group.controls.length - 1
-                      ) {
-                        event.preventDefault();
-                        onMove(
-                          group.path,
-                          control.name,
-                          group.controls[index + 1].name,
-                          "after",
-                        );
-                      }
-                    }}
-                    onDragOver={(event) => {
-                      if (
-                        !drag ||
-                        drag.file !== group.path ||
-                        drag.name === control.name
-                      )
-                        return;
-                      event.preventDefault();
-                      event.dataTransfer.dropEffect = "move";
-                      const rect = event.currentTarget.getBoundingClientRect();
-                      const side =
-                        event.clientY < rect.top + rect.height / 2
-                          ? "before"
-                          : "after";
-                      setDrag({ ...drag, over: control.name, side });
-                    }}
-                    onDragLeave={(event) => {
-                      const next = event.relatedTarget as Node | null;
-                      if (next && event.currentTarget.contains(next)) return;
-                      if (drag?.over === control.name)
-                        setDrag({ ...drag, over: null });
-                    }}
-                    onDrop={(event) => {
-                      if (
-                        !drag ||
-                        drag.file !== group.path ||
-                        drag.name === control.name
-                      )
-                        return;
-                      event.preventDefault();
-                      const rect = event.currentTarget.getBoundingClientRect();
-                      const side =
-                        event.clientY < rect.top + rect.height / 2
-                          ? "before"
-                          : "after";
-                      onMove(group.path, drag.name, control.name, side);
-                      setDrag(null);
-                    }}
-                    onContextMenu={(event) => {
-                      event.preventDefault();
-                      setMenu({
-                        kind: "control",
-                        path: group.path,
-                        control,
-                        x: Math.min(event.clientX, window.innerWidth - 210),
-                        y: Math.min(event.clientY, window.innerHeight - 90),
-                      });
-                    }}
+            {Object.entries(errors).map(([key, message]) => {
+              const [path, name] = JSON.parse(key) as [string, string];
+              if (
+                path !== group.path ||
+                group.controls.some((control) => control.name === name)
+              )
+                return null;
+              return (
+                <p key={key} role="alert" className={styles.issue}>
+                  <strong>{name}</strong>: {message}
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => onReloadSource(group.path)}
                   >
-                    {peers.size > 1 && (
-                      <small className={styles.source} title={group.path}>
-                        {sourceLabel(group.path, peers)}
-                      </small>
-                    )}
-                    {control.kind === "number" ? (
-                      <NumberKnob
-                        control={control}
-                        disabled={disabled}
-                        onChange={(name, value) =>
-                          onChange(group.path, name, value)
+                    Reload source…
+                  </button>
+                </p>
+              );
+            })}
+            <div className={styles.groupControls}>
+              {group.controls
+                .filter((control) => matches(group.path, control.name))
+                .map((control) => {
+                  const index = group.controls.indexOf(control);
+                  const isOver =
+                    drag?.file === group.path &&
+                    drag?.over === control.name &&
+                    drag.name !== control.name;
+                  const error =
+                    errors[JSON.stringify([group.path, control.name])];
+                  return (
+                    <fieldset
+                      key={control.name}
+                      className={classNames(styles.controlRow, styles.control, {
+                        [styles.rowDragging]:
+                          drag?.file === group.path &&
+                          drag?.name === control.name,
+                        [styles.dropBefore]: isOver && drag?.side === "before",
+                        [styles.dropAfter]: isOver && drag?.side === "after",
+                      })}
+                      aria-label={`${control.name} control`}
+                      draggable={!disabled}
+                      tabIndex={disabled ? undefined : 0}
+                      title={`Drag to reorder ${control.name} (${shortcut}+↑ / ${shortcut}+↓)`}
+                      onPointerDown={(event) => {
+                        const target = event.target as HTMLElement | null;
+                        dragAllowed.current = !target?.closest(
+                          "button, input, textarea, select, a, legend",
+                        );
+                      }}
+                      onDragStart={(event) => {
+                        if (disabled || !dragAllowed.current) {
+                          event.preventDefault();
+                          return;
                         }
-                        onIgnore={(name) => onIgnore(group.path, name)}
-                      />
-                    ) : (
-                      <BooleanSwitch
-                        control={control}
-                        disabled={disabled}
-                        onChange={(name, value) =>
-                          onChange(group.path, name, value)
+                        event.dataTransfer.effectAllowed = "move";
+                        event.dataTransfer.setData("text/plain", control.name);
+                        setDrag({
+                          file: group.path,
+                          name: control.name,
+                          over: null,
+                          side: "before",
+                        });
+                      }}
+                      onDragEnd={() => setDrag(null)}
+                      onKeyDown={(event) => {
+                        if (event.target !== event.currentTarget) return;
+                        if (disabled || !event.altKey) return;
+                        if (event.key === "ArrowUp" && index > 0) {
+                          event.preventDefault();
+                          onMove(
+                            group.path,
+                            control.name,
+                            group.controls[index - 1].name,
+                            "before",
+                          );
                         }
-                        onIgnore={(name) => onIgnore(group.path, name)}
-                      />
-                    )}
-                    {error && (
-                      <p role="alert" className={styles.issue}>
-                        {error}
-                      </p>
-                    )}
-                  </fieldset>
-                );
-              })}
-            {group.children.map(renderGroup)}
+                        if (
+                          event.key === "ArrowDown" &&
+                          index < group.controls.length - 1
+                        ) {
+                          event.preventDefault();
+                          onMove(
+                            group.path,
+                            control.name,
+                            group.controls[index + 1].name,
+                            "after",
+                          );
+                        }
+                      }}
+                      onDragOver={(event) => {
+                        if (
+                          !drag ||
+                          drag.file !== group.path ||
+                          drag.name === control.name
+                        )
+                          return;
+                        event.preventDefault();
+                        event.dataTransfer.dropEffect = "move";
+                        const rect =
+                          event.currentTarget.getBoundingClientRect();
+                        const side =
+                          event.clientY < rect.top + rect.height / 2
+                            ? "before"
+                            : "after";
+                        setDrag({ ...drag, over: control.name, side });
+                      }}
+                      onDragLeave={(event) => {
+                        const next = event.relatedTarget as Node | null;
+                        if (next && event.currentTarget.contains(next)) return;
+                        if (drag?.over === control.name)
+                          setDrag({ ...drag, over: null });
+                      }}
+                      onDrop={(event) => {
+                        if (
+                          !drag ||
+                          drag.file !== group.path ||
+                          drag.name === control.name
+                        )
+                          return;
+                        event.preventDefault();
+                        const rect =
+                          event.currentTarget.getBoundingClientRect();
+                        const side =
+                          event.clientY < rect.top + rect.height / 2
+                            ? "before"
+                            : "after";
+                        onMove(group.path, drag.name, control.name, side);
+                        setDrag(null);
+                      }}
+                      onContextMenu={(event) => {
+                        event.preventDefault();
+                        setMenu({
+                          kind: "control",
+                          path: group.path,
+                          control,
+                          x: Math.min(event.clientX, window.innerWidth - 210),
+                          y: Math.min(event.clientY, window.innerHeight - 90),
+                        });
+                      }}
+                    >
+                      {control.kind === "number" ? (
+                        <NumberKnob
+                          control={control}
+                          disabled={disabled}
+                          onChange={(name, value) =>
+                            onChange(group.path, name, value)
+                          }
+                          onIgnore={(name) => onIgnore(group.path, name)}
+                        />
+                      ) : (
+                        <BooleanSwitch
+                          control={control}
+                          disabled={disabled}
+                          onChange={(name, value) =>
+                            onChange(group.path, name, value)
+                          }
+                          onIgnore={(name) => onIgnore(group.path, name)}
+                        />
+                      )}
+                      {error && (
+                        <p role="alert" className={styles.issue}>
+                          {error}
+                          <button
+                            type="button"
+                            disabled={disabled}
+                            onClick={() => onReloadSource(group.path)}
+                          >
+                            Reload source…
+                          </button>
+                        </p>
+                      )}
+                    </fieldset>
+                  );
+                })}
+            </div>
             {!group.controls.length &&
-              !group.children.length &&
               !group.error &&
               !group.issues?.length && (
                 <p className={styles.controlsEmpty}>
@@ -325,19 +356,26 @@ export function ControlsPanel({
     );
   }
   return (
-    <aside className={styles.controlsPanel} aria-label="Snippet controls">
+    <aside
+      className={classNames(styles.controlsPanel, {
+        [styles.fullscreen]: fullscreen,
+      })}
+      aria-label="Snippet controls"
+      data-mode={fullscreen ? "fullscreen" : "sidebar"}
+      hidden={!visible}
+    >
       <div className={styles.controlsTitle}>
         <SlidersHorizontal size={14} />
         <span>Controls</span>
         <button
           type="button"
           className={styles.controllerButton}
-          title="Open full controls"
-          aria-label="Open full controls"
+          title={fullscreen ? "Collapse controls" : "Open full controls"}
+          aria-label={fullscreen ? "Collapse controls" : "Open full controls"}
           disabled={!root || disabled}
           onClick={onOpenController}
         >
-          <Maximize2 size={13} />
+          {fullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
         </button>
         {loading && <small>Updating…</small>}
       </div>
@@ -364,9 +402,16 @@ export function ControlsPanel({
         value={search}
         onChange={(event) => setSearch(event.target.value)}
       />
-      <div className={styles.controlsList}>
+      <div
+        className={styles.controlsList}
+        ref={list}
+        onScroll={(event) => {
+          scrollPositions.current[fullscreen ? "fullscreen" : "sidebar"] =
+            event.currentTarget.scrollTop;
+        }}
+      >
         {tree ? (
-          renderGroup(tree)
+          <div className={styles.groups}>{matchingGroups.map(renderGroup)}</div>
         ) : (
           <p className={styles.controlsEmpty}>
             {loading
@@ -374,7 +419,7 @@ export function ControlsPanel({
               : "Open a snippet to see its controls."}
           </p>
         )}
-        {tree && !contains(tree) && (
+        {tree && !groups.some(contains) && (
           <p className={styles.controlsEmpty}>No matching controls.</p>
         )}
       </div>

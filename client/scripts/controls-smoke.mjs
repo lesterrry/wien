@@ -53,17 +53,30 @@ try {
     name: "b.strudel controls",
     exact: true,
   });
-  const repeated = b.getByRole("button", { name: /shared.strudel/ });
-  await expect(repeated).toHaveAttribute("aria-expanded", "false");
-  await repeated.click();
+  const shared = panel.getByRole("region", {
+    name: "shared.strudel controls",
+    exact: true,
+  });
+  const sharedHeading = shared.getByRole("button", {
+    name: "Toggle shared.strudel group",
+    exact: true,
+  });
+  await expect(shared).toHaveCount(1);
+  await expect(b.getByRole("region")).toHaveCount(0);
+  const aHeading = panel.getByRole("button", {
+    name: "Toggle a.strudel group",
+    exact: true,
+  });
+  await aHeading.click();
   await expect(
     panel.getByRole("spinbutton", { name: "level knob" }),
-  ).toHaveCount(2);
+  ).toHaveCount(1);
+  await aHeading.click();
   await panel
     .getByRole("spinbutton", { name: "level knob" })
     .first()
     .press("ArrowUp");
-  await expect(panel.getByLabel("level value")).toHaveText(["0.41", "0.41"]);
+  await expect(panel.getByLabel("level value")).toHaveText("0.41");
   await expect
     .poll(() => fs.readFile(path.join(projectRoot, "shared.strudel"), "utf8"))
     .toContain("level = 0.41");
@@ -120,16 +133,16 @@ try {
   await expect(
     page.getByRole("button", { name: "Stop playback" }),
   ).toBeEnabled();
-  await repeated.click();
+  await sharedHeading.click();
   await search.fill("level");
   await expect(
     panel.getByRole("spinbutton", { name: "gain knob" }),
   ).toHaveCount(0);
   await expect(
     panel.getByRole("spinbutton", { name: "level knob" }),
-  ).toHaveCount(2);
+  ).toHaveCount(1);
   await search.fill("");
-  await expect(repeated).toHaveAttribute("aria-expanded", "false");
+  await expect(sharedHeading).toHaveAttribute("aria-expanded", "false");
   const a = panel.getByRole("region", {
     name: "a.strudel controls",
     exact: true,
@@ -148,7 +161,7 @@ try {
     1,
   );
   await expect(a).toHaveCount(0);
-  await expect(repeated).toHaveAttribute("aria-expanded", "false");
+  await expect(sharedHeading).toHaveAttribute("aria-expanded", "false");
   // Hiding is scoped to a root, even when that same file becomes a master.
   await panel.getByRole("button", { name: "Unpin master" }).click();
   await expect(
@@ -165,6 +178,7 @@ try {
   await panel.getByRole("button", { name: "Hidden groups (1)" }).click();
   await panel.getByRole("button", { name: /^Restore/ }).click();
   await expect(a).toHaveCount(1);
+  await sharedHeading.click();
   // Semantic failure affects only its own declaration.
   await fs.appendFile(
     path.join(projectRoot, "shared.strudel"),
@@ -201,7 +215,36 @@ try {
   await panel
     .getByRole("button", { name: "Open full controls", exact: true })
     .click();
-  await expect(panel).toHaveCount(0);
+  await expect(panel).toHaveAttribute("data-mode", "fullscreen");
+  const geometry = await panel.getByRole("group").evaluateAll((rows) =>
+    rows.map((row) => {
+      const card = row.firstElementChild;
+      const control = row.querySelector('[role="spinbutton"], [role="switch"]');
+      const output = row.querySelector("output");
+      const bounds = card.getBoundingClientRect();
+      const button = control.getBoundingClientRect();
+      return {
+        width: bounds.width,
+        height: bounds.height,
+        valueY: output.getBoundingClientRect().top - bounds.top,
+        centerY: button.top + button.height / 2 - bounds.top,
+        extraLabel: Boolean(row.querySelector("small")),
+      };
+    }),
+  );
+  for (const property of ["width", "height", "valueY", "centerY"]) {
+    const values = geometry.map((card) => card[property]);
+    assert(
+      Math.max(...values) - Math.min(...values) < 1,
+      `Control cards must align: ${property}`,
+    );
+  }
+  assert(
+    geometry.every((card) => !card.extraLabel),
+    "Duplicate names must not add a source label above the card",
+  );
+  await page.screenshot({ path: path.join(temporary, "uniform-controls.png") });
+
   await page
     .getByRole("spinbutton", { name: "level knob", exact: true })
     .press("ArrowUp");
@@ -217,7 +260,7 @@ try {
   await page.screenshot({ path: path.join(temporary, "grouped-controls.png") });
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: recursive groups, shared values, pinned navigation, source selection, live master updates, uninterrupted transport, search, hide/restore, persistence and isolated errors.",
+    "PASS: independent file cards, recursive imports, shared values, pinned navigation, source selection, live master updates, uninterrupted transport, search, hide/restore, persistence and isolated errors.",
   );
 } catch (error) {
   console.error(error);

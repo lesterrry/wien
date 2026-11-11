@@ -12,7 +12,7 @@
     "format": "biome check --write .",
     "test": "pnpm check && pnpm test:unit",
     "test:unit": "node --import tsx --test src/main/project-fs.test.ts src/main/assistant.test.ts src/shared/modules.test.ts src/shared/controls.test.ts src/shared/control-tree.test.ts && pnpm test:modules",
-    "test:smoke": "pnpm build && node scripts/smoke.mjs && node scripts/window-smoke.mjs && node scripts/controls-smoke.mjs && node scripts/assistant-smoke.mjs",
+    "test:smoke": "pnpm build && node scripts/smoke.mjs && node scripts/window-smoke.mjs && node scripts/controls-smoke.mjs && node scripts/assistant-smoke.mjs && node scripts/panel-modes-smoke.mjs",
     "build": "pnpm typecheck && electron-vite build",
     "preview": "electron-vite preview",
     "package": "pnpm build && electron-builder --dir",

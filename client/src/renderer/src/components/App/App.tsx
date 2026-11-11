@@ -36,6 +36,7 @@ import {
   type PanelPreferences,
   readControlTree,
   readPanelPreferences,
+  relocatePanelPreferences,
 } from "../../../../shared/control-tree";
 import {
   changeControl,
@@ -51,7 +52,6 @@ import {
   type Project,
   parentPath,
 } from "../../../../shared/types";
-import { ControllerPanel } from "../ControllerPanel/ControllerPanel";
 import { ControlsPanel } from "../ControlsPanel/ControlsPanel";
 import { Dialog } from "../Dialog/Dialog";
 import { Explorer } from "../Explorer/Explorer";
@@ -102,7 +102,6 @@ const message = (error: unknown) =>
   );
 
 export function App() {
-  const [editorVersion, setEditorVersion] = useState(0);
   const [editors, setEditors] = useState<Record<string, Document>>({});
   const players = useRef(new Map<string, Player>());
   const playingPath = useRef<string | null>(null);
@@ -123,7 +122,26 @@ export function App() {
   const controlQueue = useRef(Promise.resolve());
   const controlWrites = useRef(0);
   const liveUpdateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const navigationBack = useRef(new Map<string, string>());
+  const navigationBack = useRef(
+    new Map<
+      string,
+      {
+        path: string | null;
+        fullscreen: boolean;
+        root: string | null;
+        created: boolean;
+      }
+    >(),
+  );
+  const [definitionContext, setDefinitionContext] = useState<{
+    target: string;
+    path: string | null;
+    fullscreen: boolean;
+    root: string | null;
+    created: boolean;
+  } | null>(null);
+  const [controllerRoot, setControllerRoot] = useState<string | null>(null);
+  const preferencesSave = useRef(Promise.resolve());
   const [definitionTarget, setDefinitionTarget] = useState<{
     path: string;
     name: string;
@@ -251,6 +269,8 @@ export function App() {
 
   const openFile = useCallback(
     async (path: string) => {
+      setControllerOpen(false);
+      setDefinitionContext(null);
       if (documentRef.current?.path === path) return;
       await run(() => activateFile(path));
     },
@@ -274,9 +294,14 @@ export function App() {
           await flush();
           const previous = navigationBack.current.get(path);
           const next =
-            previous && remaining.includes(previous)
-              ? previous
+            previous?.path && remaining.includes(previous.path)
+              ? previous.path
               : remaining[Math.min(index, remaining.length - 1)];
+          if (previous) {
+            setControllerRoot(previous.root);
+            setControllerOpen(previous.fullscreen);
+            setDefinitionContext(null);
+          }
           navigationBack.current.delete(path);
           if (next) await activateFile(next);
           else {
@@ -324,37 +349,37 @@ export function App() {
     return settled;
   }
 
-  function saveForeign(
-    path: string,
-    name: string,
-    value: number | boolean,
-  ): Promise<void> {
-    return saveForeignEdit(path, (code) => changeControl(code, name, value));
-  }
-
-  function saveForeignMove(
-    path: string,
-    name: string,
-    targetName: string,
-    placement: "before" | "after",
-  ): Promise<void> {
-    return saveForeignEdit(path, (code) =>
-      moveControl(code, name, targetName, placement),
-    );
-  }
-
   function movePanelControl(
     path: string,
     name: string,
     targetName: string,
     placement: "before" | "after",
   ) {
-    void saveForeignMove(path, name, targetName, placement).catch((error) =>
-      setControlErrors((current) => ({
-        ...current,
-        [JSON.stringify([path, name])]: message(error),
-      })),
-    );
+    void saveForeignEdit(path, (code) => {
+      const controls = readControls(code).controls;
+      if (
+        ![name, targetName].every((binding) =>
+          controls.some((control) => control.name === binding),
+        )
+      )
+        throw new Error(
+          "This control has changed. Refresh the panel before moving it.",
+        );
+      return moveControl(code, name, targetName, placement);
+    })
+      .then(() =>
+        setControlErrors((current) => {
+          const next = { ...current };
+          delete next[JSON.stringify([path, name])];
+          return next;
+        }),
+      )
+      .catch((error) =>
+        setControlErrors((current) => ({
+          ...current,
+          [JSON.stringify([path, name])]: message(error),
+        })),
+      );
   }
 
   useEffect(() => {
@@ -402,6 +427,7 @@ export function App() {
         void run(async () => {
           try {
             await controlQueue.current;
+            await preferencesSave.current;
             await flush();
             if (playingPath.current)
               await players.current.get(playingPath.current)?.stop();
@@ -439,7 +465,7 @@ export function App() {
       if (event.key === "," || event.code === "Comma") {
         event.preventDefault();
         event.stopPropagation();
-        if (!event.repeat && !busyRef.current && !modal)
+        if (!event.repeat && !busyRef.current && !modal && !controllerOpen)
           player.current?.assist();
         return;
       }
@@ -476,7 +502,7 @@ export function App() {
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [closeTab, flush, play, stop, modal]);
+  }, [closeTab, flush, play, stop, modal, controllerOpen]);
 
   useEffect(() => {
     if (!context && !projectMenu) return;
@@ -495,10 +521,6 @@ export function App() {
     };
   }, [context, projectMenu]);
 
-  useEffect(() => {
-    if (!document) setControllerOpen(false);
-  }, [document]);
-
   function showModal(next: Modal) {
     setContext(null);
     setModalError(null);
@@ -515,7 +537,29 @@ export function App() {
   }
 
   async function refresh() {
+    await controlQueue.current;
     setProject(await api.current());
+    const current = documentRef.current;
+    if (current && current.code === current.saved) {
+      const code = await api.read(current.path);
+      if (code !== current.code) player.current?.replaceCode(code);
+      updateDocument({ ...current, code, saved: code });
+      setSavedStatus("Saved locally");
+    }
+    if (!current || current.code === current.saved) setControlErrors({});
+    for (const [path, editor] of players.current) {
+      if (path === documentRef.current?.path) continue;
+      try {
+        const code = await api.read(path);
+        editor.replaceCode(code);
+        setEditors((current) => ({
+          ...current,
+          [path]: { path, code, saved: code },
+        }));
+      } catch {
+        /* Missing files remain diagnosed in their panel branches. */
+      }
+    }
     setTreeVersion((version) => version + 1);
   }
 
@@ -557,7 +601,23 @@ export function App() {
     playingPath.current = null;
     setPlayingFile(null);
     setPlayback({ started: false, pending: false });
+    await preferencesSave.current;
     await api.move(from, to);
+    const relocate = (file: string) =>
+      isWithin(file, from) ? to + file.slice(from.length) : file;
+    setPreferences((current) => relocatePanelPreferences(current, from, to));
+    setControllerRoot((current) => (current ? relocate(current) : null));
+    setDefinitionContext(null);
+    navigationBack.current.clear();
+    setEditors((current) =>
+      Object.fromEntries(
+        Object.entries(current).map(([file, doc]) => [
+          relocate(file),
+          { ...doc, path: relocate(file) },
+        ]),
+      ),
+    );
+    setControlErrors({});
     updateTabs(
       tabsRef.current.map((file) =>
         isWithin(file, from) ? to + file.slice(from.length) : file,
@@ -578,6 +638,7 @@ export function App() {
   async function switchProject(create: boolean) {
     await run(async () => {
       await controlQueue.current;
+      await preferencesSave.current;
       await flush();
       const next = await (create ? api.create() : api.open());
       if (!next) return;
@@ -589,6 +650,10 @@ export function App() {
       playingPath.current = null;
       setPlayingFile(null);
       setEditors({});
+      setControllerOpen(false);
+      setControllerRoot(null);
+      setDefinitionContext(null);
+      navigationBack.current.clear();
       setProject(next);
       setSearch("");
       setSelection(null);
@@ -620,10 +685,10 @@ export function App() {
         const current = documentRef.current;
         if (current) {
           const code = await api.read(current.path);
-          await player.current?.stop();
+          player.current?.replaceCode(code);
           updateDocument({ path: current.path, code, saved: code });
-          setEditorVersion((version) => version + 1);
-          setPlayback({ started: false, pending: false });
+          setControlErrors({});
+          setTreeVersion((version) => version + 1);
           setSavedStatus("Saved locally");
           setError(null);
         }
@@ -678,7 +743,12 @@ export function App() {
       entry.children ? [entry, ...folders(entry.children)] : [],
     );
   const shortcut = navigator.platform.includes("Mac") ? "⌘" : "Ctrl";
-  const panelRoot = preferences.pinned ?? document?.path ?? null;
+  const panelRoot =
+    preferences.pinned ??
+    (definitionContext?.fullscreen ? definitionContext.root : null) ??
+    document?.path ??
+    (controllerOpen ? controllerRoot : null) ??
+    null;
   const panelLayout = (panelRoot && preferences.roots[panelRoot]) || {
     hidden: {},
     collapsed: {},
@@ -686,22 +756,51 @@ export function App() {
 
   useEffect(() => {
     if (!project?.root) return;
-    setPreferences(readPanelPreferences(project.root));
-    setPreferencesProject(project.root);
+    let cancelled = false;
+    const root = project.root;
+    setPreferencesProject(null);
+    setPreferences({ pinned: null, roots: {} });
     setControlErrors({});
+    void api
+      .readControlPreferences(root)
+      .then((saved) => {
+        if (!cancelled) {
+          setPreferences(saved ?? readPanelPreferences(root));
+          setPreferencesProject(root);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) setError(message(error));
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [project?.root]);
 
+  const projectRoot = project?.root;
   useEffect(() => {
-    if (!project || preferencesProject !== project.root) return;
-    try {
-      localStorage.setItem(
-        `wien:controls:${project.root}`,
-        JSON.stringify(preferences),
-      );
-    } catch (error) {
-      setError(`Could not save panel settings: ${message(error)}`);
-    }
-  }, [project, preferences, preferencesProject]);
+    if (!projectRoot || preferencesProject !== projectRoot) return;
+    let cancelled = false;
+    const root = projectRoot;
+    const task = preferencesSave.current
+      .catch(() => {})
+      .then(() => api.saveControlPreferences(root, preferences))
+      .then(() => {
+        try {
+          localStorage.removeItem(`wien:controls:${root}`);
+        } catch {
+          /* Project settings have already been saved. */
+        }
+      });
+    preferencesSave.current = task;
+    void task.catch((error) => {
+      if (!cancelled)
+        setError(`Could not save panel settings: ${message(error)}`);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectRoot, preferences, preferencesProject]);
 
   const treeRevision = JSON.stringify([
     project?.root,
@@ -793,10 +892,12 @@ export function App() {
         const current = documentRef.current;
         const source =
           current?.path === path ? current.code : await api.read(path);
+        const control = readControls(source).controls.find(
+          (control) => control.name === name,
+        );
         if (
-          !readControls(source).controls.some(
-            (control) => control.name === name,
-          )
+          !control ||
+          (value !== undefined && typeof control.value !== typeof value)
         )
           throw new Error(
             "This control has changed. Fix its declaration before editing.",
@@ -840,13 +941,43 @@ export function App() {
   function goToControl(path: string, name: string) {
     void run(async () => {
       await controlQueue.current;
-      const previous = documentRef.current?.path;
-      if (previous !== path) {
-        if (previous) navigationBack.current.set(path, previous);
-        await activateFile(path);
-      }
+      const context = {
+        path: documentRef.current?.path ?? null,
+        fullscreen: controllerOpen,
+        root: panelRoot,
+        created: !tabsRef.current.includes(path),
+      };
+      navigationBack.current.set(path, context);
+      setDefinitionContext({ ...context, target: path });
+      setControllerOpen(false);
+      if (documentRef.current?.path !== path) await activateFile(path);
       setDefinitionTarget({ path, name });
     });
+  }
+
+  function backToControls() {
+    if (!definitionContext) return;
+    if (definitionContext.created) {
+      void closeTab(definitionContext.target);
+      return;
+    }
+    const context = definitionContext;
+    void run(async () => {
+      if (context.path && context.path !== documentRef.current?.path)
+        await activateFile(context.path);
+      setControllerRoot(context.root);
+      setControllerOpen(context.fullscreen);
+      setDefinitionContext(null);
+      navigationBack.current.delete(context.target);
+    });
+  }
+
+  function toggleController() {
+    if (!controllerOpen) {
+      setControllerRoot(panelRoot);
+      setControlsVisible(true);
+    }
+    setControllerOpen(!controllerOpen);
   }
 
   // Child editor effects register the player before this effect runs, including
@@ -856,6 +987,7 @@ export function App() {
       players.current
         .get(definitionTarget.path)
         ?.revealControl(definitionTarget.name);
+      setDefinitionTarget(null);
     }
   }, [definitionTarget, document?.path]);
 
@@ -906,7 +1038,7 @@ export function App() {
             controller={{
               open: controllerOpen,
               disabled: busy,
-              onSelect: () => {},
+              onSelect: () => setControllerOpen(true),
               onClose: () => setControllerOpen(false),
             }}
           />
@@ -915,8 +1047,13 @@ export function App() {
             className={styles.iconButton}
             title="Toggle controls"
             aria-label="Toggle controls"
-            aria-expanded={controlsVisible}
-            onClick={() => setControlsVisible(!controlsVisible)}
+            aria-expanded={controlsVisible && !controllerOpen}
+            onClick={() => {
+              if (controllerOpen) {
+                setControllerOpen(false);
+                setControlsVisible(true);
+              } else setControlsVisible(!controlsVisible);
+            }}
           >
             {controlsVisible ? (
               <PanelRightClose size={17} />
@@ -1100,7 +1237,9 @@ export function App() {
       )}
 
       <main
-        className={styles.workspace}
+        className={classNames(styles.workspace, {
+          [styles.controllerWorkspace]: controllerOpen,
+        })}
         id="snippet-panel"
         role="tabpanel"
         aria-labelledby={
@@ -1114,7 +1253,15 @@ export function App() {
           aria-label="Snippet toolbar"
         >
           <div className={styles.fileHeading}>
-            {document ? (
+            {controllerOpen && panelRoot ? (
+              <>
+                <SlidersHorizontal size={17} />
+                <div>
+                  <strong>{panelRoot.split("/").at(-1)}</strong>
+                  <span title={panelRoot}>Controls · {panelRoot}</span>
+                </div>
+              </>
+            ) : document ? (
               <>
                 {controllerOpen ? (
                   <SlidersHorizontal size={17} />
@@ -1138,12 +1285,29 @@ export function App() {
             )}
           </div>
           <div className={styles.transport}>
+            {definitionContext?.fullscreen && (
+              <button
+                type="button"
+                className={styles.secondaryButton}
+                onClick={backToControls}
+              >
+                Back to controls
+              </button>
+            )}
+            {playback.started && (
+              <small
+                className={styles.playingTarget}
+                title={playingFile ?? undefined}
+              >
+                Playing {playingFile?.split("/").at(-1)}
+              </small>
+            )}
             <button
               type="button"
               className={styles.iconButton}
               aria-label="Ask Wien"
               title={`Ask Wien (${shortcut} ,)`}
-              disabled={!document || busy}
+              disabled={!document || busy || controllerOpen}
               onClick={() => player.current?.assist("bottom")}
             >
               <Sparkles size={16} />
@@ -1162,6 +1326,11 @@ export function App() {
               type="button"
               className={styles.playButton}
               disabled={!document || playback.pending || busy}
+              title={
+                document
+                  ? `Play / update ${document.path}`
+                  : "Open a file to play"
+              }
               onClick={play}
             >
               {playback.pending ? (
@@ -1173,10 +1342,13 @@ export function App() {
                 {playback.started && playingFile === document?.path
                   ? "Update"
                   : "Play"}
+                {controllerOpen &&
+                  document &&
+                  ` ${document.path.split("/").at(-1)}`}
               </span>
               <kbd>{shortcut} ↵</kbd>
             </button>
-            {controllerOpen && document ? (
+            {controllerOpen ? (
               <button
                 type="button"
                 className={styles.closeButton}
@@ -1235,11 +1407,47 @@ export function App() {
             </button>
           </div>
         )}
+        <ControlsPanel
+          key={`${project?.root}/${panelRoot}`}
+          fullscreen={controllerOpen}
+          visible={controlsVisible || controllerOpen}
+          tree={controlTree?.path === panelRoot ? controlTree : null}
+          root={panelRoot}
+          pinned={Boolean(preferences.pinned)}
+          loading={treeLoading}
+          disabled={busy}
+          layout={panelLayout}
+          errors={controlErrors}
+          onPin={() =>
+            setPreferences((current) => ({
+              ...current,
+              pinned: current.pinned ? null : panelRoot,
+            }))
+          }
+          onLayout={(layout) => {
+            if (panelRoot)
+              setPreferences((current) => ({
+                ...current,
+                roots: { ...current.roots, [panelRoot]: layout },
+              }));
+          }}
+          onChange={editPanelControl}
+          onIgnore={(path, name) => editPanelControl(path, name)}
+          onDefinition={goToControl}
+          onMove={movePanelControl}
+          onOpenController={toggleController}
+          onReloadSource={(path) => {
+            if (documentRef.current?.path === path)
+              showModal({ kind: "reload" });
+            else void run(refresh);
+          }}
+        />
+
         {tabs
           .filter((path) => editors[path])
           .map((path) => (
             <div
-              key={`${project?.root}/${path}/${editorVersion}`}
+              key={`${project?.root}/${path}`}
               className={styles.editorSession}
               data-active={document?.path === path}
               style={{
@@ -1281,7 +1489,7 @@ export function App() {
               />
             </div>
           ))}
-        {!document && (
+        {!document && !controllerOpen && (
           <div className={styles.emptyState}>
             <div className={styles.emptyIcon}>
               <Code2 size={30} strokeWidth={1.2} />
@@ -1303,22 +1511,6 @@ export function App() {
               New snippet
             </button>
           </div>
-        )}
-        {controllerOpen && document && (
-          <ControllerPanel
-            document={document}
-            playback={playback}
-            disabled={busy}
-            onChange={(name, value) =>
-              editPanelControl(document.path, name, value)
-            }
-            onMove={(name, targetName, placement) =>
-              movePanelControl(document.path, name, targetName, placement)
-            }
-            onForeignChange={saveForeign}
-            onForeignMove={saveForeignMove}
-            onError={setError}
-          />
         )}
         {playback.error && (
           <div className={styles.evaluationError} role="alert">
@@ -1353,37 +1545,6 @@ export function App() {
           </div>
         </footer>
       </main>
-
-      {controlsVisible && !controllerOpen && (
-        <ControlsPanel
-          key={`${project?.root}/${panelRoot}`}
-          tree={controlTree?.path === panelRoot ? controlTree : null}
-          root={panelRoot}
-          pinned={Boolean(preferences.pinned)}
-          loading={treeLoading}
-          disabled={busy}
-          layout={panelLayout}
-          errors={controlErrors}
-          onPin={() =>
-            setPreferences((current) => ({
-              ...current,
-              pinned: current.pinned ? null : panelRoot,
-            }))
-          }
-          onLayout={(layout) => {
-            if (panelRoot)
-              setPreferences((current) => ({
-                ...current,
-                roots: { ...current.roots, [panelRoot]: layout },
-              }));
-          }}
-          onChange={editPanelControl}
-          onIgnore={(path, name) => editPanelControl(path, name)}
-          onDefinition={goToControl}
-          onMove={movePanelControl}
-          onOpenController={() => setControllerOpen(true)}
-        />
-      )}
 
       {context && (
         <div

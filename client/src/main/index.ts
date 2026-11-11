@@ -111,6 +111,16 @@ function registerIpc() {
       return result;
     });
   };
+  handle("project:controls:read", (root: string) => {
+    if (root !== project.root)
+      throw new Error("The project changed before reading panel settings.");
+    return project.readControlPreferences();
+  });
+  handle("project:controls:save", (root: string, preferences: unknown) => {
+    if (root !== project.root)
+      throw new Error("The project changed before saving panel settings.");
+    return project.saveControlPreferences(preferences);
+  });
   handle("project:current", () => project.project());
   handle("project:read", (relative: string) => project.read(relative));
   handle("project:save", (request: SaveRequest) => project.save(request));

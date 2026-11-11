@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { controlSources, readControlTree, sourceLabel } from "./control-tree";
+import {
+  controlSources,
+  flatPanelLayout,
+  flattenControlGroups,
+  readControlTree,
+  sourceLabel,
+} from "./control-tree";
 import { changeControl, readControls } from "./controls";
 import { editSource } from "./modules";
 
@@ -87,4 +93,102 @@ test("same control names use the shortest distinct source suffix", () => {
     "drums/voice.strudel",
   );
   assert.equal(sourceLabel("other.strudel", peers), "other.strudel");
+});
+
+test("relocating a shared source preserves per-master branch settings and unrelated roots", async () => {
+  const { relocatePanelPreferences } = await import("./control-tree");
+  const first = JSON.stringify([
+    "master.strudel",
+    "a.strudel",
+    "parts/voice.strudel",
+  ]);
+  const second = JSON.stringify([
+    "master.strudel",
+    "b.strudel",
+    "parts/voice.strudel",
+  ]);
+  const result = relocatePanelPreferences(
+    {
+      pinned: "master.strudel",
+      roots: {
+        "master.strudel": {
+          hidden: { [first]: true },
+          collapsed: { [second]: true },
+        },
+        "other.strudel": { hidden: {}, collapsed: {} },
+      },
+    },
+    "parts",
+    "instruments",
+  );
+  assert.equal(result.pinned, "master.strudel");
+  assert.equal(result.roots["master.strudel"].hidden[first], undefined);
+  assert.equal(
+    result.roots["master.strudel"].hidden[
+      JSON.stringify([
+        "master.strudel",
+        "a.strudel",
+        "instruments/voice.strudel",
+      ])
+    ],
+    true,
+  );
+  assert.equal(
+    result.roots["master.strudel"].collapsed[
+      JSON.stringify([
+        "master.strudel",
+        "b.strudel",
+        "instruments/voice.strudel",
+      ])
+    ],
+    true,
+  );
+  assert.deepEqual(result.roots["other.strudel"], {
+    hidden: {},
+    collapsed: {},
+  });
+});
+
+test("recursive imports become one independent card per file, preserving cycle errors", async () => {
+  const sources: Record<string, string> = {
+    "master.strudel":
+      "import './a.strudel'; import './b.strudel'; const master = 1;",
+    "a.strudel": "import './shared.strudel'; const a = 2;",
+    "b.strudel": "import './shared.strudel'; const b = 3;",
+    "shared.strudel": "import './master.strudel'; const shared = 4;",
+  };
+  const tree = await readControlTree(
+    "master.strudel",
+    async (path) => sources[path],
+  );
+  const groups = flattenControlGroups(tree);
+  assert.deepEqual(
+    groups.map((group) => group.path),
+    ["master.strudel", "a.strudel", "shared.strudel", "b.strudel"],
+  );
+  assert(
+    groups.every((group) => group.children.length === 0 && !group.repeated),
+  );
+  assert.equal(
+    groups.find((group) => group.path === "shared.strudel")?.controls[0].value,
+    4,
+  );
+  assert.equal(groups[0].error, "Circular import");
+  assert.equal(tree.error, undefined);
+  const oldLayout = {
+    hidden: { '["master.strudel","a.strudel"]': true },
+    collapsed: { '["master.strudel","a.strudel","shared.strudel"]': true },
+  };
+  const layout = flatPanelLayout(oldLayout, groups);
+  assert.equal(layout.hidden['["a.strudel"]'], true);
+  assert.equal(layout.hidden['["shared.strudel"]'], undefined);
+  assert.equal(layout.collapsed['["shared.strudel"]'], true);
+  const updated = flatPanelLayout(
+    {
+      ...layout,
+      collapsed: { ...layout.collapsed, '["shared.strudel"]': false },
+    },
+    groups,
+  );
+  assert.equal(updated.collapsed['["shared.strudel"]'], false);
 });

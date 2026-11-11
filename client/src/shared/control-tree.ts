@@ -89,30 +89,10 @@ export function readPanelPreferences(project: string): PanelPreferences {
     const value = JSON.parse(
       localStorage.getItem(`wien:controls:${project}`) ?? "null",
     );
-    if (
-      value &&
-      (typeof value.pinned === "string" || value.pinned === null) &&
-      value.roots &&
-      typeof value.roots === "object"
-    ) {
-      const roots: Record<string, PanelLayout> = {};
-      for (const [path, layout] of Object.entries(value.roots)) {
-        const item = layout as Partial<PanelLayout> | null;
-        if (
-          item &&
-          typeof item.hidden === "object" &&
-          item.hidden &&
-          typeof item.collapsed === "object" &&
-          item.collapsed
-        )
-          roots[path] = { hidden: item.hidden, collapsed: item.collapsed };
-      }
-      return { pinned: value.pinned, roots };
-    }
+    return parsePanelPreferences(value) ?? { pinned: null, roots: {} };
   } catch {
-    /* A corrupt preference must not prevent opening a project. */
+    return { pinned: null, roots: {} };
   }
-  return { pinned: null, roots: {} };
 }
 
 export function controlSources(group: ControlGroup): Map<string, Set<string>> {
@@ -142,4 +122,140 @@ export function sourceLabel(path: string, peers: Set<string>) {
       return suffix;
   }
   return path;
+}
+
+// Project-relative paths make panel settings portable with the project folder.
+export function parsePanelPreferences(
+  value: unknown,
+): PanelPreferences | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return;
+  const input = value as Partial<PanelPreferences> & { version?: unknown };
+  if (input.version !== undefined && input.version !== 1) return;
+  if (input.pinned !== null && typeof input.pinned !== "string") return;
+  if (
+    !input.roots ||
+    typeof input.roots !== "object" ||
+    Array.isArray(input.roots)
+  )
+    return;
+  const validPath = (path: string) =>
+    /\.(strudel|js)$/i.test(path) &&
+    path
+      .split("/")
+      .every(
+        (part) =>
+          Boolean(part) &&
+          !part.startsWith(".") &&
+          !/[\\:]/.test(part) &&
+          [...part].every((char) => char.charCodeAt(0) >= 32),
+      );
+  if (input.pinned !== null && !validPath(input.pinned)) return;
+  const roots: Record<string, PanelLayout> = {};
+  for (const [root, layout] of Object.entries(input.roots)) {
+    if (!validPath(root)) return;
+    if (!layout || typeof layout !== "object") return;
+    for (const map of [layout.hidden, layout.collapsed]) {
+      if (
+        !map ||
+        typeof map !== "object" ||
+        Array.isArray(map) ||
+        Object.values(map).some((item) => typeof item !== "boolean")
+      )
+        return;
+    }
+    roots[root] = {
+      hidden: { ...layout.hidden },
+      collapsed: { ...layout.collapsed },
+    };
+  }
+  return { pinned: input.pinned, roots };
+}
+
+export function relocatePanelPreferences(
+  preferences: PanelPreferences,
+  from: string,
+  to: string,
+): PanelPreferences {
+  const relocate = (path: string) =>
+    path === from || path.startsWith(`${from}/`)
+      ? to + path.slice(from.length)
+      : path;
+  const remap = (map: Record<string, boolean>) =>
+    Object.fromEntries(
+      Object.entries(map).map(([id, value]) => {
+        try {
+          const chain: unknown = JSON.parse(id);
+          if (
+            Array.isArray(chain) &&
+            chain.every((part) => typeof part === "string")
+          )
+            return [JSON.stringify(chain.map(relocate)), value];
+        } catch {
+          /* Preserve unknown keys from older versions. */
+        }
+        return [id, value];
+      }),
+    );
+  return {
+    pinned: preferences.pinned ? relocate(preferences.pinned) : null,
+    roots: Object.fromEntries(
+      Object.entries(preferences.roots).map(([root, layout]) => [
+        relocate(root),
+        { hidden: remap(layout.hidden), collapsed: remap(layout.collapsed) },
+      ]),
+    ),
+  };
+}
+
+// Import traversal stays recursive, but display groups are independent files.
+// Shared dependencies get one card; cycle diagnostics stay on their source card.
+export function flattenControlGroups(tree: ControlGroup): ControlGroup[] {
+  const files = new Map<string, ControlGroup>();
+  function visit(group: ControlGroup) {
+    const existing = files.get(group.path);
+    if (!existing) {
+      files.set(group.path, {
+        ...group,
+        id: JSON.stringify([group.path]),
+        repeated: false,
+        children: [],
+      });
+    } else if (group.error && existing.error !== group.error) {
+      existing.error = existing.error
+        ? `${existing.error}\n${group.error}`
+        : group.error;
+    }
+    group.children.forEach(visit);
+  }
+  visit(tree);
+  return [...files.values()];
+}
+
+// Keep old branch-based choices when opening projects saved by the tree UI.
+// Once a file card has its own setting, it overrides all legacy occurrences.
+export function flatPanelLayout(
+  layout: PanelLayout,
+  groups: ControlGroup[],
+): PanelLayout {
+  const migrate = (map: Record<string, boolean>) => {
+    const result = { ...map };
+    for (const group of groups) {
+      if (Object.hasOwn(map, group.id)) continue;
+      const previous = Object.entries(map).filter(([id]) => {
+        try {
+          const chain: unknown = JSON.parse(id);
+          return Array.isArray(chain) && chain.at(-1) === group.path;
+        } catch {
+          return false;
+        }
+      });
+      if (previous.length)
+        result[group.id] = previous.some(([, value]) => value);
+    }
+    return result;
+  };
+  return {
+    hidden: migrate(layout.hidden),
+    collapsed: migrate(layout.collapsed),
+  };
 }
