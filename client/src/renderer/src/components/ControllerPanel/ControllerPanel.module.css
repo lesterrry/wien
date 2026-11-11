@@ -173,3 +173,57 @@
     transform: rotate(360deg);
   }
 }
+
+.controlRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0 0 0 2px;
+  border: 0;
+  min-width: 0;
+  min-inline-size: 0;
+  border-radius: 6px;
+  cursor: grab;
+}
+
+.controlRow > * {
+  flex: 1;
+  min-width: 0;
+}
+
+.controlRow:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
+
+.rowDragging {
+  opacity: 0.4;
+}
+
+.dropBefore::before,
+.dropAfter::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--color-brand);
+  pointer-events: none;
+}
+
+.dropBefore::before {
+  top: -3px;
+}
+
+.dropAfter::after {
+  bottom: -3px;
+}
+
+/* Cross-file hover: pointer feedback only — the row never becomes a
+   valid drop target, so there is no visual indicator line. */
+.dropForbidden {
+  cursor: not-allowed;
+}
