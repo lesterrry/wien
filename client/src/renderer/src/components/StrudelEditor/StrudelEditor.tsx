@@ -15,7 +15,11 @@ import {
 import classNames from "classnames";
 import { useEffect, useRef, useState } from "react";
 import { useDrop } from "react-dnd";
-import { changeControl, ignoreControl } from "../../../../shared/controls";
+import {
+  changeControl,
+  ignoreControl,
+  moveControl,
+} from "../../../../shared/controls";
 import type { Entry } from "../../../../shared/types";
 import { compileGraph } from "../../module-compiler";
 import {
@@ -31,6 +35,11 @@ export interface Player {
   replaceCode(code: string): void;
   changeControl(name: string, value: number | boolean): void;
   ignoreControl(name: string): void;
+  moveControl(
+    name: string,
+    targetName: string,
+    placement: "before" | "after",
+  ): void;
 }
 
 let scope: Promise<unknown> | undefined;
@@ -224,6 +233,18 @@ export function StrudelEditor({
             insert: code,
           },
         }),
+      moveControl: (name, targetName, placement) => {
+        const edit = moveControl(mirror.code, name, targetName, placement);
+        if (!edit) return;
+        mirror.editor.dispatch({
+          changes: { from: edit.start, to: edit.end, insert: edit.text },
+        });
+        if (!mirror.repl.state.started || liveTimer !== undefined) return;
+        liveTimer = setTimeout(() => {
+          liveTimer = undefined;
+          if (alive && mirror.repl.state.started) void evaluate(false);
+        }, 60);
+      },
     });
     editor.current = mirror.editor;
     setView(mirror.editor);

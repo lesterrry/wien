@@ -1,9 +1,11 @@
 import type { ReplState } from "@strudel/codemirror";
+import classNames from "classnames";
 import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type Control,
   changeControl,
+  moveControl,
   readControls,
 } from "../../../../shared/controls";
 import {
@@ -28,11 +30,20 @@ interface GroupedControls {
   controls: Control[];
 }
 
+type DragState = {
+  file: string;
+  name: string;
+  over: string | null;
+  side: "before" | "after";
+};
+
 export function ControllerPanel({
   document,
   disabled,
   onChange,
+  onMove,
   onForeignChange,
+  onForeignMove,
   onError,
 }: {
   document: Document;
@@ -40,11 +51,24 @@ export function ControllerPanel({
   disabled: boolean;
   /** Applies to the document that is currently bound to the editor. */
   onChange: (name: string, value: number | boolean) => void;
+  /** Reorders a control in the bound document. */
+  onMove: (
+    name: string,
+    targetName: string,
+    placement: "before" | "after",
+  ) => void;
   /** Writes a control change to a file imported by the bound document. */
   onForeignChange: (
     path: string,
     name: string,
     value: number | boolean,
+  ) => Promise<void>;
+  /** Reorders a control inside an imported file. Same-file only. */
+  onForeignMove: (
+    path: string,
+    name: string,
+    targetName: string,
+    placement: "before" | "after",
   ) => Promise<void>;
   onError: (message: string) => void;
 }) {
@@ -52,6 +76,13 @@ export function ControllerPanel({
     {},
   );
   const [loading, setLoading] = useState(true);
+  const [drag, setDrag] = useState<DragState | null>(null);
+  const shortcut = navigator.platform.includes("Mac") ? "⌥" : "Alt";
+
+  // Set on pointer-down: only presses that start on the row's own
+  // background may initiate a reorder drag. Nested buttons (knob,
+  // switch, ignore) keep their own gestures.
+  const dragAllowed = useRef(true);
 
   // Latest code, readable from effects without adding it to a dependency
   // array (which would otherwise re-fetch imports on every keystroke).
@@ -154,6 +185,32 @@ export function ControllerPanel({
     }
   }
 
+  async function handleMove(
+    file: string,
+    name: string,
+    targetName: string,
+    placement: "before" | "after",
+  ) {
+    if (file === document.path) {
+      // Live edit through the editor so imports and history stay intact.
+      onMove(name, targetName, placement);
+      return;
+    }
+    const code = sources[file];
+    if (code === undefined) return;
+    const edit = moveControl(code, name, targetName, placement);
+    if (!edit) return;
+    const optimistic = editSource(code, [edit]);
+    setForeignSources((prev) => ({ ...prev, [file]: optimistic }));
+    try {
+      await onForeignMove(file, name, targetName, placement);
+    } catch (error) {
+      // Restore the previous snapshot on failure.
+      setForeignSources((prev) => ({ ...prev, [file]: code }));
+      onError(String(error instanceof Error ? error.message : error));
+    }
+  }
+
   return (
     <div className={styles.controllerPanel}>
       <div className={styles.controllerGrid}>
@@ -173,39 +230,156 @@ export function ControllerPanel({
             </div>
           </div>
         ) : (
-          files.map((file) => (
-            <section key={file.path} className={styles.fileGroup}>
-              <header className={styles.fileGroupHeader}>
-                <span className={styles.fileGroupName}>
-                  {file.path.split("/").at(-1)}
-                </span>
-                <span className={styles.fileGroupPath}>{file.path}</span>
-              </header>
-              <div className={styles.fileGroupControls}>
-                {file.controls.map((control) =>
-                  control.kind === "number" ? (
-                    <NumberKnob
-                      key={control.name}
-                      control={control}
-                      disabled={disabled}
-                      onChange={(name, value) =>
-                        void handleChange(file.path, name, value)
-                      }
-                    />
-                  ) : (
-                    <BooleanSwitch
-                      key={control.name}
-                      control={control}
-                      disabled={disabled}
-                      onChange={(name, value) =>
-                        void handleChange(file.path, name, value)
-                      }
-                    />
-                  ),
-                )}
-              </div>
-            </section>
-          ))
+          files.map((file) => {
+            const isDragSource = drag?.file === file.path;
+            return (
+              <section key={file.path} className={styles.fileGroup}>
+                <header className={styles.fileGroupHeader}>
+                  <span className={styles.fileGroupName}>
+                    {file.path.split("/").at(-1)}
+                  </span>
+                  <span className={styles.fileGroupPath}>{file.path}</span>
+                </header>
+                <div className={styles.fileGroupControls}>
+                  {file.controls.map((control, index) => {
+                    const overThisRow =
+                      drag?.over === control.name && drag.name !== control.name;
+                    const sameFile = drag?.file === file.path;
+                    return (
+                      <fieldset
+                        key={control.name}
+                        className={classNames(styles.controlRow, {
+                          [styles.rowDragging]:
+                            isDragSource && drag?.name === control.name,
+                          [styles.dropBefore]:
+                            sameFile && overThisRow && drag?.side === "before",
+                          [styles.dropAfter]:
+                            sameFile && overThisRow && drag?.side === "after",
+                          [styles.dropForbidden]: !!drag && !sameFile,
+                        })}
+                        aria-label={`${control.name} control`}
+                        draggable={!disabled}
+                        tabIndex={disabled ? undefined : 0}
+                        title={`Drag to reorder ${control.name} (${shortcut}+↑ / ${shortcut}+↓)`}
+                        onPointerDown={(event) => {
+                          const target = event.target as HTMLElement | null;
+                          dragAllowed.current = !target?.closest(
+                            "button, input, textarea, select, a, legend",
+                          );
+                        }}
+                        onDragStart={(event) => {
+                          if (disabled || !dragAllowed.current) {
+                            event.preventDefault();
+                            return;
+                          }
+                          event.dataTransfer.effectAllowed = "move";
+                          event.dataTransfer.setData(
+                            "text/plain",
+                            control.name,
+                          );
+                          setDrag({
+                            file: file.path,
+                            name: control.name,
+                            over: null,
+                            side: "before",
+                          });
+                        }}
+                        onDragEnd={() => setDrag(null)}
+                        onKeyDown={(event) => {
+                          if (event.target !== event.currentTarget) return;
+                          if (disabled || !event.altKey) return;
+                          if (event.key === "ArrowUp" && index > 0) {
+                            event.preventDefault();
+                            void handleMove(
+                              file.path,
+                              control.name,
+                              file.controls[index - 1].name,
+                              "before",
+                            );
+                          }
+                          if (
+                            event.key === "ArrowDown" &&
+                            index < file.controls.length - 1
+                          ) {
+                            event.preventDefault();
+                            void handleMove(
+                              file.path,
+                              control.name,
+                              file.controls[index + 1].name,
+                              "after",
+                            );
+                          }
+                        }}
+                        onDragOver={(event) => {
+                          if (!drag || drag.file !== file.path) {
+                            event.dataTransfer.dropEffect = "none";
+                            return;
+                          }
+                          if (drag.name === control.name) return;
+                          event.preventDefault();
+                          event.dataTransfer.dropEffect = "move";
+                          const rect =
+                            event.currentTarget.getBoundingClientRect();
+                          const side =
+                            event.clientY < rect.top + rect.height / 2
+                              ? "before"
+                              : "after";
+                          setDrag({ ...drag, over: control.name, side });
+                        }}
+                        onDragLeave={(event) => {
+                          const next = event.relatedTarget as Node | null;
+                          if (next && event.currentTarget.contains(next))
+                            return;
+                          if (drag?.over === control.name)
+                            setDrag({ ...drag, over: null });
+                        }}
+                        onDrop={(event) => {
+                          if (
+                            !drag ||
+                            drag.file !== file.path ||
+                            drag.name === control.name
+                          )
+                            return;
+                          event.preventDefault();
+                          const rect =
+                            event.currentTarget.getBoundingClientRect();
+                          const side =
+                            event.clientY < rect.top + rect.height / 2
+                              ? "before"
+                              : "after";
+                          void handleMove(
+                            file.path,
+                            drag.name,
+                            control.name,
+                            side,
+                          );
+                          setDrag(null);
+                        }}
+                      >
+                        {control.kind === "number" ? (
+                          <NumberKnob
+                            control={control}
+                            disabled={disabled}
+                            onChange={(name, value) =>
+                              void handleChange(file.path, name, value)
+                            }
+                          />
+                        ) : (
+                          <BooleanSwitch
+                            control={control}
+                            disabled={disabled}
+                            onChange={(name, value) =>
+                              void handleChange(file.path, name, value)
+                            }
+                          />
+                        )}
+                      </fieldset>
+                    );
+                  })}
+                </div>
+              </section>
+            );
+          })
         )}
       </div>
     </div>
