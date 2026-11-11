@@ -1,0 +1,11 @@
+# Allow only build inputs and non-secret runtime defaults into the context.
+**
+!Cargo.toml
+!Cargo.lock
+!config.example.toml
+!crates/
+!crates/**
+!proto/
+!proto/**
+!corpus/
+!corpus/sources.toml

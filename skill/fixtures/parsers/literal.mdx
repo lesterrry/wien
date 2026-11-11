@@ -1,0 +1,24 @@
+---
+title: Original parser fixture
+---
+import { MiniRepl } from './not-executed';
+
+# Original parser fixture
+
+This input is original test data, not imported official documentation.
+
+## Literal
+
+Keep this prose next to the code.
+
+<Box>
+<MiniRepl
+  tune={`s(\`bd ~ sd\`)
+  .slow(2)`}
+/>
+</Box>
+
+## Dynamic
+
+<MiniRepl tune={`s(${notExecuted()})`} />
+<MiniRepl tune={notExecuted("not a literal")} />
