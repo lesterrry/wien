@@ -1,12 +1,16 @@
 import { SlidersHorizontal } from "lucide-react";
-import type { Control } from "../../../../shared/controls";
+import type { Control, ControlValue } from "../../../../shared/controls";
 import { BooleanSwitch } from "../BooleanSwitch/BooleanSwitch";
+import { EnumSwitch } from "../EnumSwitch/EnumSwitch";
+import { MultiSelect } from "../MultiSelect/MultiSelect";
 import { NumberKnob } from "../NumberKnob/NumberKnob";
+import { NumberSlider } from "../NumberSlider/NumberSlider";
 import styles from "./ControlsPanel.module.css";
 
 export function ControlsPanel({
   controls,
   valid,
+  errors,
   hasDocument,
   disabled,
   onChange,
@@ -14,13 +18,16 @@ export function ControlsPanel({
 }: {
   controls: Control[];
   valid: boolean;
+  errors?: string[];
   hasDocument: boolean;
   disabled: boolean;
-  onChange: (name: string, value: number | boolean) => void;
+  onChange: (name: string, value: ControlValue) => void;
   onIgnore: (name: string) => void;
 }) {
   const hasNumber = controls.some((control) => control.kind === "number");
   const hasBoolean = controls.some((control) => control.kind === "boolean");
+  const hasSlider = controls.some((control) => control.kind === "slider");
+  const hasEnum = controls.some((control) => control.kind === "enum");
   return (
     <aside className={styles.controlsPanel} aria-label="Snippet controls">
       <div className={styles.controlsTitle}>
@@ -29,8 +36,37 @@ export function ControlsPanel({
         <small>{controls.length}</small>
       </div>
       <div className={styles.controlsList}>
+        {errors?.map((error) => (
+          <p key={error} className={styles.controlError} role="alert">
+            {error}
+          </p>
+        ))}
         {controls.map((control) =>
-          control.kind === "number" ? (
+          control.kind === "multi-enum" ? (
+            <MultiSelect
+              key={control.name}
+              control={control}
+              disabled={disabled}
+              onChange={onChange}
+              onIgnore={onIgnore}
+            />
+          ) : control.kind === "enum" ? (
+            <EnumSwitch
+              key={control.name}
+              control={control}
+              disabled={disabled}
+              onChange={onChange}
+              onIgnore={onIgnore}
+            />
+          ) : control.kind === "slider" ? (
+            <NumberSlider
+              key={control.name}
+              control={control}
+              disabled={disabled}
+              onChange={onChange}
+              onIgnore={onIgnore}
+            />
+          ) : control.kind === "number" ? (
             <NumberKnob
               key={control.name}
               control={control}
@@ -80,6 +116,18 @@ export function ControlsPanel({
         {hasBoolean && (
           <>
             Press a switch to toggle
+            <br />
+          </>
+        )}
+        {hasSlider && (
+          <>
+            Drag or scroll · Arrows to adjust · Shift for precision · Home / End
+            <br />
+          </>
+        )}
+        {hasEnum && (
+          <>
+            <span>Choose a label or drag · Arrows to switch</span>
             <br />
           </>
         )}

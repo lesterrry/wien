@@ -8,8 +8,6 @@ const numberFormat = new Intl.NumberFormat("en-US", {
   useGrouping: false,
 });
 
-const step = 0.01;
-
 export function NumberKnob({
   control,
   disabled,
@@ -21,7 +19,8 @@ export function NumberKnob({
   onChange: (name: string, value: number) => void;
   onIgnore: (name: string) => void;
 }) {
-  const { name, value } = control;
+  const { name, value, integer } = control;
+  const step = integer ? 1 : 0.01;
   const knob = useRef<HTMLButtonElement>(null);
   const drag = useRef<{
     x: number;
@@ -29,7 +28,8 @@ export function NumberKnob({
     value: number;
   } | null>(null);
   const change = (next: number) => {
-    if (Number.isFinite(next)) onChange(name, Number(next.toFixed(5)));
+    if (Number.isFinite(next))
+      onChange(name, integer ? Math.round(next) : Number(next.toFixed(5)));
   };
   useEffect(() => {
     const element = knob.current;
@@ -49,13 +49,13 @@ export function NumberKnob({
         currentValue -
         distance * step * 2 * (event.shiftKey ? 0.1 : event.altKey ? 10 : 1);
       if (!Number.isFinite(next)) return;
-      currentValue = Number(next.toFixed(5));
-      onChange(name, currentValue);
+      currentValue = next;
+      onChange(name, integer ? Math.round(next) : Number(next.toFixed(5)));
     };
     // React wheel handlers are passive; a native listener lets us stop panel scrolling.
     element.addEventListener("wheel", wheel, { passive: false });
     return () => element.removeEventListener("wheel", wheel);
-  }, [disabled, name, onChange, value]);
+  }, [disabled, integer, name, onChange, step, value]);
   return (
     <div className={styles.numberControl}>
       <div className={styles.controlHeading}>
@@ -101,7 +101,7 @@ export function NumberKnob({
             change(
               start.value +
                 distance *
-                  step *
+                  (integer ? 0.1 : step) *
                   (event.shiftKey ? 0.1 : event.altKey ? 10 : 1),
             );
           }}
@@ -130,7 +130,7 @@ export function NumberKnob({
               value +
                 direction *
                   step *
-                  (event.shiftKey ? 0.1 : event.altKey ? 10 : 1),
+                  (event.altKey ? 10 : event.shiftKey && !integer ? 0.1 : 1),
             );
           }}
         >

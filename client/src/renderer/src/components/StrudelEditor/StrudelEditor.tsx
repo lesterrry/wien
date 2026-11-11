@@ -15,7 +15,11 @@ import {
 import classNames from "classnames";
 import { useEffect, useRef } from "react";
 import { useDrop } from "react-dnd";
-import { changeControl, ignoreControl } from "../../../../shared/controls";
+import {
+  type ControlValue,
+  changeControl,
+  ignoreControl,
+} from "../../../../shared/controls";
 import type { Entry } from "../../../../shared/types";
 import { compileGraph } from "../../module-compiler";
 import styles from "./StrudelEditor.module.css";
@@ -24,7 +28,7 @@ export interface Player {
   play(): Promise<void>;
   stop(): Promise<void>;
   replaceCode(code: string): void;
-  changeControl(name: string, value: number | boolean): void;
+  changeControl(name: string, value: ControlValue): void;
   ignoreControl(name: string): void;
 }
 
@@ -189,6 +193,7 @@ export function StrudelEditor({
         if (!edit) return;
         mirror.editor.dispatch({
           changes: { from: edit.start, to: edit.end, insert: edit.text },
+          userEvent: typeof value === "object" ? "input.control" : undefined,
         });
         if (!mirror.repl.state.started || liveTimer !== undefined) return;
         liveTimer = setTimeout(() => {

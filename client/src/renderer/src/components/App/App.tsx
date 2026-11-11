@@ -956,6 +956,7 @@ export function App() {
           key={`${project?.root}/${document?.path}/${editorVersion}`}
           controls={controlState.controls}
           valid={controlState.valid}
+          errors={controlState.errors}
           hasDocument={Boolean(document)}
           disabled={busy}
           onChange={(name, value) => player.current?.changeControl(name, value)}

@@ -21,6 +21,9 @@ async function launch() {
   const page = await app.firstWindow();
   page.setDefaultTimeout(10000);
   await page.getByLabel("Strudel code editor").waitFor();
+  await page
+    .getByRole("button", { name: "first-light.strudel", exact: true })
+    .click();
   return page;
 }
 async function replaceCode(page, text) {

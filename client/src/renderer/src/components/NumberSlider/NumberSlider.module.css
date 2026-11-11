@@ -1,0 +1,112 @@
+.iconButton {
+  composes: iconButton from "../../styles/common.module.css";
+}
+
+.sliderControl {
+  composes: numberControl from "../NumberKnob/NumberKnob.module.css";
+}
+
+.controlHeading {
+  composes: controlHeading from "../NumberKnob/NumberKnob.module.css";
+}
+
+.controlName {
+  composes: controlName from "../NumberKnob/NumberKnob.module.css";
+}
+
+.controlHeading .iconButton {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.controlValue {
+  composes: controlValue from "../NumberKnob/NumberKnob.module.css";
+  display: block;
+  margin: 2px 0 8px;
+}
+
+.track input {
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 26px;
+  margin: 0;
+  border-radius: 4px;
+  cursor: ew-resize;
+  touch-action: none;
+  background: transparent;
+}
+
+.track input::-webkit-slider-runnable-track {
+  height: 5px;
+  border-radius: 5px;
+  background: linear-gradient(
+    to right,
+    var(--color-brand) var(--fill),
+    var(--color-border-strong) var(--fill)
+  );
+}
+
+.track input::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 20px;
+  margin-top: -7.5px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-primary);
+}
+
+.track input:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.bounds {
+  composes: bounds from "../NumberKnob/NumberKnob.module.css";
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+
+.vertical {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  padding: 4px 0;
+}
+
+.vertical input {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 26px;
+  height: 140px;
+  cursor: ns-resize;
+}
+
+.vertical input::-webkit-slider-runnable-track {
+  width: 5px;
+  height: 100%;
+  background: linear-gradient(
+    to top,
+    var(--color-brand) var(--fill),
+    var(--color-border-strong) var(--fill)
+  );
+}
+
+.vertical input::-webkit-slider-thumb {
+  width: 20px;
+  height: 14px;
+  margin-top: 0;
+  margin-left: -7.5px;
+}
+
+.vertical .bounds {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: calc(50% + 25px);
+  max-width: calc(50% - 25px);
+  flex-direction: column-reverse;
+  width: auto;
+}

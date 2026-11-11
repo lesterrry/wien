@@ -23,6 +23,9 @@ try {
   });
   const projectRoot = path.join(temporary, "projects", "First session");
   await page.getByLabel("Strudel code editor").waitFor();
+  await page
+    .getByRole("button", { name: "first-light.strudel", exact: true })
+    .click();
   assert.match(
     await page.getByLabel("Strudel code editor").textContent(),
     /import glass from '\.\/instruments\/glass.strudel'/,
@@ -96,7 +99,7 @@ try {
 
   console.log("Checking numeric controls and reactive audio");
   await replaceCode(`var gain = 0.2;
-let cutoff = 800;
+let cutoff = 800.0;
 const speed = (2 / 2);
 note("c3*8").s("sine").gain(gain).lpf(cutoff).fast(speed)`);
   const gainValue = page.getByLabel("gain value", { exact: true });

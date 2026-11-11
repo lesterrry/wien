@@ -1,0 +1,144 @@
+.card {
+  composes: numberControl from "../NumberKnob/NumberKnob.module.css";
+}
+
+.heading {
+  composes: controlHeading from "../NumberKnob/NumberKnob.module.css";
+}
+
+.name {
+  composes: controlName from "../NumberKnob/NumberKnob.module.css";
+}
+
+.iconButton {
+  composes: iconButton from "../../styles/common.module.css";
+}
+
+.heading .iconButton {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.list {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.row {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  color: var(--color-muted);
+}
+
+.row[data-selected="true"] {
+  color: var(--color-primary);
+  background: var(--color-hover);
+}
+
+.row[data-dragging="true"] {
+  opacity: 0.4;
+}
+
+.row[data-drop-before="true"]::before,
+.list[data-drop-end="true"]::after {
+  content: "";
+  position: absolute;
+  height: 2px;
+  background: var(--color-brand);
+  left: 0;
+  right: 0;
+  pointer-events: none;
+}
+
+.row[data-drop-before="true"]::before {
+  top: -3px;
+}
+
+.list[data-drop-end="true"]::after {
+  bottom: -3px;
+}
+
+.grip {
+  display: grid;
+  place-items: center;
+  flex: 0 0 24px;
+  color: var(--color-muted);
+  cursor: grab;
+  touch-action: none;
+  border-radius: 4px;
+}
+
+.grip:active {
+  cursor: grabbing;
+}
+
+.option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  gap: 7px;
+  padding: 8px 7px 8px 0;
+  cursor: pointer;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.option input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  clip-path: inset(50%);
+}
+
+.option:has(input:focus-visible) {
+  outline: 2px solid var(--color-brand);
+  outline-offset: -2px;
+}
+
+.row:has(input:disabled) {
+  opacity: 0.4;
+}
+
+.check {
+  display: grid;
+  place-items: center;
+  flex: 0 0 13px;
+  width: 13px;
+  height: 13px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 2px;
+}
+
+.option:has(input:checked) .check {
+  background: var(--color-brand);
+  color: var(--color-surface);
+}
+
+.preview {
+  position: fixed;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 1000;
+  pointer-events: none;
+  max-width: 220px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-surface);
+  box-shadow: 0 4px 16px var(--color-overlay);
+  overflow-wrap: anywhere;
+}
