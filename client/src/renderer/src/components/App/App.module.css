@@ -28,7 +28,7 @@
 
 .app {
   --sidebar-width: 258px;
-  --controls-width: 230px;
+  --controls-width: 280px;
   display: grid;
   height: 100%;
   grid-template: 52px minmax(0, 1fr) / var(--sidebar-width) minmax(0, 1fr) var(
@@ -599,4 +599,10 @@
   .playButton kbd {
     display: none;
   }
+}
+
+.editorSession {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }

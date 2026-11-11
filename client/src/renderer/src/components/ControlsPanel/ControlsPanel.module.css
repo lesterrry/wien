@@ -54,3 +54,126 @@
   line-height: 1.8;
   color: var(--color-muted);
 }
+
+.rootHeading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px 12px;
+  font-size: 12px;
+}
+.rootHeading > span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pin {
+  composes: iconButton from "../../styles/common.module.css";
+}
+.pin[aria-pressed="true"] {
+  color: var(--color-brand);
+  background: var(--color-active);
+}
+.search {
+  margin: 0 12px 14px;
+  padding: 8px;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  background: var(--color-surface);
+  color: var(--color-primary);
+  font-size: 11px;
+}
+.group {
+  margin-bottom: 8px;
+}
+.groupHeading {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 9px 3px;
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-secondary);
+  background: transparent;
+  text-align: left;
+  font-size: 11px;
+  cursor: pointer;
+}
+.groupHeading > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.groupHeading small {
+  margin-left: auto;
+  color: var(--color-muted);
+  font-size: 9px;
+}
+.groupBody {
+  padding-left: 9px;
+  border-left: 1px solid var(--color-border);
+}
+.source {
+  display: block;
+  padding: 9px 6px 0;
+  font-size: 10px;
+  color: var(--color-muted);
+  overflow-wrap: anywhere;
+}
+.issue {
+  color: var(--color-secondary);
+  font-size: 11px;
+  padding: 8px;
+  border-left: 2px solid var(--color-brand);
+  overflow-wrap: anywhere;
+}
+.hiddenGroups {
+  padding: 8px 16px;
+  max-height: 150px;
+  overflow: auto;
+  border-top: 1px solid var(--color-border);
+}
+.hiddenGroups button {
+  display: block;
+  width: 100%;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-secondary);
+  text-align: left;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.menu {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  padding: 5px;
+  min-width: 190px;
+  box-shadow: 0 8px 25px #0006;
+  position: fixed;
+  z-index: 100;
+}
+
+.menu button {
+  display: block;
+  width: 100%;
+  padding: 9px;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-primary);
+  text-align: left;
+  font-size: 12px;
+}
+.menu button:hover:not(:disabled) {
+  background: var(--color-hover);
+}
+.control {
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}

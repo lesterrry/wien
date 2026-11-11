@@ -1,90 +1,323 @@
-import { SlidersHorizontal } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Pin,
+  SlidersHorizontal,
+} from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  type ControlGroup,
+  controlSources,
+  type PanelLayout,
+  sourceLabel,
+} from "../../../../shared/control-tree";
 import type { Control } from "../../../../shared/controls";
 import { BooleanSwitch } from "../BooleanSwitch/BooleanSwitch";
 import { NumberKnob } from "../NumberKnob/NumberKnob";
 import styles from "./ControlsPanel.module.css";
 
+type Menu = { x: number; y: number } & (
+  | { kind: "control"; path: string; control: Control }
+  | { kind: "group"; group: ControlGroup }
+);
+
 export function ControlsPanel({
-  controls,
-  valid,
-  hasDocument,
+  tree,
+  root,
+  pinned,
+  loading,
   disabled,
+  layout,
+  errors,
+  onPin,
+  onLayout,
   onChange,
   onIgnore,
+  onDefinition,
 }: {
-  controls: Control[];
-  valid: boolean;
-  hasDocument: boolean;
+  tree: ControlGroup | null;
+  root: string | null;
+  pinned: boolean;
+  loading: boolean;
   disabled: boolean;
-  onChange: (name: string, value: number | boolean) => void;
-  onIgnore: (name: string) => void;
+  layout: PanelLayout;
+  errors: Record<string, string>;
+  onPin: () => void;
+  onLayout: (layout: PanelLayout) => void;
+  onChange: (path: string, name: string, value: number | boolean) => void;
+  onIgnore: (path: string, name: string) => void;
+  onDefinition: (path: string, name: string) => void;
 }) {
-  const hasNumber = controls.some((control) => control.kind === "number");
-  const hasBoolean = controls.some((control) => control.kind === "boolean");
+  const [search, setSearch] = useState("");
+  const [menu, setMenu] = useState<Menu | null>(null);
+  const [showHidden, setShowHidden] = useState(false);
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    const key = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    window.addEventListener("click", close);
+    window.addEventListener("blur", close);
+    window.addEventListener("keydown", key);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("blur", close);
+      window.removeEventListener("keydown", key);
+    };
+  }, [menu]);
+  const query = search.trim().toLocaleLowerCase();
+  const names = tree ? controlSources(tree) : new Map<string, Set<string>>();
+  const hidden: ControlGroup[] = [];
+  function collectHidden(group: ControlGroup) {
+    if (layout.hidden[group.id]) hidden.push(group);
+    group.children.forEach(collectHidden);
+  }
+  if (tree) collectHidden(tree);
+  const matches = (path: string, name: string) =>
+    `${path} ${name}`.toLocaleLowerCase().includes(query);
+  function contains(group: ControlGroup): boolean {
+    if (layout.hidden[group.id]) return false;
+    return (
+      !query ||
+      matches(group.path, "") ||
+      group.controls.some((control) => matches(group.path, control.name)) ||
+      Boolean(group.issues?.some((issue) => matches(group.path, issue.name))) ||
+      group.children.some(contains)
+    );
+  }
+  function renderGroup(group: ControlGroup) {
+    if (!contains(group)) return null;
+    const collapsed = !query && (layout.collapsed[group.id] ?? group.repeated);
+    return (
+      <section
+        key={group.id}
+        className={styles.group}
+        aria-label={`${group.path} controls`}
+      >
+        <button
+          type="button"
+          className={styles.groupHeading}
+          title={group.path}
+          aria-label={`Toggle ${group.path} group`}
+          aria-expanded={!collapsed}
+          onClick={() =>
+            onLayout({
+              ...layout,
+              collapsed: { ...layout.collapsed, [group.id]: !collapsed },
+            })
+          }
+          onContextMenu={(event) => {
+            event.preventDefault();
+            setMenu({
+              kind: "group",
+              group,
+              x: Math.min(event.clientX, window.innerWidth - 210),
+              y: Math.min(event.clientY, window.innerHeight - 90),
+            });
+          }}
+        >
+          {collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+          <span>{group.path.split("/").at(-1)}</span>
+          {group.repeated && (
+            <small title="Shared controls, repeated import">
+              Repeated import
+            </small>
+          )}
+        </button>
+        {!collapsed && (
+          <div className={styles.groupBody}>
+            {group.error && (
+              <p role="alert" className={styles.issue}>
+                {group.error}
+              </p>
+            )}
+            {group.issues
+              ?.filter((issue) => matches(group.path, issue.name))
+              .map((issue) => (
+                <p key={issue.name} role="alert" className={styles.issue}>
+                  <strong>{issue.name}</strong>: {issue.message}
+                </p>
+              ))}
+            {group.controls
+              .filter((control) => matches(group.path, control.name))
+              .map((control) => {
+                const peers = names.get(control.name) ?? new Set<string>();
+                const error =
+                  errors[JSON.stringify([group.path, control.name])];
+                return (
+                  <fieldset
+                    className={styles.control}
+                    key={control.name}
+                    aria-label={`${control.name} in ${group.path}`}
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      setMenu({
+                        kind: "control",
+                        path: group.path,
+                        control,
+                        x: Math.min(event.clientX, window.innerWidth - 210),
+                        y: Math.min(event.clientY, window.innerHeight - 90),
+                      });
+                    }}
+                  >
+                    {peers.size > 1 && (
+                      <small className={styles.source} title={group.path}>
+                        {sourceLabel(group.path, peers)}
+                      </small>
+                    )}
+                    {control.kind === "number" ? (
+                      <NumberKnob
+                        control={control}
+                        disabled={disabled}
+                        onChange={(name, value) =>
+                          onChange(group.path, name, value)
+                        }
+                        onIgnore={(name) => onIgnore(group.path, name)}
+                      />
+                    ) : (
+                      <BooleanSwitch
+                        control={control}
+                        disabled={disabled}
+                        onChange={(name, value) =>
+                          onChange(group.path, name, value)
+                        }
+                        onIgnore={(name) => onIgnore(group.path, name)}
+                      />
+                    )}
+                    {error && (
+                      <p role="alert" className={styles.issue}>
+                        {error}
+                      </p>
+                    )}
+                  </fieldset>
+                );
+              })}
+            {group.children.map(renderGroup)}
+            {!group.controls.length &&
+              !group.children.length &&
+              !group.error &&
+              !group.issues?.length && (
+                <p className={styles.controlsEmpty}>
+                  No controls in this file.
+                </p>
+              )}
+          </div>
+        )}
+      </section>
+    );
+  }
   return (
     <aside className={styles.controlsPanel} aria-label="Snippet controls">
       <div className={styles.controlsTitle}>
         <SlidersHorizontal size={14} />
         <span>Controls</span>
-        <small>{controls.length}</small>
+        {loading && <small>Updating…</small>}
       </div>
+      <div className={styles.rootHeading}>
+        <span title={root ?? undefined}>
+          {root?.split("/").at(-1) ?? "No file selected"}
+        </span>
+        <button
+          type="button"
+          disabled={!root || disabled}
+          className={styles.pin}
+          aria-label={pinned ? "Unpin master" : "Pin as master"}
+          aria-pressed={pinned}
+          title={pinned ? "Unpin master" : "Pin as master"}
+          onClick={onPin}
+        >
+          <Pin size={14} />
+        </button>
+      </div>
+      <input
+        className={styles.search}
+        aria-label="Search controls"
+        placeholder="Search controls or files…"
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+      />
       <div className={styles.controlsList}>
-        {controls.map((control) =>
-          control.kind === "number" ? (
-            <NumberKnob
-              key={control.name}
-              control={control}
-              disabled={disabled}
-              onChange={onChange}
-              onIgnore={onIgnore}
-            />
-          ) : (
-            <BooleanSwitch
-              key={control.name}
-              control={control}
-              disabled={disabled}
-              onChange={onChange}
-              onIgnore={onIgnore}
-            />
-          ),
+        {tree ? (
+          renderGroup(tree)
+        ) : (
+          <p className={styles.controlsEmpty}>
+            {loading
+              ? "Loading controls…"
+              : "Open a snippet to see its controls."}
+          </p>
         )}
-        {!controls.length && (
-          <div className={styles.controlsEmpty}>
-            <p>
-              {!hasDocument
-                ? "Open a snippet to see its controls."
-                : !valid
-                  ? "Finish editing your code to see its controls."
-                  : "Give your sound a few controls."}
-            </p>
-            {hasDocument && valid && (
-              <>
-                <code>const gain = 0.3</code>
-                <code>const enabled = true</code>
-                <p>
-                  Use a number or a boolean in a top-level var, let or const.
-                  Numbers appear as knobs, booleans as switches.
-                </p>
-              </>
-            )}
-          </div>
+        {tree && !contains(tree) && (
+          <p className={styles.controlsEmpty}>No matching controls.</p>
         )}
       </div>
+      {hidden.length > 0 && (
+        <div className={styles.hiddenGroups}>
+          <button
+            type="button"
+            aria-expanded={showHidden}
+            onClick={() => setShowHidden(!showHidden)}
+          >
+            Hidden groups ({hidden.length})
+          </button>
+          {showHidden &&
+            hidden.map((group) => (
+              <button
+                key={group.id}
+                type="button"
+                title={JSON.parse(group.id).join(" → ")}
+                onClick={() =>
+                  onLayout({
+                    ...layout,
+                    hidden: { ...layout.hidden, [group.id]: false },
+                  })
+                }
+              >
+                Restore {JSON.parse(group.id).join(" → ")}
+              </button>
+            ))}
+        </div>
+      )}
       <div className={styles.controlsHint}>
-        {hasNumber && (
-          <>
-            Drag a knob to adjust · Shift for precision
-            <br />
-          </>
-        )}
-        {hasBoolean && (
-          <>
-            Press a switch to toggle
-            <br />
-          </>
-        )}
-        Changes are saved in your code.
+        Right-click a control to go to its declaration.
+        <br />
+        Changes are saved in the source file.
       </div>
+      {menu && (
+        <div
+          role="menu"
+          className={styles.menu}
+          style={{ left: menu.x, top: menu.y }}
+        >
+          {menu.kind === "control" ? (
+            <button
+              type="button"
+              role="menuitem"
+              disabled={disabled}
+              onClick={() => {
+                onDefinition(menu.path, menu.control.name);
+                setMenu(null);
+              }}
+            >
+              Go to declaration
+            </button>
+          ) : (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                onLayout({
+                  ...layout,
+                  hidden: { ...layout.hidden, [menu.group.id]: true },
+                });
+                setMenu(null);
+              }}
+            >
+              Hide group
+            </button>
+          )}
+        </div>
+      )}
     </aside>
   );
 }

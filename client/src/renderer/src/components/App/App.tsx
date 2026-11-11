@@ -28,9 +28,19 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { readControls } from "../../../../shared/controls";
-import { hasExports } from "../../../../shared/modules";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  type ControlGroup,
+  type PanelPreferences,
+  readControlTree,
+  readPanelPreferences,
+} from "../../../../shared/control-tree";
+import {
+  changeControl,
+  ignoreControl,
+  readControls,
+} from "../../../../shared/controls";
+import { editSource, hasExports } from "../../../../shared/modules";
 import {
   type Entry,
   isWithin,
@@ -89,6 +99,30 @@ const message = (error: unknown) =>
 
 export function App() {
   const [editorVersion, setEditorVersion] = useState(0);
+  const [editors, setEditors] = useState<Record<string, Document>>({});
+  const players = useRef(new Map<string, Player>());
+  const playingPath = useRef<string | null>(null);
+  const [playingFile, setPlayingFile] = useState<string | null>(null);
+  const [preferences, setPreferences] = useState<PanelPreferences>({
+    pinned: null,
+    roots: {},
+  });
+  const [preferencesProject, setPreferencesProject] = useState<string | null>(
+    null,
+  );
+  const [controlTree, setControlTree] = useState<ControlGroup | null>(null);
+  const [treeLoading, setTreeLoading] = useState(false);
+  const [treeVersion, setTreeVersion] = useState(0);
+  const [controlErrors, setControlErrors] = useState<Record<string, string>>(
+    {},
+  );
+  const controlQueue = useRef(Promise.resolve());
+  const liveUpdateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const navigationBack = useRef(new Map<string, string>());
+  const [definitionTarget, setDefinitionTarget] = useState<{
+    path: string;
+    name: string;
+  } | null>(null);
   const [project, setProject] = useState<Project | null>(null);
   const [document, setDocument] = useState<Document | null>(null);
   const [tabs, setTabs] = useState<string[]>([]);
@@ -128,6 +162,7 @@ export function App() {
     (next: Document | null) => {
       documentRef.current = next;
       setDocument(next);
+      if (next) setEditors((current) => ({ ...current, [next.path]: next }));
       if (next && !tabsRef.current.includes(next.path))
         updateTabs([...tabsRef.current, next.path]);
     },
@@ -196,10 +231,11 @@ export function App() {
 
   const activateFile = useCallback(
     async (path: string) => {
+      await controlQueue.current;
       await flush();
       const code = await api.read(path);
-      await player.current?.stop();
-      setPlayback({ started: false, pending: false });
+      players.current.get(path)?.replaceCode(code);
+      player.current = players.current.get(path) ?? null;
       setPosition([1, 1]);
       updateDocument({ path, code, saved: code });
       setSavedStatus("Saved locally");
@@ -218,17 +254,28 @@ export function App() {
   const closeTab = useCallback(
     async (path: string) => {
       await run(async () => {
+        await controlQueue.current;
         const index = tabsRef.current.indexOf(path);
         if (index < 0) return;
         const remaining = tabsRef.current.filter((item) => item !== path);
+        if (playingPath.current === path) {
+          await players.current.get(path)?.stop();
+          playingPath.current = null;
+          setPlayingFile(null);
+          setPlayback({ started: false, pending: false });
+        }
         if (documentRef.current?.path === path) {
           await flush();
-          const next = remaining[Math.min(index, remaining.length - 1)];
+          const previous = navigationBack.current.get(path);
+          const next =
+            previous && remaining.includes(previous)
+              ? previous
+              : remaining[Math.min(index, remaining.length - 1)];
+          navigationBack.current.delete(path);
           if (next) await activateFile(next);
           else {
-            await player.current?.stop();
+            player.current = null;
             updateDocument(null);
-            setPlayback({ started: false, pending: false });
           }
         }
         updateTabs(remaining);
@@ -281,8 +328,10 @@ export function App() {
         }
         void run(async () => {
           try {
+            await controlQueue.current;
             await flush();
-            await player.current?.stop();
+            if (playingPath.current)
+              await players.current.get(playingPath.current)?.stop();
             api.finishClose();
           } catch (error) {
             api.cancelClose();
@@ -294,10 +343,21 @@ export function App() {
   );
 
   const play = useCallback(() => {
-    void player.current?.play().catch((error) => setError(message(error)));
-  }, []);
+    void run(async () => {
+      await controlQueue.current;
+      await flush();
+      const path = documentRef.current?.path;
+      if (!path) return;
+      if (playingPath.current && playingPath.current !== path)
+        await players.current.get(playingPath.current)?.stop();
+      playingPath.current = path;
+      setPlayingFile(path);
+      await players.current.get(path)?.play();
+    });
+  }, [flush, run]);
   const stop = useCallback(() => {
-    void player.current?.stop();
+    if (playingPath.current)
+      void players.current.get(playingPath.current)?.stop();
   }, []);
 
   useEffect(() => {
@@ -366,6 +426,7 @@ export function App() {
 
   async function refresh() {
     setProject(await api.current());
+    setTreeVersion((version) => version + 1);
   }
 
   async function syncDocument() {
@@ -399,7 +460,13 @@ export function App() {
   }
 
   async function move(from: string, to: string) {
+    await controlQueue.current;
     await flush();
+    if (playingPath.current)
+      await players.current.get(playingPath.current)?.stop();
+    playingPath.current = null;
+    setPlayingFile(null);
+    setPlayback({ started: false, pending: false });
     await api.move(from, to);
     updateTabs(
       tabsRef.current.map((file) =>
@@ -420,13 +487,18 @@ export function App() {
 
   async function switchProject(create: boolean) {
     await run(async () => {
+      await controlQueue.current;
       await flush();
       const next = await (create ? api.create() : api.open());
       if (!next) return;
-      await player.current?.stop();
+      if (playingPath.current)
+        await players.current.get(playingPath.current)?.stop();
       updateTabs([]);
       updateDocument(null);
       setPlayback({ started: false, pending: false });
+      playingPath.current = null;
+      setPlayingFile(null);
+      setEditors({});
       setProject(next);
       setSearch("");
       setSelection(null);
@@ -444,6 +516,7 @@ export function App() {
     setBusy(true);
     setModalError(null);
     try {
+      await controlQueue.current;
       if (modal.kind === "create") {
         await flush();
         const path = await api.add(modal.parent, value, modal.folder);
@@ -472,6 +545,11 @@ export function App() {
         await move(modal.entry.id, joinPath(value, modal.entry.name));
       } else if (modal.kind === "delete") {
         await flush();
+        if (playingPath.current)
+          await players.current.get(playingPath.current)?.stop();
+        playingPath.current = null;
+        setPlayingFile(null);
+        setPlayback({ started: false, pending: false });
         await api.trash(modal.entry.id);
         const remaining = tabsRef.current.filter(
           (file) => !isWithin(file, modal.entry.id),
@@ -510,10 +588,184 @@ export function App() {
       entry.children ? [entry, ...folders(entry.children)] : [],
     );
   const shortcut = navigator.platform.includes("Mac") ? "⌘" : "Ctrl";
-  const controlState = useMemo(
-    () => readControls(document?.code ?? ""),
-    [document?.code],
-  );
+  const panelRoot = preferences.pinned ?? document?.path ?? null;
+  const panelLayout = (panelRoot && preferences.roots[panelRoot]) || {
+    hidden: {},
+    collapsed: {},
+  };
+
+  useEffect(() => {
+    if (!project?.root) return;
+    setPreferences(readPanelPreferences(project.root));
+    setPreferencesProject(project.root);
+    setControlErrors({});
+  }, [project?.root]);
+
+  useEffect(() => {
+    if (!project || preferencesProject !== project.root) return;
+    try {
+      localStorage.setItem(
+        `wien:controls:${project.root}`,
+        JSON.stringify(preferences),
+      );
+    } catch (error) {
+      setError(`Could not save panel settings: ${message(error)}`);
+    }
+  }, [project, preferences, preferencesProject]);
+
+  const treeRevision = JSON.stringify([
+    project?.root,
+    document?.path,
+    document?.code,
+    treeVersion,
+  ]);
+  useEffect(() => {
+    const [, activePath, activeCode] = JSON.parse(treeRevision) as [
+      string | null,
+      string | null,
+      string | null,
+      number,
+    ];
+    let cancelled = false;
+    if (!panelRoot) {
+      setControlTree(null);
+      setTreeLoading(false);
+      return;
+    }
+    setTreeLoading(true);
+    const timer = setTimeout(() => {
+      void readControlTree(panelRoot, async (path) => {
+        return activePath === path && activeCode !== null
+          ? activeCode
+          : api.read(path);
+      }).then((tree) => {
+        if (!cancelled) {
+          setControlTree(tree);
+          setTreeLoading(false);
+        }
+      });
+    }, 80);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [panelRoot, treeRevision]);
+
+  function editPanelControl(
+    path: string,
+    name: string,
+    value?: number | boolean,
+  ) {
+    const key = JSON.stringify([path, name]);
+    // All appearances share an optimistic value, including keyboard gestures
+    // whose next step arrives before the file write has finished.
+    const updateTree = (group: ControlGroup): ControlGroup => ({
+      ...group,
+      controls:
+        group.path === path
+          ? group.controls.flatMap((control) =>
+              control.name !== name
+                ? [control]
+                : value === undefined
+                  ? []
+                  : [{ ...control, value } as typeof control],
+            )
+          : group.controls,
+      children: group.children.map(updateTree),
+    });
+    setControlTree((tree) => (tree ? updateTree(tree) : null));
+    controlQueue.current = controlQueue.current.then(async () => {
+      try {
+        const current = documentRef.current;
+        const source =
+          current?.path === path ? current.code : await api.read(path);
+        if (
+          !readControls(source).controls.some(
+            (control) => control.name === name,
+          )
+        )
+          throw new Error(
+            "This control has changed. Fix its declaration before editing.",
+          );
+        if (current?.path === path) {
+          if (value === undefined) player.current?.ignoreControl(name);
+          else player.current?.changeControl(name, value);
+          await flush();
+        } else {
+          const edit =
+            value === undefined
+              ? ignoreControl(source, name)
+              : changeControl(source, name, value);
+          if (edit) {
+            const code = editSource(source, [edit]);
+            await api.save({ path, content: code, expected: source });
+            players.current.get(path)?.replaceCode(code);
+            setEditors((current) =>
+              current[path]
+                ? { ...current, [path]: { path, code, saved: code } }
+                : current,
+            );
+          }
+        }
+        setTreeVersion((version) => version + 1);
+        setControlErrors((current) => {
+          const next = { ...current };
+          delete next[key];
+          return next;
+        });
+        const playing = playingPath.current;
+        const running = playing && players.current.get(playing);
+        if (
+          running &&
+          value !== undefined &&
+          running.dependsOn(path) &&
+          liveUpdateTimer.current === null
+        ) {
+          liveUpdateTimer.current = setTimeout(() => {
+            liveUpdateTimer.current = null;
+            void controlQueue.current
+              .then(async () => {
+                if (
+                  playingPath.current === playing &&
+                  players.current.get(playing) === running
+                )
+                  await running.update();
+              })
+              .catch((error) =>
+                setControlErrors((current) => ({
+                  ...current,
+                  [key]: message(error),
+                })),
+              );
+          }, 60);
+        }
+      } catch (error) {
+        setControlErrors((current) => ({ ...current, [key]: message(error) }));
+      }
+    });
+  }
+
+  function goToControl(path: string, name: string) {
+    void run(async () => {
+      await controlQueue.current;
+      const previous = documentRef.current?.path;
+      if (previous !== path) {
+        if (previous) navigationBack.current.set(path, previous);
+        await activateFile(path);
+      }
+      setDefinitionTarget({ path, name });
+    });
+  }
+
+  // Child editor effects register the player before this effect runs, including
+  // when navigation opens a new tab rather than revealing an existing editor.
+  useEffect(() => {
+    if (definitionTarget && document?.path === definitionTarget.path) {
+      players.current
+        .get(definitionTarget.path)
+        ?.revealControl(definitionTarget.name);
+    }
+  }, [definitionTarget, document?.path]);
 
   return (
     <div
@@ -804,7 +1056,11 @@ export function App() {
               ) : (
                 <Play size={13} fill="currentColor" />
               )}
-              <span>{playback.started ? "Update" : "Play"}</span>
+              <span>
+                {playback.started && playingFile === document?.path
+                  ? "Update"
+                  : "Play"}
+              </span>
               <kbd>{shortcut} ↵</kbd>
             </button>
             <button
@@ -855,27 +1111,50 @@ export function App() {
             </button>
           </div>
         )}
-        {document ? (
-          <StrudelEditor
-            key={`${project?.root}/${document.path}/${editorVersion}`}
-            initialCode={document.code}
-            path={document.path}
-            disabled={busy}
-            onLink={(source) => void linkSnippet(source)}
-            onChange={(code) => {
-              const current = documentRef.current;
-              if (current) {
-                updateDocument({ ...current, code });
-                setSavedStatus("Unsaved changes");
-              }
-            }}
-            onState={setPlayback}
-            onReady={(next) => {
-              player.current = next;
-            }}
-            onPosition={(line, column) => setPosition([line, column])}
-          />
-        ) : (
+        {tabs
+          .filter((path) => editors[path])
+          .map((path) => (
+            <div
+              key={`${project?.root}/${path}/${editorVersion}`}
+              className={styles.editorSession}
+              data-active={document?.path === path}
+              style={{ display: document?.path === path ? "flex" : "none" }}
+            >
+              <StrudelEditor
+                initialCode={editors[path].code}
+                path={path}
+                disabled={busy}
+                onLink={(source) => void linkSnippet(source)}
+                onChange={(code) => {
+                  const current = documentRef.current;
+                  if (current?.path === path) {
+                    updateDocument({ ...current, code });
+                    setSavedStatus("Unsaved changes");
+                  }
+                }}
+                onState={(state) => {
+                  if (playingPath.current === path) setPlayback(state);
+                }}
+                onReady={(next) => {
+                  if (next) players.current.set(path, next);
+                  else {
+                    players.current.delete(path);
+                    if (playingPath.current === path) {
+                      playingPath.current = null;
+                      setPlayingFile(null);
+                      setPlayback({ started: false, pending: false });
+                    }
+                  }
+                  if (documentRef.current?.path === path) player.current = next;
+                }}
+                onPosition={(line, column) => {
+                  if (documentRef.current?.path === path)
+                    setPosition([line, column]);
+                }}
+              />
+            </div>
+          ))}
+        {!document && (
           <div className={styles.emptyState}>
             <div className={styles.emptyIcon}>
               <Code2 size={30} strokeWidth={1.2} />
@@ -916,7 +1195,9 @@ export function App() {
             <span className={styles.statusDot} />
             <span>{playback.started ? "Playing" : "Ready when you are"}</span>
             {playback.started && (
-              <span className={styles.playingFile}>{filename}</span>
+              <span className={styles.playingFile}>
+                {playingFile?.split("/").at(-1)}
+              </span>
             )}
           </div>
           <span className={styles.keyboardHint}>
@@ -953,13 +1234,30 @@ export function App() {
 
       {controlsVisible && (
         <ControlsPanel
-          key={`${project?.root}/${document?.path}/${editorVersion}`}
-          controls={controlState.controls}
-          valid={controlState.valid}
-          hasDocument={Boolean(document)}
+          key={`${project?.root}/${panelRoot}`}
+          tree={controlTree?.path === panelRoot ? controlTree : null}
+          root={panelRoot}
+          pinned={Boolean(preferences.pinned)}
+          loading={treeLoading}
           disabled={busy}
-          onChange={(name, value) => player.current?.changeControl(name, value)}
-          onIgnore={(name) => player.current?.ignoreControl(name)}
+          layout={panelLayout}
+          errors={controlErrors}
+          onPin={() =>
+            setPreferences((current) => ({
+              ...current,
+              pinned: current.pinned ? null : panelRoot,
+            }))
+          }
+          onLayout={(layout) => {
+            if (panelRoot)
+              setPreferences((current) => ({
+                ...current,
+                roots: { ...current.roots, [panelRoot]: layout },
+              }));
+          }}
+          onChange={editPanelControl}
+          onIgnore={(path, name) => editPanelControl(path, name)}
+          onDefinition={goToControl}
         />
       )}
 
@@ -1085,8 +1383,8 @@ export function App() {
               </div>
               <p className={styles.muted}>
                 Drag snippets into folders to organize them. Starter sounds use
-                built-in synthesizers and work offline. Opening another snippet
-                stops playback.
+                built-in synthesizers and work offline. Playback continues while
+                you browse other snippets.
               </p>
               <button
                 type="button"

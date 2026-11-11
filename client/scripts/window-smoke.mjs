@@ -20,11 +20,16 @@ async function launch() {
   child = app.process();
   const page = await app.firstWindow();
   page.setDefaultTimeout(10000);
-  await page.getByLabel("Strudel code editor").waitFor();
+  await page
+    .getByLabel("Strudel code editor")
+    .filter({ visible: true })
+    .waitFor();
   return page;
 }
 async function replaceCode(page, text) {
-  const editor = page.getByLabel("Strudel code editor");
+  const editor = page
+    .getByLabel("Strudel code editor")
+    .filter({ visible: true });
   await editor.click();
   await editor.press(process.platform === "darwin" ? "Meta+a" : "Control+a");
   await page.keyboard.insertText(text);

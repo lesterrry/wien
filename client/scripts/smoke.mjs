@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { _electron as electron } from "@playwright/test";
+import { _electron as electron, expect } from "@playwright/test";
 
 const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "wien-smoke-"));
 const environment = { ...process.env, WIEN_USER_DATA: temporary };
@@ -22,9 +22,15 @@ try {
       console.log("renderer:", event.text().slice(0, 350));
   });
   const projectRoot = path.join(temporary, "projects", "First session");
-  await page.getByLabel("Strudel code editor").waitFor();
+  await page
+    .getByLabel("Strudel code editor")
+    .filter({ visible: true })
+    .waitFor();
   assert.match(
-    await page.getByLabel("Strudel code editor").textContent(),
+    await page
+      .getByLabel("Strudel code editor")
+      .filter({ visible: true })
+      .textContent(),
     /import glass from '\.\/instruments\/glass.strudel'/,
   );
   await page
@@ -66,12 +72,12 @@ try {
   assert(signal > 0.0001, `Expected real audio output, got ${signal}`);
   console.log("Audio signal peak:", signal);
 
-  const code = page.getByLabel("Strudel code editor");
+  const code = page.getByLabel("Strudel code editor").filter({ visible: true });
   async function replaceCode(value) {
     await page.waitForFunction(
       () =>
         document
-          .querySelector(".cm-content")
+          .querySelector('[data-active="true"] .cm-content')
           ?.getAttribute("contenteditable") === "true",
     );
     await code.click();
@@ -79,8 +85,8 @@ try {
     await page.keyboard.insertText(value);
     await page.waitForFunction(
       (expected) =>
-        document.querySelector(".cm-content")?.textContent ===
-        expected.replaceAll("\n", ""),
+        document.querySelector('[data-active="true"] .cm-content')
+          ?.textContent === expected.replaceAll("\n", ""),
       value,
     );
   }
@@ -217,7 +223,7 @@ note("c3*8").s("sine").gain(gain).lpf(cutoff).fast(speed)`);
       .getByRole("complementary", { name: "Snippet controls" })
       .locator("input")
       .count(),
-    0,
+    1,
   );
   await page
     .getByRole("button", { name: "Hide speed control", exact: true })
@@ -240,7 +246,7 @@ note("c3*8").s("sine").gain(gain).lpf(cutoff).fast(speed)`);
   await replaceCode(`var gain = 0.123456789;
 let cutoff = -123456.75;
 note("c3*8").s("sine").gain(gain)`);
-  assert.equal(await gainValue.textContent(), "0.12346");
+  await expect(gainValue).toHaveText("0.12346");
   await gainKnob.press("Shift+ArrowUp");
   assert.match(await code.textContent(), /gain = 0.12446/);
   const cutoffValue = page.getByLabel("cutoff value", { exact: true });
@@ -254,7 +260,7 @@ note("c3*8").s("sine").gain(gain)`);
   await cutoffValue.waitFor();
   assert.equal(await page.evaluate(() => window.getIsStarted()), false);
   await replaceCode('note("c3 e3 g3").s("triangle").gain(0.2)');
-  assert.equal(await page.getByRole("spinbutton").count(), 0);
+  await expect(page.getByRole("spinbutton")).toHaveCount(0);
 
   console.log("Checking file tabs");
   const rootTab = page.getByRole("tab", {
@@ -333,7 +339,7 @@ note("c3*8").s("sine").gain(gain)`);
     .click();
   await page.waitForFunction(() =>
     document
-      .querySelector(".cm-content")
+      .querySelector('[data-active="true"] .cm-content')
       ?.textContent.startsWith("export default "),
   );
   await page
@@ -346,7 +352,8 @@ note("c3*8").s("sine").gain(gain)`);
     .click();
   await page.waitForFunction(
     (expected) =>
-      document.querySelector(".cm-content")?.textContent === expected,
+      document.querySelector('[data-active="true"] .cm-content')
+        ?.textContent === expected,
     originalRoot,
   );
 
@@ -365,7 +372,7 @@ note("c3*8").s("sine").gain(gain)`);
   await glassFile.dragTo(code, { targetPosition: { x: 160, y: 15 } });
   await page.waitForFunction(() =>
     document
-      .querySelector(".cm-content")
+      .querySelector('[data-active="true"] .cm-content')
       ?.textContent.includes("import glass from './instruments/glass.strudel'"),
   );
   await page
@@ -432,7 +439,7 @@ note("c3*8").s("sine").gain(gain)`);
   );
   await page.waitForFunction(() =>
     document
-      .querySelector(".cm-content")
+      .querySelector('[data-active="true"] .cm-content')
       ?.textContent.includes("'./sketches/glass.strudel'"),
   );
   await fs.access(path.join(projectRoot, "sketches/glass.strudel"));
@@ -519,9 +526,15 @@ note("c3*8").s("sine").gain(gain)`);
   await page.getByRole("dialog").waitFor({ state: "hidden" });
   await assert.rejects(fs.access(path.join(projectRoot, "renamed-folder")));
   await page.reload();
-  await page.getByLabel("Strudel code editor").waitFor();
+  await page
+    .getByLabel("Strudel code editor")
+    .filter({ visible: true })
+    .waitFor();
   assert.equal(
-    await page.getByLabel("Strudel code editor").textContent(),
+    await page
+      .getByLabel("Strudel code editor")
+      .filter({ visible: true })
+      .textContent(),
     'note("c3 e3 g3").s("triangle").gain(0.2)',
   );
   await replaceCode('note("f4").s("triangle")');

@@ -73,6 +73,7 @@ function booleanValue(node: Expression): boolean | undefined {
 export function readControls(code: string): {
   controls: Control[];
   valid: boolean;
+  issues?: { name: string; message: string }[];
 } {
   const comments: Comment[] = [];
   try {
@@ -93,6 +94,7 @@ export function readControls(code: string): {
       );
     const controls: Control[] = [];
     const names = new Map<string, number>();
+    const issues: { name: string; message: string }[] = [];
     for (const statement of ast.body) {
       const declaration =
         statement.type === "ExportNamedDeclaration"
@@ -111,6 +113,10 @@ export function readControls(code: string): {
         const ignoreAt =
           declaration.declarations.length === 1 ? statement.start : item.start;
         const numeric = numberValue(item.init);
+        if (numeric !== undefined && !Number.isFinite(numeric)) {
+          issues.push({ name, message: "Value must be a finite number." });
+          continue;
+        }
         if (numeric !== undefined && Number.isFinite(numeric)) {
           controls.push({
             kind: "number",
@@ -134,7 +140,12 @@ export function readControls(code: string): {
           });
       }
     }
+    for (const [name, count] of names) {
+      if (count > 1)
+        issues.push({ name, message: "Multiple declarations use this name." });
+    }
     return {
+      ...(issues.length ? { issues } : {}),
       controls: controls.filter((control) => names.get(control.name) === 1),
       valid: true,
     };
