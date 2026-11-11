@@ -76,3 +76,48 @@ jobs:
 
       - name: Build server
         run: cargo build --locked --release
+
+  skill:
+    name: Skill checks and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: skill
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Lint
+        run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+
+      - name: Test without credentials or external model calls
+        run: cargo test --locked --workspace --all-features
+
+      - name: Build production CLI
+        run: cargo build --locked --release -p strudel-rag-cli
+
+      - name: Build fixture CLI
+        run: cargo build --locked -p strudel-rag-cli --features fixture-provider
+
+      - name: Smoke-test fixture retrieval
+        shell: bash
+        run: |
+          rag=(
+            ./target/debug/strudel-rag
+            --config config.fixture.toml
+            --data-dir "$RUNNER_TEMP/strudel-rag-fixture"
+            --allow-fixture
+          )
+          "${rag[@]}" ingest
+          "${rag[@]}" index
+          "${rag[@]}" search --query 'slow pattern cycles' --intent api --top-k 3
+          "${rag[@]}" eval --dataset eval/fixture.jsonl --k 5
