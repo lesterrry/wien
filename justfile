@@ -3,6 +3,11 @@
 default:
     @just --list
 
+# Prepare env
+init:
+    @if [ -e .env ] || [ -L .env ]; then echo 'error: .env already exists' >&2; exit 1; fi
+    (set -C; cat .env.example > .env)
+
 # Launch the desktop client in development mode
 run-client:
     pnpm --dir client dev
@@ -11,13 +16,9 @@ run-client:
 build-client:
     pnpm --dir client build
 
-# Launch the local AI server
+# Build and launch the AI server and RAG; Ctrl+C stops both
 run-server:
-    cargo run --manifest-path server/Cargo.toml --locked
-
-# Build the local AI server
-build-server:
-    cargo build --manifest-path server/Cargo.toml --locked --release
+    docker compose up --build server skill
 
 # Export OpenAPI and generate VS Code HTTP requests
 generate:

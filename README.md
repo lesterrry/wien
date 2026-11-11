@@ -13,14 +13,16 @@
 pnpm --dir client install
 just run-client
 # В соседнем терминале:
+# Один раз: скопируй .env.example в .env и заполни STRUDEL_RAG_BEARER_TOKEN.
 just run-server
 ```
 
 - `just run-client` — `pnpm dev` в `client`, Electron с hot reload.
-- `just run-server` — Rust-сервер на `127.0.0.1:3001`, Swagger UI на `/docs/`.
+- `just run-server` — сборка и запуск `server` + `skill` через Docker Compose,
+  общие логи в терминале; Ctrl+C останавливает оба сервиса.
+  HTTP-сервер на `127.0.0.1:3001`, Swagger UI на `/docs/`.
 - `just test` — линты, форматирование, типы и тесты клиента; rustfmt, Clippy и тесты сервера.
 - `just build-client` — `pnpm build` в `client`, результат в `client/out`.
-- `just build-server` — release-сборка в `server/target/release`.
 - `just generate` — экспорт OpenAPI и генерация `server/http/*.http` для REST Client в VS Code.
 
 Все pnpm-скрипты определены в [client/package.json](client/package.json).
@@ -30,7 +32,8 @@ just run-server
 В VS Code открывайте корень репозитория: задачи запускаются оттуда,
 а форматирование при сохранении использует Biome из `client/` и rust-analyzer для Rust.
 Default task **Wien: Run** (`⌘⇧B`) запускает обе части в соседних терминалах.
-Для сервера нужен stable Rust с компонентами rustfmt и clippy.
+Для запуска сервера нужен работающий Docker с Compose и файл авторизации Codex.
+Для локальных Rust-проверок нужен stable Rust с компонентами rustfmt и clippy.
 
 В редакторе `⌘,` (Windows/Linux: `Ctrl+,`) открывает ассистента у курсора:
 введи запрос и нажми Enter. Shift+Enter добавляет строку, Esc закрывает поповер.
@@ -38,10 +41,12 @@ Default task **Wien: Run** (`⌘⇧B`) запускает обе части в �
 отменяются через Cmd+Z после возврата в редактор. `⌘.` по-прежнему останавливает
 текущий сниппет, `⌘⇧.` — все играющие табы, `⌘Enter` запускает или обновляет текущий. Для AI должны работать обе части.
 
-## Docker Compose: Strudel RAG
+## Docker Compose: сервер и Strudel RAG
 
-Корневой [`compose.yaml`](compose.yaml) пока запускает только сервис `skill`.
-Клиент и AI-бэкенд в Compose не включены.
+Корневой [`compose.yaml`](compose.yaml) запускает AI-бэкенд `server` и RAG `skill`.
+Electron-клиент работает на хосте. Сервер стартует после успешного healthcheck RAG;
+внутренний адрес RAG — `http://skill:50051`. Это совместный запуск сервисов:
+вызовы RAG из ассистента пока не реализованы.
 
 ### Запуск
 
@@ -49,9 +54,19 @@ Default task **Wien: Run** (`⌘⇧B`) запускает обе части в �
 # Сохраните токен для последующих запусков: переменная окружения или корневой .env.
 export STRUDEL_RAG_BEARER_TOKEN="$(openssl rand -hex 32)"
 export OPENAI_API_KEY='your-key'
-docker compose up -d --build skill
+just run-server
+# В соседнем терминале:
 docker compose exec skill strudel-rag remote info
 ```
+
+Вместо экспорта переменных можно скопировать `.env.example` в `.env` и заполнить его.
+`server/config.toml` и файл авторизации Codex подключаются только для чтения.
+Путь авторизации: `WIEN_CODEX_AUTH_FILE`, затем `$CODEX_HOME/auth.json`, затем
+`$HOME/.codex/auth.json`; файл должен существовать до запуска контейнера.
+После замены файла авторизации через Codex пересоздай контейнер:
+`docker compose up -d --force-recreate server`.
+Для запуска обоих сервисов в фоне: `docker compose up -d --build`.
+Для остановки: `docker compose down` (данные RAG сохраняются).
 
 gRPC доступен на `127.0.0.1:50051`; порт хоста можно изменить через
 `STRUDEL_RAG_PORT`. Данные сохраняются в named volume `skill-data`.

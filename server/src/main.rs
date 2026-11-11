@@ -1,9 +1,12 @@
-use std::{net::Ipv4Addr, path::PathBuf};
+use std::{net::IpAddr, path::PathBuf};
 
 use wien_server::{api, config::Config};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let host = std::env::var("WIEN_SERVER_HOST")
+        .unwrap_or_else(|_| "127.0.0.1".into())
+        .parse::<IpAddr>()?;
     let port = std::env::var("WIEN_SERVER_PORT")
         .unwrap_or_else(|_| "3001".into())
         .parse::<u16>()?;
@@ -12,15 +15,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|| PathBuf::from("server/config.toml"));
     let config = Config::load(&config_path).map_err(|error| error.to_string())?;
     let provider = config.provider.build()?;
-    let address = (Ipv4Addr::LOCALHOST, port);
-    println!("Starting Wien server on http://127.0.0.1:{port}");
+    let address = std::net::SocketAddr::new(host, port);
+    println!("Starting Wien server on http://{address}");
     let listener = tokio::net::TcpListener::bind(address)
         .await
         .map_err(|error| {
             if error.kind() == std::io::ErrorKind::AddrInUse {
-                format!("Cannot start Wien: 127.0.0.1:{port} is already in use.")
+                format!("Cannot start Wien: {address} is already in use.")
             } else {
-                format!("Cannot bind Wien server to 127.0.0.1:{port}: {error}")
+                format!("Cannot bind Wien server to {address}: {error}")
             }
         })?;
     println!("Wien server: http://{}", listener.local_addr()?);

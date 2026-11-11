@@ -1,4 +1,36 @@
 services:
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    init: true
+    restart: unless-stopped
+    environment:
+      WIEN_SERVER_HOST: 0.0.0.0
+      WIEN_SERVER_PORT: "3001"
+      WIEN_SERVER_CONFIG: /app/config.toml
+      WIEN_CODEX_AUTH_FILE: /run/wien/auth.json
+      STRUDEL_RAG_ENDPOINT: http://skill:50051
+      STRUDEL_RAG_BEARER_TOKEN: ${STRUDEL_RAG_BEARER_TOKEN:?Set STRUDEL_RAG_BEARER_TOKEN in the environment or root .env}
+    ports:
+      - "127.0.0.1:${WIEN_SERVER_PORT:-3001}:3001"
+    volumes:
+      - type: bind
+        source: ${WIEN_SERVER_CONFIG:-./server/config.toml}
+        target: /app/config.toml
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${WIEN_CODEX_AUTH_FILE:-${CODEX_HOME:-${HOME}/.codex}/auth.json}
+        target: /run/wien/auth.json
+        read_only: true
+        bind:
+          create_host_path: false
+    depends_on:
+      skill:
+        condition: service_healthy
+
   skill:
     build:
       context: ./skill
