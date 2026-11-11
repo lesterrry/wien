@@ -36,6 +36,7 @@ export function ControlsPanel({
   ) => void;
 }) {
   const [drag, setDrag] = useState<DragState | null>(null);
+  const shortcut = navigator.platform.includes("Mac") ? "⌥" : "Alt";
 
   return (
     <aside className={styles.controlsPanel} aria-label="Snippet controls">
@@ -101,7 +102,7 @@ export function ControlsPanel({
                 className={styles.dragHandle}
                 draggable={!disabled}
                 aria-label={`Reorder ${control.name}`}
-                title={`Reorder ${control.name} (Alt+↑ / Alt+↓)`}
+                title={`Reorder ${control.name} (${shortcut}+↑ / ${shortcut}+↓)`}
                 onDragStart={(event) => {
                   if (disabled) {
                     event.preventDefault();

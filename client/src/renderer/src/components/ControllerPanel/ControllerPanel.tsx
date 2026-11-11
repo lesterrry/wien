@@ -77,6 +77,7 @@ export function ControllerPanel({
   );
   const [loading, setLoading] = useState(true);
   const [drag, setDrag] = useState<DragState | null>(null);
+  const shortcut = navigator.platform.includes("Mac") ? "⌥" : "Alt";
 
   // Latest code, readable from effects without adding it to a dependency
   // array (which would otherwise re-fetch imports on every keystroke).
@@ -307,7 +308,7 @@ export function ControllerPanel({
                           className={styles.dragHandle}
                           draggable={!disabled}
                           aria-label={`Reorder ${control.name}`}
-                          title={`Reorder ${control.name} (Alt+↑ / Alt+↓)`}
+                          title={`Reorder ${control.name} (${shortcut}+↑ / ${shortcut}+↓)`}
                           onDragStart={(event) => {
                             if (disabled) {
                               event.preventDefault();
