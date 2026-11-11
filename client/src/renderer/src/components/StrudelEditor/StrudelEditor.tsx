@@ -6,22 +6,19 @@ import * as mini from "@strudel/mini";
 import * as tonal from "@strudel/tonal";
 import { transpiler } from "@strudel/transpiler";
 import * as webaudio from "@strudel/webaudio";
-import {
-  getAudioContext,
-  initAudio,
-  registerSynthSounds,
-  webaudioOutput,
-} from "@strudel/webaudio";
+import { getAudioContext, initAudio, webaudioOutput } from "@strudel/webaudio";
 import classNames from "classnames";
 import { useEffect, useRef, useState } from "react";
 import { useDrop } from "react-dnd";
 import {
+  type ControlChange,
   changeControl,
   ignoreControl,
   moveControl,
 } from "../../../../shared/controls";
 import type { Entry } from "../../../../shared/types";
 import { compileGraph } from "../../module-compiler";
+import { registerStandardSounds } from "../../standard-sounds";
 import {
   type AssistantPlacement,
   AssistantPopover,
@@ -33,7 +30,7 @@ export interface Player {
   play(): Promise<void>;
   stop(): Promise<void>;
   replaceCode(code: string): void;
-  changeControl(name: string, value: number | boolean): void;
+  changeControl(name: string, value: ControlChange): void;
   ignoreControl(name: string): void;
   moveControl(
     name: string,
@@ -57,7 +54,7 @@ function withEvaluationLock(evaluate: () => Promise<void>) {
 function prepareScope() {
   scope ??= Promise.all([
     core.evalScope(core, mini, tonal, webaudio),
-    registerSynthSounds(),
+    registerStandardSounds(),
   ]);
   return scope;
 }
@@ -242,11 +239,15 @@ export function StrudelEditor({
       },
       play: () => evaluate(true),
       stop: () => mirror.stop(),
-      changeControl: (name, value) => {
-        const edit = changeControl(mirror.code, name, value);
+      changeControl: (name, change) => {
+        const edit = changeControl(mirror.code, name, change);
         if (!edit) return;
         mirror.editor.dispatch({
           changes: { from: edit.start, to: edit.end, insert: edit.text },
+          userEvent:
+            change.type === "reorder" || Array.isArray(change.value)
+              ? "input.control"
+              : undefined,
         });
         if (!mirror.repl.state.started || liveTimer !== undefined) return;
         liveTimer = setTimeout(() => {

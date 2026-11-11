@@ -30,6 +30,12 @@ try {
     );
   const project = path.join(temporary, "projects/First session");
   await code.waitFor();
+  await page
+    .getByRole("button", { name: "first-light.strudel", exact: true })
+    .click();
+  await expect(
+    page.getByRole("tab", { name: "first-light.strudel", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
   await page.getByRole("button", { name: /^Play/ }).click();
   await expect(
     page.getByRole("tab", { name: "first-light.strudel", exact: true }),
@@ -39,7 +45,7 @@ try {
     .click();
   await expect(graphTab).toHaveAttribute("aria-selected", "true");
   await expect(graph).toHaveAttribute("aria-busy", "false");
-  await expect(graph.locator(".react-flow__node")).toHaveCount(4);
+  await expect(graph.locator(".react-flow__node")).toHaveCount(5);
   await expect(graph.locator(".react-flow__edge")).toHaveCount(1);
   await expect(graph.locator(".react-flow__edge")).toHaveAttribute(
     "aria-label",
@@ -186,7 +192,7 @@ try {
   );
   await fs.writeFile(path.join(project, "broken.js"), 'import "./missing.js";');
   await graph.getByRole("button", { name: "Refresh graph" }).click();
-  await expect(graph.locator(".react-flow__node")).toHaveCount(6);
+  await expect(graph.locator(".react-flow__node")).toHaveCount(7);
   await expect(graph).toContainText("1 snippet with dependency issues");
   await graph.getByRole("button", { name: "Fit all snippets" }).click();
   await node("broken.js").click();
@@ -194,7 +200,7 @@ try {
   assert.equal(await page.evaluate(() => window.__graphExecuted), undefined);
   await fs.unlink(path.join(project, "unused.js"));
   await graph.getByRole("button", { name: "Refresh graph" }).click();
-  await expect(graph.locator(".react-flow__node")).toHaveCount(5);
+  await expect(graph.locator(".react-flow__node")).toHaveCount(6);
 
   // Cmd+W closes the graph only, keeping snippet tabs and their playback intact.
   await page.keyboard.press(`${mod}+w`);

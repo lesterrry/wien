@@ -35,6 +35,14 @@ try {
   const low =
     'const gain = 0.06;\nsetcpm(120);\nfreq(220).s("sine").gain(gain).release(0.01)';
   const high = 'setcpm(60);\nfreq(1760).s("sine").gain(0.06).release(0.01)';
+  await code.waitFor();
+  await page
+    .getByRole("button", { name: "first-light.strudel", exact: true })
+    .click();
+  await expect(tab("first-light.strudel")).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
   await replace(low);
   await play();
   await playing("first-light.strudel");

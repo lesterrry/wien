@@ -39,10 +39,14 @@ try {
   page.on("pageerror", (error) => errors.push(error.message));
   const code = page.getByLabel("Strudel code editor");
   await code.waitFor();
+  await page
+    .getByRole("button", { name: "first-light.strudel", exact: true })
+    .click();
   const original = await fs.readFile(
     path.join(temporary, "projects/First session/first-light.strudel"),
     "utf8",
   );
+  await expect(code).toHaveText(original.replaceAll("\n", ""));
   const dialog = page.getByRole("dialog", { name: "Wien assistant" });
   const input = page.getByRole("textbox", { name: "Ask Wien" });
 

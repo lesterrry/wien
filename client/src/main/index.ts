@@ -19,6 +19,8 @@ let closePending = false;
 let quitting = false;
 let assistantRequest: { id: string; controller: AbortController } | null = null;
 
+const icon = path.join(__dirname, "../../resources/icon.png");
+
 const stateFile = () => path.join(app.getPath("userData"), "workspace.json");
 
 async function selectProject(root: string) {
@@ -182,6 +184,7 @@ function createWindow() {
     minWidth: 850,
     minHeight: 560,
     title: "Wien",
+    icon,
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 20, y: 19 },
     backgroundColor: "#191919",
@@ -221,6 +224,7 @@ function createWindow() {
 void app
   .whenReady()
   .then(async () => {
+    if (process.platform === "darwin") app.dock?.setIcon(icon);
     await initializeProject();
     registerIpc();
     Menu.setApplicationMenu(

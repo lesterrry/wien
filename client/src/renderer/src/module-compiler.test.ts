@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import * as core from "@strudel/core";
 import * as mini from "@strudel/mini";
+import { starterFiles } from "../../main/starter";
+import { changeControl } from "../../shared/controls";
 import type { ModuleGraph } from "../../shared/modules";
+import { editSource } from "../../shared/modules";
 import { compileGraph as compile } from "./module-compiler";
 
 const transpilerModule = import("@strudel/transpiler");
@@ -118,4 +122,76 @@ test("missing exports, cycles, syntax and runtime errors identify the file", asy
     }),
     /glass.strudel: noSuchFunction/,
   );
+});
+
+test("annotated variables are ordinary JavaScript in roots and dependencies", async () => {
+  const pattern = await evaluate({
+    "main.strudel": `import voice from './voice.strudel';
+// ordinary numeric binding
+const gain = 0.25;
+if (typeof gain !== 'number' || gain !== 0.25 || !Number.isFinite(gain)) throw new Error('not a primitive');
+voice.gain(gain)`,
+    "voice.strudel": `//@slider fire vertical -1..1
+const pan = 0.5;
+export default note('c3').pan(pan)`,
+  });
+  assert.deepEqual(pattern.queryArc(0, 1)[0].value, {
+    note: "c3",
+    pan: 0.5,
+    gain: 0.25,
+  });
+});
+
+test("the playable slider example produces numeric Strudel parameters", async () => {
+  const source = await readFile("../examples/sliders.strudel", "utf8");
+  assert.equal(starterFiles["controls-demo.strudel"], source);
+  await core.evalScope({ setcpm: () => {} });
+  const pattern = await evaluate({ "main.strudel": source });
+  const events = pattern.queryArc(0, 1);
+  assert(
+    events.some(({ value }: { value: { s: string } }) => value.s === "sbd"),
+  );
+  assert(
+    events.some(({ value }: { value: { s: string } }) => value.s === "white"),
+  );
+  const lead = events.filter(
+    ({ value }: { value: { orbit: number } }) => value.orbit === 1,
+  );
+  assert(lead.length > 0);
+  for (const { value } of lead) {
+    assert.equal(value.s, "triangle");
+    assert.equal(value.cutoff, 1200);
+    assert.equal(value.pan, 0);
+    assert.equal(value.delay, 0.38);
+    assert.equal(value.chorus, 0.55);
+  }
+});
+
+test("playground enum edits change the lead and combine selected effects", async () => {
+  const source = await readFile("../examples/sliders.strudel", "utf8");
+  const edit = changeControl(source, "waveform", {
+    type: "set",
+    value: "sawtooth",
+  });
+  assert(edit);
+  const changed = editSource(source, [edit]);
+  assert.match(changed, /const waveform = Wave.Saw/);
+  const effectsEdit = changeControl(changed, "effects", {
+    type: "set",
+    value: ["echo", "crush"],
+  });
+  assert(effectsEdit);
+  const updated = editSource(changed, [effectsEdit]);
+  assert.match(updated, /const effects = \[Fx.Echo, Fx.Crush\]/);
+  const pattern = await evaluate({ "main.strudel": updated });
+  const lead = pattern
+    .queryArc(0, 1)
+    .filter((hap: { value: { orbit: number } }) => hap.value.orbit === 1);
+  assert(lead.length > 0);
+  for (const { value } of lead) {
+    assert.equal(value.s, "sawtooth");
+    assert.equal(value.delay, 0.38);
+    assert.equal(value.crush, 5);
+    assert.equal(value.chorus, undefined);
+  }
 });

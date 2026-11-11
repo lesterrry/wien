@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  type ControlChange,
   changeControl,
   moveControl,
   readControls,
@@ -360,7 +361,7 @@ export function App() {
   );
 
   const saveForeign = useCallback(
-    (path: string, name: string, value: number | boolean): Promise<void> =>
+    (path: string, name: string, value: ControlChange): Promise<void> =>
       saveForeignEdit(path, (code) => changeControl(code, name, value)),
     [saveForeignEdit],
   );
@@ -1238,6 +1239,7 @@ export function App() {
           key={`${project?.root}/${document?.path}`}
           controls={controlState.controls}
           valid={controlState.valid}
+          errors={controlState.errors}
           hasDocument={Boolean(document)}
           disabled={busy}
           onChange={(name, value) => player.current?.changeControl(name, value)}
