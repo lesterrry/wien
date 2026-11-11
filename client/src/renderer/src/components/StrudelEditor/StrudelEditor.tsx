@@ -11,6 +11,7 @@ import classNames from "classnames";
 import { useEffect, useRef, useState } from "react";
 import { useDrop } from "react-dnd";
 import {
+  type ControlChange,
   changeControl,
   ignoreControl,
   moveControl,
@@ -29,7 +30,7 @@ export interface Player {
   play(): Promise<void>;
   stop(): Promise<void>;
   replaceCode(code: string): void;
-  changeControl(name: string, value: number | boolean): void;
+  changeControl(name: string, value: ControlChange): void;
   ignoreControl(name: string): void;
   moveControl(
     name: string,
@@ -40,6 +41,15 @@ export interface Player {
 
 let scope: Promise<unknown> | undefined;
 let audio: Promise<void> | undefined;
+// Strudel installs evaluation helpers (setcpm, $: tracks) in a shared scope.
+// Serialize compilation/evaluation across tabs; their schedulers run independently.
+let evaluationQueue: Promise<void> = Promise.resolve();
+
+function withEvaluationLock(evaluate: () => Promise<void>) {
+  const next = evaluationQueue.then(evaluate);
+  evaluationQueue = next.catch(() => {});
+  return next;
+}
 
 function prepareScope() {
   scope ??= Promise.all([
@@ -52,6 +62,7 @@ function prepareScope() {
 export function StrudelEditor({
   initialCode,
   path,
+  active,
   disabled,
   onLink,
   onChange,
@@ -61,6 +72,7 @@ export function StrudelEditor({
 }: {
   initialCode: string;
   path: string;
+  active: boolean;
   disabled: boolean;
   onLink: (source: string) => void;
   onChange: (code: string) => void;
@@ -94,10 +106,14 @@ export function StrudelEditor({
   const callbacks = useRef({ onChange, onState, onReady, onPosition });
   callbacks.current = { onChange, onState, onReady, onPosition };
   const code = useRef(initialCode);
+  const pathRef = useRef(path);
+  pathRef.current = path;
 
   useEffect(() => {
     if (!root.current) return;
     let alive = true;
+    let generation = 0;
+    let evaluationGeneration = 0;
     let requested: boolean | null = null;
     let evaluating: Promise<void> | undefined;
     let liveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -106,6 +122,8 @@ export function StrudelEditor({
     const mirror = new StrudelMirror({
       root: root.current,
       initialCode: code.current,
+      id: crypto.randomUUID(),
+      solo: false,
       bgFill: false,
       defaultOutput: webaudioOutput,
       getTime: () => getAudioContext().currentTime,
@@ -116,10 +134,11 @@ export function StrudelEditor({
       beforeEval: async () => {
         try {
           const graph = await window.workspace.graph(
-            path,
+            pathRef.current,
             evaluationCode ?? mirror.code,
           );
-          if (!alive) throw new Error("Evaluation cancelled.");
+          if (!alive || evaluationGeneration !== generation)
+            throw new Error("Evaluation cancelled.");
           compiled = compileGraph(graph, transpiler);
         } catch (error) {
           throw new Error(
@@ -138,6 +157,8 @@ export function StrudelEditor({
         });
         await audio;
         await getAudioContext().resume();
+        if (!alive || evaluationGeneration !== generation)
+          throw new Error("Playback cancelled.");
       },
       onUpdateState: (state) => {
         if (alive) callbacks.current.onState({ ...state });
@@ -152,9 +173,6 @@ export function StrudelEditor({
     mirror.editor.dispatch({
       effects: StateEffect.appendConfig.of([
         readOnly.current.of([]),
-        EditorView.contentAttributes.of({
-          "aria-label": "Strudel code editor",
-        }),
         EditorView.updateListener.of((update) => {
           if (update.docChanged)
             callbacks.current.onChange(update.state.doc.toString());
@@ -169,6 +187,8 @@ export function StrudelEditor({
     // Serialize evaluations and coalesce fast knob gestures into the latest code.
     // autostart=false swaps the running pattern without resetting the clock or
     // starting playback again if Stop was pressed during an async evaluation.
+    const evaluateMirror = mirror.evaluate.bind(mirror);
+    const stopMirror = mirror.stop.bind(mirror);
     const evaluate = (autostart: boolean): Promise<void> => {
       requested = requested === true || autostart;
       if (evaluating) return evaluating;
@@ -177,8 +197,21 @@ export function StrudelEditor({
           const start = requested;
           requested = null;
           if (!start && !mirror.repl.state.started) continue;
-          evaluationCode = mirror.code;
-          await mirror.evaluate(start);
+          const token = generation;
+          await withEvaluationLock(async () => {
+            if (!alive || token !== generation) return;
+            evaluationGeneration = token;
+            evaluationCode = mirror.code;
+            await evaluateMirror(false);
+            if (
+              alive &&
+              token === generation &&
+              start &&
+              !mirror.repl.state.error &&
+              !mirror.repl.state.started
+            )
+              await mirror.repl.start();
+          });
         }
       };
       evaluating = drain().finally(() => {
@@ -188,9 +221,16 @@ export function StrudelEditor({
       return evaluating;
     };
     const cancelLive = () => {
+      generation++;
       clearTimeout(liveTimer);
       liveTimer = undefined;
       requested = null;
+    };
+    // Route Strudel's own editor shortcuts through the same queue and cancellation.
+    mirror.evaluate = (autostart = true) => evaluate(autostart);
+    mirror.stop = () => {
+      cancelLive();
+      return stopMirror();
     };
     callbacks.current.onReady({
       assist: (placement = "cursor") => {
@@ -198,15 +238,16 @@ export function StrudelEditor({
         setAssistantInvocation((value) => value + 1);
       },
       play: () => evaluate(true),
-      stop: () => {
-        cancelLive();
-        return mirror.stop();
-      },
-      changeControl: (name, value) => {
-        const edit = changeControl(mirror.code, name, value);
+      stop: () => mirror.stop(),
+      changeControl: (name, change) => {
+        const edit = changeControl(mirror.code, name, change);
         if (!edit) return;
         mirror.editor.dispatch({
           changes: { from: edit.start, to: edit.end, insert: edit.text },
+          userEvent:
+            change.type === "reorder" || Array.isArray(change.value)
+              ? "input.control"
+              : undefined,
         });
         if (!mirror.repl.state.started || liveTimer !== undefined) return;
         liveTimer = setTimeout(() => {
@@ -253,16 +294,25 @@ export function StrudelEditor({
       mirror.editor.destroy();
       callbacks.current.onReady(null);
     };
-  }, [path]);
+  }, []);
+
+  useEffect(() => {
+    if (active) editor.current?.requestMeasure();
+  }, [active]);
 
   useEffect(() => {
     editor.current?.dispatch({
       effects: readOnly.current.reconfigure([
         EditorState.readOnly.of(disabled),
         EditorView.editable.of(!disabled),
+        EditorView.contentAttributes.of({
+          "aria-label": active
+            ? "Strudel code editor"
+            : "Background snippet editor",
+        }),
       ]),
     });
-  }, [disabled]);
+  }, [disabled, active]);
 
   return (
     <>
@@ -282,7 +332,7 @@ export function StrudelEditor({
           path={path}
           invocation={assistantInvocation}
           placement={assistantPlacement}
-          disabled={disabled}
+          disabled={disabled || !active}
         />
       )}
     </>

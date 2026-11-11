@@ -1,4 +1,3 @@
-import type { ReplState } from "@strudel/codemirror";
 import classNames from "classnames";
 import {
   ArrowDownToLine,
@@ -11,9 +10,9 @@ import {
   FilePlus2,
   FolderOpen,
   FolderPlus,
-  HardDrive,
   Loader2,
   MoreHorizontal,
+  Network,
   Package,
   PanelLeftClose,
   PanelLeftOpen,
@@ -27,11 +26,13 @@ import {
   SlidersHorizontal,
   Sparkles,
   Square,
+  SquareX,
   Trash2,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  type ControlChange,
   changeControl,
   moveControl,
   readControls,
@@ -45,20 +46,20 @@ import {
   parentPath,
   type VersionEntry,
 } from "../../../../shared/types";
+import {
+  type Document,
+  useSnippetSessions,
+} from "../../hooks/useSnippetSessions";
 import { ControllerPanel } from "../ControllerPanel/ControllerPanel";
 import { ControlsPanel } from "../ControlsPanel/ControlsPanel";
 import { Dialog } from "../Dialog/Dialog";
 import { Explorer } from "../Explorer/Explorer";
 import { FileTabs } from "../FileTabs/FileTabs";
-import { type Player, StrudelEditor } from "../StrudelEditor/StrudelEditor";
+import { GraphView } from "../GraphView/GraphView";
+import { StrudelEditor } from "../StrudelEditor/StrudelEditor";
 import { VersionsPanel } from "../VersionsPanel/VersionsPanel";
 import styles from "./App.module.css";
 
-interface Document {
-  path: string;
-  code: string;
-  saved: string;
-}
 type Modal =
   | { kind: "create"; parent: string; folder: boolean }
   | { kind: "rename"; entry: Entry }
@@ -97,23 +98,31 @@ const message = (error: unknown) =>
   );
 
 export function App() {
-  const [editorVersion, setEditorVersion] = useState(0);
   const [project, setProject] = useState<Project | null>(null);
   const [versions, setVersions] = useState<VersionEntry[]>([]);
   const [versionError, setVersionError] = useState<string | null>(null);
   const [selectedVersion, setSelectedVersion] = useState<string | null>(null);
   const [recoveryBlocked, setRecoveryBlocked] = useState(false);
   const recoveryBlockedRef = useRef(false);
-  const [document, setDocument] = useState<Document | null>(null);
+  const {
+    sessions,
+    sessionsRef,
+    document,
+    documentRef,
+    playback,
+    position,
+    player,
+    players,
+    updateDocument: selectDocument,
+    patchSession,
+    setPlayer,
+    removeSessions,
+    renameSessions,
+    stopAll,
+  } = useSnippetSessions();
   const [tabs, setTabs] = useState<string[]>([]);
   const tabsRef = useRef<string[]>([]);
-  const documentRef = useRef<Document | null>(null);
   const saving = useRef<Promise<void> | null>(null);
-  const player = useRef<Player | null>(null);
-  const [playback, setPlayback] = useState<ReplState>({
-    started: false,
-    pending: false,
-  });
   const [savedStatus, setSavedStatus] = useState("Saved locally");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -131,12 +140,36 @@ export function App() {
   const [modal, setModal] = useState<Modal | null>(null);
   const [value, setValue] = useState("");
   const [modalError, setModalError] = useState<string | null>(null);
-  const [position, setPosition] = useState([1, 1]);
-  const [controllerOpen, setControllerOpen] = useState(false);
-  const playbackRef = useRef(playback);
-  useEffect(() => {
-    playbackRef.current = playback;
-  }, [playback]);
+  const [workspaceView, setWorkspaceView] = useState<
+    "editor" | "controls" | "graph"
+  >("editor");
+  const controllerOpen = workspaceView === "controls";
+  const graphActive = workspaceView === "graph";
+  const [graphOpen, setGraphOpen] = useState(false);
+  const [graphFocus, setGraphFocus] = useState<{
+    path: string | null;
+    revision: number;
+  }>({ path: null, revision: 0 });
+  const openGraph = (path: string | null = null) => {
+    setContext(null);
+    setGraphOpen(true);
+    setWorkspaceView("graph");
+    setGraphFocus((focus) => ({ path, revision: focus.revision + 1 }));
+  };
+  const closeGraph = useCallback(() => {
+    setGraphOpen(false);
+    setWorkspaceView((view) => (view === "graph" ? "editor" : view));
+  }, []);
+  const playingPaths = new Set(
+    sessions
+      .filter((session) => session.playback.started)
+      .map((session) => session.document.path),
+  );
+  const graphDrafts = Object.fromEntries(
+    sessions
+      .filter((s) => s.document.code !== s.document.saved)
+      .map((s) => [s.document.path, s.document.code]),
+  );
 
   const updateTabs = useCallback((next: string[]) => {
     tabsRef.current = next;
@@ -145,29 +178,30 @@ export function App() {
 
   const updateDocument = useCallback(
     (next: Document | null) => {
-      documentRef.current = next;
-      setDocument(next);
+      selectDocument(next);
       if (next && !tabsRef.current.includes(next.path))
         updateTabs([...tabsRef.current, next.path]);
     },
-    [updateTabs],
+    [selectDocument, updateTabs],
   );
 
-  const blockRecovery = useCallback(() => {
+  const blockRecovery = useCallback(async () => {
     recoveryBlockedRef.current = true;
     setRecoveryBlocked(true);
+    await removeSessions(tabsRef.current);
     updateTabs([]);
     updateDocument(null);
-  }, [updateDocument, updateTabs]);
+  }, [removeSessions, updateDocument, updateTabs]);
 
   const flush = useCallback(async () => {
     if (saving.current) return saving.current;
     const work = async () => {
-      while (
-        documentRef.current &&
-        documentRef.current.code !== documentRef.current.saved
-      ) {
-        const snapshot = { ...documentRef.current };
+      for (;;) {
+        const session = sessionsRef.current.find(
+          (s) => s.document.code !== s.document.saved,
+        );
+        if (!session) break;
+        const snapshot = { ...session.document };
         setSavedStatus("Saving…");
         try {
           await api.save({
@@ -175,9 +209,11 @@ export function App() {
             content: snapshot.code,
             expected: snapshot.saved,
           });
-          const current = documentRef.current;
-          if (current?.path === snapshot.path)
-            updateDocument({ ...current, saved: snapshot.code });
+          const current = sessionsRef.current.find((s) => s.id === session.id);
+          if (current)
+            patchSession(current.id, {
+              document: { ...current.document, saved: snapshot.code },
+            });
           setProject((currentProject) =>
             currentProject
               ? {
@@ -203,7 +239,7 @@ export function App() {
     } finally {
       saving.current = null;
     }
-  }, [updateDocument]);
+  }, [patchSession, sessionsRef]);
 
   const run = useCallback(async (action: () => Promise<void>) => {
     if (busyRef.current) return;
@@ -223,22 +259,25 @@ export function App() {
   const activateFile = useCallback(
     async (path: string) => {
       await flush();
+      const existing = sessionsRef.current.find(
+        (s) => s.document.path === path,
+      );
       const code = await api.read(path);
-      await player.current?.stop();
-      setPlayback({ started: false, pending: false });
-      setPosition([1, 1]);
+      if (existing && code !== existing.document.code)
+        players.current.get(existing.id)?.replaceCode(code);
       updateDocument({ path, code, saved: code });
       setSavedStatus("Saved locally");
     },
-    [flush, updateDocument],
+    [flush, updateDocument, sessionsRef, players],
   );
 
   const openFile = useCallback(
     async (path: string) => {
+      setWorkspaceView("editor");
       if (documentRef.current?.path === path) return;
       await run(() => activateFile(path));
     },
-    [activateFile, run],
+    [activateFile, run, documentRef],
   );
 
   const closeTab = useCallback(
@@ -251,16 +290,21 @@ export function App() {
           await flush();
           const next = remaining[Math.min(index, remaining.length - 1)];
           if (next) await activateFile(next);
-          else {
-            await player.current?.stop();
-            updateDocument(null);
-            setPlayback({ started: false, pending: false });
-          }
+          else updateDocument(null);
         }
+        await removeSessions([path]);
         updateTabs(remaining);
       });
     },
-    [activateFile, flush, run, updateDocument, updateTabs],
+    [
+      activateFile,
+      flush,
+      run,
+      updateDocument,
+      updateTabs,
+      removeSessions,
+      documentRef,
+    ],
   );
 
   const foreignSaves = useRef(new Map<string, Promise<void>>());
@@ -275,15 +319,33 @@ export function App() {
       path: string,
       transform: (code: string) => Edit | undefined,
     ): Promise<void> => {
+      const owner = sessionsRef.current.find(
+        (s) => s.document.path === documentRef.current?.path,
+      );
       const previous = foreignSaves.current.get(path) ?? Promise.resolve();
       const task = previous
         .catch(() => {})
         .then(async () => {
+          await flush();
           const code = await api.read(path);
           const edit = transform(code);
           if (!edit) return;
           const next = editSource(code, [edit]);
           await api.save({ path, content: next, expected: code });
+          const open = sessionsRef.current.find(
+            (s) => s.document.path === path,
+          );
+          if (open) {
+            players.current.get(open.id)?.replaceCode(next);
+            patchSession(open.id, {
+              document: { path, code: next, saved: next },
+            });
+            if (open.playback.started && open.id !== owner?.id)
+              void players.current
+                .get(open.id)
+                ?.play()
+                .catch((error) => setError(message(error)));
+          }
         });
 
       foreignSaves.current.set(path, task);
@@ -293,7 +355,15 @@ export function App() {
       const settle = (succeeded: boolean) => {
         if (foreignSaves.current.get(path) !== task) return;
         foreignSaves.current.delete(path);
-        if (succeeded && playbackRef.current.started) player.current?.play();
+        if (
+          succeeded &&
+          owner &&
+          sessionsRef.current.find((s) => s.id === owner.id)?.playback.started
+        )
+          void players.current
+            .get(owner.id)
+            ?.play()
+            .catch((error) => setError(message(error)));
       };
       task.then(
         () => settle(true),
@@ -302,11 +372,11 @@ export function App() {
 
       return task;
     },
-    [],
+    [documentRef, flush, patchSession, players, sessionsRef],
   );
 
   const saveForeign = useCallback(
-    (path: string, name: string, value: number | boolean): Promise<void> =>
+    (path: string, name: string, value: ControlChange): Promise<void> =>
       saveForeignEdit(path, (code) => changeControl(code, name, value)),
     [saveForeignEdit],
   );
@@ -357,17 +427,19 @@ export function App() {
   }, [updateDocument]);
 
   useEffect(() => {
-    if (!document || document.code === document.saved) return;
+    if (!sessions.some((s) => s.document.code !== s.document.saved)) return;
     const timer = setTimeout(() => {
       void flush().catch((error) => setError(message(error)));
     }, 650);
     return () => clearTimeout(timer);
-  }, [document, flush]);
+  }, [sessions, flush]);
 
   useEffect(() => {
     const protectPendingEdits = (event: BeforeUnloadEvent) => {
-      const current = documentRef.current;
-      if (!current || current.code === current.saved) return;
+      if (
+        !sessionsRef.current.some((s) => s.document.code !== s.document.saved)
+      )
+        return;
       event.preventDefault();
       event.returnValue = "";
       void flush().catch((error) => setError(message(error)));
@@ -375,7 +447,7 @@ export function App() {
     window.addEventListener("beforeunload", protectPendingEdits);
     return () =>
       window.removeEventListener("beforeunload", protectPendingEdits);
-  }, [flush]);
+  }, [flush, sessionsRef]);
 
   useEffect(
     () =>
@@ -388,6 +460,7 @@ export function App() {
           try {
             await flush();
             await Promise.all(foreignSaves.current.values());
+            await stopAll();
             if (selectedVersion && !recoveryBlockedRef.current) {
               try {
                 if (
@@ -400,11 +473,10 @@ export function App() {
                 await api.restoreVersion();
                 setSelectedVersion(null);
               } catch (error) {
-                blockRecovery();
+                await blockRecovery();
                 setError(message(error));
               }
             }
-            await player.current?.stop();
             api.finishClose();
           } catch (error) {
             api.cancelClose();
@@ -412,15 +484,15 @@ export function App() {
           }
         });
       }),
-    [blockRecovery, flush, run, selectedVersion],
+    [blockRecovery, flush, run, selectedVersion, stopAll],
   );
 
   const play = useCallback(() => {
     void player.current?.play().catch((error) => setError(message(error)));
-  }, []);
+  }, [player]);
   const stop = useCallback(() => {
     void player.current?.stop();
-  }, []);
+  }, [player]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -428,8 +500,10 @@ export function App() {
       if (event.key === "," || event.code === "Comma") {
         event.preventDefault();
         event.stopPropagation();
-        if (!event.repeat && !busyRef.current && !modal)
+        if (!event.repeat && !busyRef.current && !modal) {
+          setWorkspaceView("editor");
           player.current?.assist();
+        }
         return;
       }
       if (
@@ -441,7 +515,9 @@ export function App() {
       if (event.key === "w") {
         event.preventDefault();
         event.stopPropagation();
-        if (documentRef.current) void closeTab(documentRef.current.path);
+        if (graphActive) closeGraph();
+        else if (controllerOpen) setWorkspaceView("editor");
+        else if (documentRef.current) void closeTab(documentRef.current.path);
         else api.close();
       }
       if (event.key === "s") {
@@ -451,12 +527,13 @@ export function App() {
       if (event.key === "Enter") {
         event.preventDefault();
         event.stopPropagation();
-        play();
+        if (!graphActive) play();
       }
-      if (event.key === ".") {
+      if (event.key === "." || event.code === "Period") {
         event.preventDefault();
         event.stopPropagation();
-        stop();
+        if (event.shiftKey || graphActive) void stopAll();
+        else stop();
       }
       if (event.key === "b") {
         event.preventDefault();
@@ -465,7 +542,19 @@ export function App() {
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [closeTab, flush, play, stop, modal]);
+  }, [
+    closeTab,
+    closeGraph,
+    graphActive,
+    controllerOpen,
+    flush,
+    play,
+    stop,
+    stopAll,
+    modal,
+    player,
+    documentRef,
+  ]);
 
   useEffect(() => {
     if (!context && !projectMenu) return;
@@ -485,8 +574,8 @@ export function App() {
   }, [context, projectMenu]);
 
   useEffect(() => {
-    if (!document) setControllerOpen(false);
-  }, [document]);
+    if (!document && controllerOpen) setWorkspaceView("editor");
+  }, [document, controllerOpen]);
 
   function showModal(next: Modal) {
     setContext(null);
@@ -508,11 +597,14 @@ export function App() {
   }
 
   async function syncDocument() {
-    const current = documentRef.current;
-    if (!current) return;
-    const code = await api.read(current.path);
-    if (code !== current.code) player.current?.replaceCode(code);
-    updateDocument({ ...current, code, saved: code });
+    for (const session of sessionsRef.current) {
+      const code = await api.read(session.document.path);
+      if (code !== session.document.code)
+        players.current.get(session.id)?.replaceCode(code);
+      patchSession(session.id, {
+        document: { ...session.document, code, saved: code },
+      });
+    }
     setSavedStatus("Saved locally");
   }
 
@@ -545,13 +637,7 @@ export function App() {
         isWithin(file, from) ? to + file.slice(from.length) : file,
       ),
     );
-    const current = documentRef.current;
-    if (current && isWithin(current.path, from)) {
-      updateDocument({
-        ...current,
-        path: to + current.path.slice(from.length),
-      });
-    }
+    renameSessions(from, to);
     setSelection(null);
     await syncDocument();
     await refresh();
@@ -568,20 +654,22 @@ export function App() {
             !window.confirm("Discard edits made in this version?")
           )
             return;
+          await removeSessions(tabsRef.current);
+          updateTabs([]);
+          updateDocument(null);
           await api.restoreVersion();
           setSelectedVersion(null);
           const restored = await api.current();
           setProject(restored);
           updateTabs([]);
           updateDocument(null);
-          setEditorVersion((version) => version + 1);
           const first = restored.entries.find((entry) => !entry.children);
           if (first) {
             const code = await api.read(first.id);
             updateDocument({ path: first.id, code, saved: code });
           }
         } catch (error) {
-          blockRecovery();
+          await blockRecovery();
           setError(message(error));
         }
       }
@@ -590,11 +678,12 @@ export function App() {
       recoveryBlockedRef.current = false;
       setRecoveryBlocked(false);
       setSelectedVersion(null);
-      await player.current?.stop();
+      await removeSessions(tabsRef.current);
       updateTabs([]);
       updateDocument(null);
-      setPlayback({ started: false, pending: false });
       setProject(next);
+      setGraphOpen(false);
+      setWorkspaceView("editor");
       setSearch("");
       setSelection(null);
       const first = next.entries.find((entry) => !entry.children);
@@ -615,14 +704,17 @@ export function App() {
         !window.confirm("Discard edits made in this version?")
       )
         return;
-      await player.current?.stop();
-      setPlayback({ started: false, pending: false });
+      await removeSessions(tabsRef.current);
+      updateTabs([]);
+      updateDocument(null);
+      setGraphOpen(false);
+      setWorkspaceView("editor");
       try {
         if (oid) await api.selectVersion(oid);
         else await api.restoreVersion();
       } catch (error) {
         if (await api.versionActive()) {
-          blockRecovery();
+          await blockRecovery();
           setSelectedVersion(oid ?? selectedVersion ?? "recovery");
         }
         throw error;
@@ -635,7 +727,6 @@ export function App() {
       updateTabs([]);
       updateDocument(null);
       setSelection(null);
-      setEditorVersion((version) => version + 1);
       const first = next.entries.find((entry) => !entry.children);
       if (first) {
         const code = await api.read(first.id);
@@ -672,7 +763,7 @@ export function App() {
         const path = await api.add(modal.parent, value, modal.folder);
         await refresh();
         if (!modal.folder) {
-          await player.current?.stop();
+          setWorkspaceView("editor");
           const code = await api.read(path);
           updateDocument({ path, code, saved: code });
         }
@@ -682,8 +773,15 @@ export function App() {
           const code = await api.read(current.path);
           await player.current?.stop();
           updateDocument({ path: current.path, code, saved: code });
-          setEditorVersion((version) => version + 1);
-          setPlayback({ started: false, pending: false });
+          const session = sessionsRef.current.find(
+            (s) => s.document.path === current.path,
+          );
+          if (session)
+            patchSession(session.id, {
+              version: session.version + 1,
+              playback: { started: false, pending: false },
+              position: [1, 1],
+            });
           setSavedStatus("Saved locally");
           setError(null);
         }
@@ -699,14 +797,15 @@ export function App() {
         const remaining = tabsRef.current.filter(
           (file) => !isWithin(file, modal.entry.id),
         );
-        updateTabs(remaining);
-        if (
+        const deletedActive =
           documentRef.current &&
-          isWithin(documentRef.current.path, modal.entry.id)
-        ) {
-          await player.current?.stop();
+          isWithin(documentRef.current.path, modal.entry.id);
+        await removeSessions(
+          tabsRef.current.filter((path) => !remaining.includes(path)),
+        );
+        updateTabs(remaining);
+        if (deletedActive) {
           updateDocument(null);
-          setPlayback({ started: false, pending: false });
           if (remaining.length) await activateFile(remaining[0]);
         }
         setSelection(null);
@@ -742,7 +841,8 @@ export function App() {
     <div
       className={classNames(styles.app, {
         [styles.sidebarHidden]: !sidebar,
-        [styles.controlsHidden]: !controlsVisible || controllerOpen,
+        [styles.controlsHidden]:
+          !controlsVisible || controllerOpen || graphActive,
       })}
     >
       <div className={styles.titlebar}>
@@ -772,21 +872,33 @@ export function App() {
                 path === document?.path
                   ? hasExports(document.code)
                   : Boolean(findEntry(project?.entries ?? [], path)?.exported),
-              dirty:
-                path === document?.path && document.code !== document.saved,
+              dirty: sessions.some(
+                (s) =>
+                  s.document.path === path &&
+                  s.document.code !== s.document.saved,
+              ),
+              playing: sessions.some(
+                (s) => s.document.path === path && s.playback.started,
+              ),
             }))}
             active={document?.path ?? null}
             disabled={busy}
             onSelect={(path) => {
-              setControllerOpen(false);
+              setWorkspaceView("editor");
               void openFile(path);
             }}
             onClose={(path) => void closeTab(path)}
+            graph={{
+              open: graphOpen,
+              active: graphActive,
+              onSelect: () => setWorkspaceView("graph"),
+              onClose: closeGraph,
+            }}
             controller={{
               open: controllerOpen,
               disabled: busy,
               onSelect: () => {},
-              onClose: () => setControllerOpen(false),
+              onClose: () => setWorkspaceView("editor"),
             }}
           />
           <button
@@ -794,7 +906,8 @@ export function App() {
             className={styles.iconButton}
             title="Toggle controls"
             aria-label="Toggle controls"
-            aria-expanded={controlsVisible}
+            aria-expanded={controlsVisible && !graphActive}
+            disabled={graphActive}
             onClick={() => setControlsVisible(!controlsVisible)}
           >
             {controlsVisible ? (
@@ -972,15 +1085,15 @@ export function App() {
           <div className={styles.sidebarBottom}>
             <button
               type="button"
-              className={styles.localProject}
-              onClick={() =>
-                void api.reveal().catch((error) => setError(message(error)))
-              }
-              title={project?.root}
+              className={styles.graphLink}
+              onClick={() => openGraph()}
+              disabled={!project || busy}
+              aria-label="Open Graph View"
+              aria-current={graphActive ? "page" : undefined}
             >
-              <HardDrive size={16} />
+              <Network size={16} />
               <span>
-                On your computer<small>Changes save automatically</small>
+                Graph View<small>Explore snippet dependencies</small>
               </span>
               <ArrowRight size={13} />
             </button>
@@ -1001,111 +1114,133 @@ export function App() {
         id="snippet-panel"
         role="tabpanel"
         aria-labelledby={
-          document ? `tab-${encodeURIComponent(document.path)}` : undefined
+          graphActive
+            ? "tab-graph"
+            : document
+              ? `tab-${encodeURIComponent(document.path)}`
+              : undefined
         }
-        aria-label={document ? undefined : "Snippet editor"}
+        aria-label={graphActive || document ? undefined : "Snippet editor"}
       >
-        <header
-          className={styles.editorToolbar}
-          role="toolbar"
-          aria-label="Snippet toolbar"
-        >
-          <div className={styles.fileHeading}>
-            {document ? (
-              <>
-                {controllerOpen ? (
-                  <SlidersHorizontal size={17} />
-                ) : hasExports(document.code) ? (
-                  <Package size={17} />
-                ) : (
-                  <FileCode2 size={17} />
-                )}
-                <div>
-                  <strong>{filename}</strong>
-                  <span>
-                    {project?.name}
-                    {parentPath(document.path)
-                      ? ` / ${parentPath(document.path)}`
-                      : ""}
-                  </span>
-                </div>
-              </>
-            ) : (
-              <span className={styles.muted}>Your next idea starts here</span>
-            )}
-          </div>
-          <div className={styles.transport}>
-            <button
-              type="button"
-              className={styles.iconButton}
-              aria-label="Ask Wien"
-              title={`Ask Wien (${shortcut} ,)`}
-              disabled={!document || busy}
-              onClick={() => player.current?.assist("bottom")}
-            >
-              <Sparkles size={16} />
-            </button>
-            <button
-              type="button"
-              className={classNames(styles.iconButton, styles.stopButton)}
-              title={`Stop (${shortcut} .)`}
-              aria-label="Stop playback"
-              disabled={!playback.started}
-              onClick={stop}
-            >
-              <Square size={14} fill="currentColor" />
-            </button>
-            <button
-              type="button"
-              className={styles.playButton}
-              disabled={!document || playback.pending || busy}
-              onClick={play}
-            >
-              {playback.pending ? (
-                <Loader2 size={14} className={styles.spin} />
+        {!graphActive && (
+          <header
+            className={styles.editorToolbar}
+            role="toolbar"
+            aria-label="Snippet toolbar"
+          >
+            <div className={styles.fileHeading}>
+              {document ? (
+                <>
+                  {controllerOpen ? (
+                    <SlidersHorizontal size={17} />
+                  ) : hasExports(document.code) ? (
+                    <Package size={17} />
+                  ) : (
+                    <FileCode2 size={17} />
+                  )}
+                  <div>
+                    <strong>{filename}</strong>
+                    <span>
+                      {project?.name}
+                      {parentPath(document.path)
+                        ? ` / ${parentPath(document.path)}`
+                        : ""}
+                    </span>
+                  </div>
+                </>
               ) : (
-                <Play size={13} fill="currentColor" />
+                <span className={styles.muted}>Your next idea starts here</span>
               )}
-              <span>{playback.started ? "Update" : "Play"}</span>
-              <kbd>{shortcut} ↵</kbd>
-            </button>
-            {controllerOpen && document ? (
-              <button
-                type="button"
-                className={styles.closeButton}
-                title="Close controls"
-                aria-label="Close controls"
-                onClick={() => setControllerOpen(false)}
-              >
-                <X size={15} />
-              </button>
-            ) : (
+            </div>
+            <div className={styles.transport}>
               <button
                 type="button"
                 className={styles.iconButton}
-                title="Snippet actions"
-                aria-label="Snippet actions"
+                aria-label="Ask Wien"
+                title={`Ask Wien (${shortcut} ,)`}
                 disabled={!document || busy}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  if (!document) return;
-                  const rect = event.currentTarget.getBoundingClientRect();
-                  setContext({
-                    entry: {
-                      id: document.path,
-                      name: filename ?? document.path,
-                      exported: hasExports(document.code),
-                    },
-                    x: rect.right - 220,
-                    y: rect.bottom + 8,
-                  });
+                onClick={() => {
+                  setWorkspaceView("editor");
+                  player.current?.assist("bottom");
                 }}
               >
-                <MoreHorizontal size={18} />
+                <Sparkles size={16} />
               </button>
-            )}
-          </div>
-        </header>
+              <button
+                type="button"
+                className={classNames(styles.iconButton, styles.stopButton)}
+                title={`Stop (${shortcut} .)`}
+                aria-label="Stop playback"
+                disabled={!playback.started}
+                onClick={stop}
+              >
+                <Square size={14} fill="currentColor" />
+              </button>
+              {sessions.some(
+                (s) => s.playback.started && s.document.path !== document?.path,
+              ) && (
+                <button
+                  type="button"
+                  className={styles.iconButton}
+                  aria-label="Stop all playback"
+                  title={`Stop all (${shortcut} ⇧ .)`}
+                  onClick={() => void stopAll()}
+                >
+                  <SquareX size={16} />
+                </button>
+              )}
+              <button
+                type="button"
+                className={styles.playButton}
+                disabled={!document || playback.pending || busy}
+                onClick={play}
+              >
+                {playback.pending ? (
+                  <Loader2 size={14} className={styles.spin} />
+                ) : (
+                  <Play size={13} fill="currentColor" />
+                )}
+                <span>{playback.started ? "Update" : "Play"}</span>
+                <kbd>{shortcut} ↵</kbd>
+              </button>
+              {controllerOpen && document ? (
+                <button
+                  type="button"
+                  className={styles.closeButton}
+                  title="Close controls"
+                  aria-label="Close controls"
+                  onClick={() => setWorkspaceView("editor")}
+                >
+                  <X size={15} />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className={styles.iconButton}
+                  title="Snippet actions"
+                  aria-label="Snippet actions"
+                  disabled={!document || busy}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    if (!document) return;
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    setContext({
+                      entry: {
+                        id: document.path,
+                        name: filename ?? document.path,
+                        exported: hasExports(document.code),
+                      },
+                      x: rect.right - 220,
+                      y: rect.bottom + 8,
+                    });
+                  }}
+                >
+                  <MoreHorizontal size={18} />
+                </button>
+              )}
+            </div>
+          </header>
+        )}
         {error && (
           <div role="alert" className={styles.errorBanner}>
             <span>{error}</span>
@@ -1128,60 +1263,81 @@ export function App() {
             </button>
           </div>
         )}
-        {/*
-    Keep <StrudelEditor /> mounted so `player.current.changeControl`
-    keeps working while the controller panel is on screen.
-    `display: contents` keeps the original flex layout intact.
-  */}
-        <div
-          style={{
-            display: controllerOpen && document ? "none" : "contents",
-          }}
-        >
-          {document ? (
+        {sessions.map((session) => (
+          <div
+            key={`${project?.root}/${session.id}/${session.version}`}
+            style={{
+              display:
+                session.document.path === document?.path &&
+                workspaceView === "editor"
+                  ? "contents"
+                  : "none",
+            }}
+          >
             <StrudelEditor
-              key={`${project?.root}/${document.path}/${editorVersion}`}
-              initialCode={document.code}
-              path={document.path}
+              initialCode={session.document.code}
+              path={session.document.path}
+              active={
+                session.document.path === document?.path &&
+                workspaceView === "editor"
+              }
               disabled={busy}
               onLink={(source) => void linkSnippet(source)}
               onChange={(code) => {
-                const current = documentRef.current;
+                const current = sessionsRef.current.find(
+                  (s) => s.id === session.id,
+                );
                 if (current) {
-                  updateDocument({ ...current, code });
+                  patchSession(current.id, {
+                    document: { ...current.document, code },
+                  });
                   setSavedStatus("Unsaved changes");
                 }
               }}
-              onState={setPlayback}
-              onReady={(next) => {
-                player.current = next;
-              }}
-              onPosition={(line, column) => setPosition([line, column])}
+              onState={(playback) => patchSession(session.id, { playback })}
+              onReady={(next) => setPlayer(session.id, next)}
+              onPosition={(line, column) =>
+                patchSession(session.id, { position: [line, column] })
+              }
             />
-          ) : (
-            <div className={styles.emptyState}>
-              <div className={styles.emptyIcon}>
-                <Code2 size={30} strokeWidth={1.2} />
-              </div>
-              <h1>Make room for a little music.</h1>
-              <p>
-                Open a snippet, or start with a few notes.
-                <br />
-                There’s no wrong place to begin.
-              </p>
-              <button
-                type="button"
-                className={styles.primaryButton}
-                onClick={() =>
-                  showModal({ kind: "create", parent: "", folder: false })
-                }
-              >
-                <Plus size={15} />
-                New snippet
-              </button>
+          </div>
+        ))}
+        {!document && !graphActive && (
+          <div className={styles.emptyState}>
+            <div className={styles.emptyIcon}>
+              <Code2 size={30} strokeWidth={1.2} />
             </div>
-          )}
-        </div>
+            <h1>Make room for a little music.</h1>
+            <p>
+              Open a snippet, or start with a few notes.
+              <br />
+              There’s no wrong place to begin.
+            </p>
+            <button
+              type="button"
+              className={styles.primaryButton}
+              onClick={() =>
+                showModal({ kind: "create", parent: "", folder: false })
+              }
+            >
+              <Plus size={15} />
+              New snippet
+            </button>
+          </div>
+        )}
+        {graphOpen && project && (
+          <div className={styles.graphPane} hidden={!graphActive}>
+            <GraphView
+              key={project.root}
+              project={project}
+              active={graphActive}
+              focus={graphFocus}
+              drafts={graphDrafts}
+              playingPaths={playingPaths}
+              onOpen={(path) => void openFile(path)}
+            />
+          </div>
+        )}
         {controllerOpen && document && (
           <ControllerPanel
             document={document}
@@ -1198,7 +1354,7 @@ export function App() {
             onError={setError}
           />
         )}
-        {playback.error && (
+        {!graphActive && playback.error && (
           <div className={styles.evaluationError} role="alert">
             <strong>Couldn’t run this code</strong>
             <span>{playback.error.message}</span>
@@ -1207,36 +1363,39 @@ export function App() {
             )}
           </div>
         )}
-        <footer className={styles.statusbar}>
-          <span
-            className={classNames({
-              [styles.saveError]: savedStatus === "Not saved",
-            })}
-          >
-            {savedStatus === "Saving…" ? (
-              <Loader2 size={12} className={styles.spin} />
-            ) : dirty ? (
-              <span className={styles.unsavedDot} />
-            ) : (
-              <Check size={12} />
-            )}
-            {savedStatus}
-          </span>
-          <div>
-            <span>
-              Ln {position[0]}, Col {position[1]}
+        {!graphActive && (
+          <footer className={styles.statusbar}>
+            <span
+              className={classNames({
+                [styles.saveError]: savedStatus === "Not saved",
+              })}
+            >
+              {savedStatus === "Saving…" ? (
+                <Loader2 size={12} className={styles.spin} />
+              ) : dirty ? (
+                <span className={styles.unsavedDot} />
+              ) : (
+                <Check size={12} />
+              )}
+              {savedStatus}
             </span>
-            <span>UTF-8</span>
-            <span className={styles.strudelBadge}>Strudel</span>
-          </div>
-        </footer>
+            <div>
+              <span>
+                Ln {position[0]}, Col {position[1]}
+              </span>
+              <span>UTF-8</span>
+              <span className={styles.strudelBadge}>Strudel</span>
+            </div>
+          </footer>
+        )}
       </main>
 
-      {controlsVisible && !controllerOpen && (
+      {controlsVisible && !controllerOpen && !graphActive && (
         <ControlsPanel
-          key={`${project?.root}/${document?.path}/${editorVersion}`}
+          key={`${project?.root}/${document?.path}`}
           controls={controlState.controls}
           valid={controlState.valid}
+          errors={controlState.errors}
           hasDocument={Boolean(document)}
           disabled={busy}
           onChange={(name, value) => player.current?.changeControl(name, value)}
@@ -1244,7 +1403,7 @@ export function App() {
           onMove={(name, targetName, placement) =>
             player.current?.moveControl(name, targetName, placement)
           }
-          onOpenController={() => setControllerOpen(true)}
+          onOpenController={() => setWorkspaceView("controls")}
         />
       )}
 
@@ -1255,6 +1414,10 @@ export function App() {
         >
           {!context.entry.children && (
             <>
+              <button type="button" onClick={() => openGraph(context.entry.id)}>
+                <Network size={14} />
+                View in Graph View
+              </button>
               <button
                 type="button"
                 onClick={() => void toggleExport(context.entry.id)}
@@ -1357,8 +1520,12 @@ export function App() {
                 <kbd>{shortcut} Enter</kbd>
               </div>
               <div>
-                <span>Stop playback</span>
+                <span>Stop current snippet</span>
                 <kbd>{shortcut} .</kbd>
+              </div>
+              <div>
+                <span>Stop all snippets</span>
+                <kbd>{shortcut} ⇧ .</kbd>
               </div>
               <div>
                 <span>Ask Wien</span>

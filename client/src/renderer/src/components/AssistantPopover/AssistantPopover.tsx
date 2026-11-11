@@ -11,6 +11,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { parseModule } from "../../../../shared/modules";
+import { AnimatedBorder } from "../AnimatedBorder/AnimatedBorder";
 import { MarkdownAnswer } from "../MarkdownAnswer/MarkdownAnswer";
 import styles from "./AssistantPopover.module.css";
 
@@ -245,12 +246,11 @@ export function AssistantPopover({
       data-assistant
       className={classNames(styles.panel, {
         [styles.closing]: !open,
-        [styles.thinking]: pending,
       })}
       style={{ ...position, height: open ? undefined : closingHeight }}
       aria-busy={pending}
     >
-      <span className={styles.rim} aria-hidden="true" />
+      <AnimatedBorder active={pending} className={styles.rim} />
       {(answer || error) && (
         <div
           className={classNames(styles.answer, { [styles.error]: !!error })}

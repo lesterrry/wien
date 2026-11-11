@@ -1,14 +1,13 @@
 import { X } from "lucide-react";
 import { useRef } from "react";
 import type { NumberControl } from "../../../../shared/controls";
+import { useNumericWheel } from "../../hooks/useNumericWheel";
 import styles from "./NumberKnob.module.css";
 
 const numberFormat = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 5,
   useGrouping: false,
 });
-
-const step = 0.01;
 
 export function NumberKnob({
   control,
@@ -21,15 +20,26 @@ export function NumberKnob({
   onChange: (name: string, value: number) => void;
   onIgnore?: (name: string) => void;
 }) {
-  const { name, value } = control;
+  const { name, value, integer } = control;
+  const step = integer ? 1 : 0.01;
+  const knob = useRef<HTMLButtonElement>(null);
   const drag = useRef<{
     x: number;
     y: number;
     value: number;
   } | null>(null);
   const change = (next: number) => {
-    if (Number.isFinite(next)) onChange(name, Number(next.toFixed(5)));
+    if (Number.isFinite(next))
+      onChange(name, integer ? Math.round(next) : Number(next.toFixed(5)));
   };
+  useNumericWheel({
+    target: knob,
+    value,
+    step,
+    disabled,
+    onChange: change,
+    isInteracting: () => drag.current !== null,
+  });
   return (
     <div className={styles.numberControl}>
       <div className={styles.controlHeading}>
@@ -51,13 +61,14 @@ export function NumberKnob({
       </div>
       <div className={styles.controlBody}>
         <button
+          ref={knob}
           type="button"
           role="spinbutton"
           className={styles.numberKnob}
           aria-label={`${name} knob`}
           aria-valuenow={value}
           disabled={disabled}
-          title="Drag up or right to increase · Shift for fine adjustment"
+          title="Drag up/right or scroll up to increase · Shift for precision · Alt for faster adjustment"
           onPointerDown={(event) => {
             if (event.button !== 0) return;
             event.preventDefault();
@@ -76,7 +87,7 @@ export function NumberKnob({
             change(
               start.value +
                 distance *
-                  step *
+                  (integer ? 0.1 : step) *
                   (event.shiftKey ? 0.1 : event.altKey ? 10 : 1),
             );
           }}
@@ -105,7 +116,7 @@ export function NumberKnob({
               value +
                 direction *
                   step *
-                  (event.shiftKey ? 0.1 : event.altKey ? 10 : 1),
+                  (event.altKey ? 10 : event.shiftKey && !integer ? 0.1 : 1),
             );
           }}
         >

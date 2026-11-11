@@ -1,0 +1,204 @@
+.graphView {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-background);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 80px;
+  padding: 0 27px;
+  color: var(--color-brand);
+}
+
+.toolbar > div {
+  flex: 1;
+}
+.toolbar strong {
+  display: block;
+  color: var(--color-primary);
+  font-size: 13px;
+  font-weight: 550;
+}
+.toolbar span {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--color-muted);
+}
+.iconButton {
+  composes: iconButton from "../../styles/common.module.css";
+}
+.spin {
+  composes: spin from "../../styles/common.module.css";
+}
+.canvas {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.canvas :global(.react-flow) {
+  --xy-background-color: var(--color-background);
+  --xy-controls-button-background-color-default: var(--color-surface-raised);
+  --xy-controls-button-background-color-hover-default: var(--color-hover);
+  --xy-controls-button-color-default: var(--color-secondary);
+  --xy-controls-button-color-hover-default: var(--color-primary);
+  --xy-controls-button-border-color-default: var(--color-border);
+  --xy-controls-box-shadow-default: 0 2px 12px #0002;
+  --xy-attribution-background-color-default: var(--color-surface);
+  --xy-edge-stroke-default: var(--color-brand);
+}
+
+.canvas :global(.react-flow__node:focus-visible) {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 4px;
+  border-radius: 12px;
+}
+.canvas :global(.react-flow__attribution a) {
+  color: var(--color-muted);
+}
+.canvas :global(.react-flow__handle) {
+  width: 7px;
+  height: 7px;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-brand);
+}
+
+.node {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 228px;
+  height: 82px;
+  padding: 16px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 12px;
+  background: var(--color-surface);
+  box-shadow: 0 3px 12px #0002;
+  color: var(--color-brand);
+}
+.node:hover {
+  background: var(--color-surface-raised);
+}
+.selected {
+  border-color: var(--color-brand);
+  background: var(--color-hover);
+  box-shadow:
+    0 0 0 3px var(--color-brand-glow),
+    0 4px 20px #0003;
+}
+.nodeText {
+  min-width: 0;
+  flex: 1;
+}
+.nodeText strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 550;
+}
+.nodeText span {
+  display: block;
+  margin-top: 7px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-muted);
+  font:
+    10px "SFMono-Regular",
+    Consolas,
+    monospace;
+}
+.issue {
+  border-style: dashed;
+}
+.issueIcon,
+.warning {
+  color: var(--color-warning);
+}
+.openNode {
+  width: 20px;
+  height: 24px;
+  padding: 0;
+  font-size: 17px;
+  color: var(--color-muted);
+}
+.openNode:hover {
+  color: var(--color-primary);
+}
+.legend {
+  font-size: 11px;
+  color: var(--color-muted);
+  background: var(--color-background);
+  padding: 7px 10px;
+  border-radius: 6px;
+  pointer-events: none;
+}
+.legend span {
+  color: var(--color-brand);
+  padding: 0 5px;
+}
+.details {
+  max-width: min(420px, 55%);
+  max-height: 160px;
+  overflow: auto;
+  padding: 12px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+  color: var(--color-secondary);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.details strong {
+  font-weight: 500;
+}
+.details p {
+  margin: 8px 0 0;
+  line-height: 1.5;
+}
+.empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--color-muted);
+  pointer-events: none;
+}
+.empty strong {
+  color: var(--color-secondary);
+  font-weight: 500;
+}
+.notice {
+  position: absolute;
+  top: 50px;
+  left: 24px;
+  right: 24px;
+  padding: 12px 16px;
+  color: var(--color-danger);
+  background: var(--color-surface);
+  border-radius: 8px;
+}
+.footer {
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 7px 22px;
+  border-top: 1px solid var(--color-border);
+  font-size: 10px;
+  color: var(--color-muted);
+}

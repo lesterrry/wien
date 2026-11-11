@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { _electron as electron } from "@playwright/test";
+import { _electron as electron, expect } from "@playwright/test";
 
 const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "wien-smoke-"));
 const environment = { ...process.env, WIEN_USER_DATA: temporary };
@@ -23,6 +23,12 @@ try {
   });
   const projectRoot = path.join(temporary, "projects", "First session");
   await page.getByLabel("Strudel code editor").waitFor();
+  await page
+    .getByRole("button", { name: "first-light.strudel", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Close controls-demo.strudel", exact: true })
+    .click();
   assert.match(
     await page.getByLabel("Strudel code editor").textContent(),
     /import glass from '\.\/instruments\/glass.strudel'/,
@@ -73,7 +79,7 @@ try {
     await page.waitForFunction(
       () =>
         document
-          .querySelector(".cm-content")
+          .querySelector('[aria-label="Strudel code editor"]')
           ?.getAttribute("contenteditable") === "true",
     );
     await code.click();
@@ -81,8 +87,8 @@ try {
     await page.keyboard.insertText(value);
     await page.waitForFunction(
       (expected) =>
-        document.querySelector(".cm-content")?.textContent ===
-        expected.replaceAll("\n", ""),
+        document.querySelector('[aria-label="Strudel code editor"]')
+          ?.textContent === expected.replaceAll("\n", ""),
       value,
     );
   }
@@ -98,7 +104,7 @@ try {
 
   console.log("Checking numeric controls and reactive audio");
   await replaceCode(`var gain = 0.2;
-let cutoff = 800;
+let cutoff = 800.0;
 const speed = (2 / 2);
 note("c3*8").s("sine").gain(gain).lpf(cutoff).fast(speed)`);
   const gainValue = page.getByLabel("gain value", { exact: true });
@@ -335,7 +341,7 @@ note("c3*8").s("sine").gain(gain)`);
     .click();
   await page.waitForFunction(() =>
     document
-      .querySelector(".cm-content")
+      .querySelector('[aria-label="Strudel code editor"]')
       ?.textContent.startsWith("export default "),
   );
   await page
@@ -348,7 +354,8 @@ note("c3*8").s("sine").gain(gain)`);
     .click();
   await page.waitForFunction(
     (expected) =>
-      document.querySelector(".cm-content")?.textContent === expected,
+      document.querySelector('[aria-label="Strudel code editor"]')
+        ?.textContent === expected,
     originalRoot,
   );
 
@@ -367,7 +374,7 @@ note("c3*8").s("sine").gain(gain)`);
   await glassFile.dragTo(code, { targetPosition: { x: 160, y: 15 } });
   await page.waitForFunction(() =>
     document
-      .querySelector(".cm-content")
+      .querySelector('[aria-label="Strudel code editor"]')
       ?.textContent.includes("import glass from './instruments/glass.strudel'"),
   );
   await page
@@ -434,7 +441,7 @@ note("c3*8").s("sine").gain(gain)`);
   );
   await page.waitForFunction(() =>
     document
-      .querySelector(".cm-content")
+      .querySelector('[aria-label="Strudel code editor"]')
       ?.textContent.includes("'./sketches/glass.strudel'"),
   );
   await fs.access(path.join(projectRoot, "sketches/glass.strudel"));
@@ -522,8 +529,10 @@ note("c3*8").s("sine").gain(gain)`);
   await assert.rejects(fs.access(path.join(projectRoot, "renamed-folder")));
   await page.reload();
   await page.getByLabel("Strudel code editor").waitFor();
-  assert.equal(
-    await page.getByLabel("Strudel code editor").textContent(),
+  await page
+    .getByRole("button", { name: "first-light.strudel", exact: true })
+    .click();
+  await expect(page.getByLabel("Strudel code editor")).toHaveText(
     'note("c3 e3 g3").s("triangle").gain(0.2)',
   );
   await replaceCode('note("f4").s("triangle")');
