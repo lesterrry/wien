@@ -24,13 +24,14 @@ import {
   Plus,
   RefreshCw,
   Search,
+  SlidersHorizontal,
   Square,
   Trash2,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { readControls } from "../../../../shared/controls";
-import { hasExports } from "../../../../shared/modules";
+import { changeControl, readControls } from "../../../../shared/controls";
+import { editSource, hasExports } from "../../../../shared/modules";
 import {
   type Entry,
   isWithin,
@@ -38,6 +39,7 @@ import {
   type Project,
   parentPath,
 } from "../../../../shared/types";
+import { ControllerPanel } from "../ControllerPanel/ControllerPanel";
 import { ControlsPanel } from "../ControlsPanel/ControlsPanel";
 import { Dialog } from "../Dialog/Dialog";
 import { Explorer } from "../Explorer/Explorer";
@@ -118,6 +120,11 @@ export function App() {
   const [value, setValue] = useState("");
   const [modalError, setModalError] = useState<string | null>(null);
   const [position, setPosition] = useState([1, 1]);
+  const [controllerOpen, setControllerOpen] = useState(false);
+  const playbackRef = useRef(playback);
+  useEffect(() => {
+    playbackRef.current = playback;
+  }, [playback]);
 
   const updateTabs = useCallback((next: string[]) => {
     tabsRef.current = next;
@@ -237,6 +244,43 @@ export function App() {
     [activateFile, flush, run, updateDocument, updateTabs],
   );
 
+  const foreignSaves = useRef(new Map<string, Promise<void>>());
+
+  const saveForeign = useCallback(
+    (path: string, name: string, value: number | boolean): Promise<void> => {
+      // Serialize per file. Two concurrent read-then-save calls would
+      // otherwise both compute `expected` from the same disk snapshot,
+      // and the second would fail with "This file changed on disk".
+      const previous = foreignSaves.current.get(path) ?? Promise.resolve();
+      const task = previous
+        .catch(() => {})
+        .then(async () => {
+          const code = await api.read(path);
+          const edit = changeControl(code, name, value);
+          if (!edit) return;
+          const next = editSource(code, [edit]);
+          await api.save({ path, content: next, expected: code });
+        });
+
+      foreignSaves.current.set(path, task);
+
+      // Only the last queued save in a batch needs to trigger a re-evaluation;
+      // intermediate knob values would otherwise spam `play()`.
+      const settle = (succeeded: boolean) => {
+        if (foreignSaves.current.get(path) !== task) return;
+        foreignSaves.current.delete(path);
+        if (succeeded && playbackRef.current.started) player.current?.play();
+      };
+      task.then(
+        () => settle(true),
+        () => settle(false),
+      );
+
+      return task;
+    },
+    [],
+  );
+
   useEffect(() => {
     void api
       .current()
@@ -348,6 +392,10 @@ export function App() {
       window.removeEventListener("keydown", handleEscape);
     };
   }, [context, projectMenu]);
+
+  useEffect(() => {
+    if (!document) setControllerOpen(false);
+  }, [document]);
 
   function showModal(next: Modal) {
     setContext(null);
@@ -519,7 +567,7 @@ export function App() {
     <div
       className={classNames(styles.app, {
         [styles.sidebarHidden]: !sidebar,
-        [styles.controlsHidden]: !controlsVisible,
+        [styles.controlsHidden]: !controlsVisible || controllerOpen,
       })}
     >
       <div className={styles.titlebar}>
@@ -554,8 +602,17 @@ export function App() {
             }))}
             active={document?.path ?? null}
             disabled={busy}
-            onSelect={(path) => void openFile(path)}
+            onSelect={(path) => {
+              setControllerOpen(false);
+              void openFile(path);
+            }}
             onClose={(path) => void closeTab(path)}
+            controller={{
+              open: controllerOpen,
+              disabled: busy,
+              onSelect: () => {},
+              onClose: () => setControllerOpen(false),
+            }}
           />
           <button
             type="button"
@@ -763,7 +820,9 @@ export function App() {
           <div className={styles.fileHeading}>
             {document ? (
               <>
-                {hasExports(document.code) ? (
+                {controllerOpen ? (
+                  <SlidersHorizontal size={17} />
+                ) : hasExports(document.code) ? (
                   <Package size={17} />
                 ) : (
                   <FileCode2 size={17} />
@@ -807,32 +866,43 @@ export function App() {
               <span>{playback.started ? "Update" : "Play"}</span>
               <kbd>{shortcut} ↵</kbd>
             </button>
-            <button
-              type="button"
-              className={styles.iconButton}
-              title="Snippet actions"
-              aria-label="Snippet actions"
-              disabled={!document || busy}
-              onClick={(event) => {
-                event.stopPropagation();
-                if (!document) return;
-                const rect = event.currentTarget.getBoundingClientRect();
-                setContext({
-                  entry: {
-                    id: document.path,
-                    name: filename ?? document.path,
-                    exported: hasExports(document.code),
-                  },
-                  x: rect.right - 220,
-                  y: rect.bottom + 8,
-                });
-              }}
-            >
-              <MoreHorizontal size={18} />
-            </button>
+            {controllerOpen && document ? (
+              <button
+                type="button"
+                className={styles.closeButton}
+                title="Close controls"
+                aria-label="Close controls"
+                onClick={() => setControllerOpen(false)}
+              >
+                <X size={15} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                className={styles.iconButton}
+                title="Snippet actions"
+                aria-label="Snippet actions"
+                disabled={!document || busy}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (!document) return;
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  setContext({
+                    entry: {
+                      id: document.path,
+                      name: filename ?? document.path,
+                      exported: hasExports(document.code),
+                    },
+                    x: rect.right - 220,
+                    y: rect.bottom + 8,
+                  });
+                }}
+              >
+                <MoreHorizontal size={18} />
+              </button>
+            )}
           </div>
         </header>
-
         {error && (
           <div role="alert" className={styles.errorBanner}>
             <span>{error}</span>
@@ -855,48 +925,71 @@ export function App() {
             </button>
           </div>
         )}
-        {document ? (
-          <StrudelEditor
-            key={`${project?.root}/${document.path}/${editorVersion}`}
-            initialCode={document.code}
-            path={document.path}
-            disabled={busy}
-            onLink={(source) => void linkSnippet(source)}
-            onChange={(code) => {
-              const current = documentRef.current;
-              if (current) {
-                updateDocument({ ...current, code });
-                setSavedStatus("Unsaved changes");
-              }
-            }}
-            onState={setPlayback}
-            onReady={(next) => {
-              player.current = next;
-            }}
-            onPosition={(line, column) => setPosition([line, column])}
-          />
-        ) : (
-          <div className={styles.emptyState}>
-            <div className={styles.emptyIcon}>
-              <Code2 size={30} strokeWidth={1.2} />
+        {/*
+    Keep <StrudelEditor /> mounted so `player.current.changeControl`
+    keeps working while the controller panel is on screen.
+    `display: contents` keeps the original flex layout intact.
+  */}
+        <div
+          style={{
+            display: controllerOpen && document ? "none" : "contents",
+          }}
+        >
+          {document ? (
+            <StrudelEditor
+              key={`${project?.root}/${document.path}/${editorVersion}`}
+              initialCode={document.code}
+              path={document.path}
+              disabled={busy}
+              onLink={(source) => void linkSnippet(source)}
+              onChange={(code) => {
+                const current = documentRef.current;
+                if (current) {
+                  updateDocument({ ...current, code });
+                  setSavedStatus("Unsaved changes");
+                }
+              }}
+              onState={setPlayback}
+              onReady={(next) => {
+                player.current = next;
+              }}
+              onPosition={(line, column) => setPosition([line, column])}
+            />
+          ) : (
+            <div className={styles.emptyState}>
+              <div className={styles.emptyIcon}>
+                <Code2 size={30} strokeWidth={1.2} />
+              </div>
+              <h1>Make room for a little music.</h1>
+              <p>
+                Open a snippet, or start with a few notes.
+                <br />
+                There’s no wrong place to begin.
+              </p>
+              <button
+                type="button"
+                className={styles.primaryButton}
+                onClick={() =>
+                  showModal({ kind: "create", parent: "", folder: false })
+                }
+              >
+                <Plus size={15} />
+                New snippet
+              </button>
             </div>
-            <h1>Make room for a little music.</h1>
-            <p>
-              Open a snippet, or start with a few notes.
-              <br />
-              There’s no wrong place to begin.
-            </p>
-            <button
-              type="button"
-              className={styles.primaryButton}
-              onClick={() =>
-                showModal({ kind: "create", parent: "", folder: false })
-              }
-            >
-              <Plus size={15} />
-              New snippet
-            </button>
-          </div>
+          )}
+        </div>
+        {controllerOpen && document && (
+          <ControllerPanel
+            document={document}
+            playback={playback}
+            disabled={busy}
+            onChange={(name, value) =>
+              player.current?.changeControl(name, value)
+            }
+            onForeignChange={saveForeign}
+            onError={setError}
+          />
         )}
         {playback.error && (
           <div className={styles.evaluationError} role="alert">
@@ -951,7 +1044,7 @@ export function App() {
         </footer>
       </main>
 
-      {controlsVisible && (
+      {controlsVisible && !controllerOpen && (
         <ControlsPanel
           key={`${project?.root}/${document?.path}/${editorVersion}`}
           controls={controlState.controls}
@@ -960,6 +1053,7 @@ export function App() {
           disabled={busy}
           onChange={(name, value) => player.current?.changeControl(name, value)}
           onIgnore={(name) => player.current?.ignoreControl(name)}
+          onOpenController={() => setControllerOpen(true)}
         />
       )}
 

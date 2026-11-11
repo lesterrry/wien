@@ -1,4 +1,4 @@
-import { SlidersHorizontal } from "lucide-react";
+import { Maximize2, SlidersHorizontal } from "lucide-react";
 import type { Control } from "../../../../shared/controls";
 import { BooleanSwitch } from "../BooleanSwitch/BooleanSwitch";
 import { NumberKnob } from "../NumberKnob/NumberKnob";
@@ -11,6 +11,7 @@ export function ControlsPanel({
   disabled,
   onChange,
   onIgnore,
+  onOpenController,
 }: {
   controls: Control[];
   valid: boolean;
@@ -18,6 +19,7 @@ export function ControlsPanel({
   disabled: boolean;
   onChange: (name: string, value: number | boolean) => void;
   onIgnore: (name: string) => void;
+  onOpenController: () => void;
 }) {
   const hasNumber = controls.some((control) => control.kind === "number");
   const hasBoolean = controls.some((control) => control.kind === "boolean");
@@ -27,6 +29,16 @@ export function ControlsPanel({
         <SlidersHorizontal size={14} />
         <span>Controls</span>
         <small>{controls.length}</small>
+        <button
+          type="button"
+          className={styles.controllerButton}
+          title="Open full controls"
+          aria-label="Open full controls"
+          disabled={!hasDocument || !valid || disabled}
+          onClick={onOpenController}
+        >
+          <Maximize2 size={13} />
+        </button>
       </div>
       <div className={styles.controlsList}>
         {controls.map((control) =>
