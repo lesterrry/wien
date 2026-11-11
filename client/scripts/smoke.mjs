@@ -43,7 +43,9 @@ try {
   // Listen to the audio graph without sending test audio to the speakers.
   console.log("Starting playback");
   await page.getByRole("button", { name: /^Play/ }).click();
-  await page.getByText("Playing", { exact: true }).waitFor({ timeout: 20000 });
+  await page
+    .getByRole("button", { name: /^Update/ })
+    .waitFor({ timeout: 20000 });
   const signal = await page.evaluate(async () => {
     const output = window.getSuperdoughAudioController().output;
     const meter = window.getAudioContext().createAnalyser();
@@ -98,7 +100,7 @@ try {
   await page.getByRole("button", { name: /^Update/ }).click();
   await page.getByText("Couldn’t run this code").waitFor({ state: "hidden" });
   await page.getByRole("button", { name: "Stop playback" }).click();
-  await page.getByText("Ready when you are").waitFor();
+  await page.getByRole("button", { name: /^Play/ }).waitFor();
 
   console.log("Checking numeric controls and reactive audio");
   await replaceCode(`var gain = 0.2;
@@ -144,7 +146,7 @@ note("c3*8").s("sine").gain(gain).lpf(cutoff).fast(speed)`);
   await cutoffKnob.press("Alt+ArrowUp");
   assert.equal(await cutoffKnob.getAttribute("aria-valuenow"), "800.461");
   await page.getByRole("button", { name: /^Play/ }).click();
-  await page.getByText("Playing", { exact: true }).waitFor();
+  await page.getByRole("button", { name: /^Update/ }).waitFor();
   await page.waitForFunction(() => window.getTime() > 0.3);
   const cycleBefore = await page.evaluate(() => window.getTime());
   for (let i = 0; i < 15; i++) await gainKnob.press("ArrowDown");
@@ -399,7 +401,7 @@ note("c3*8").s("sine").gain(gain)`);
     "import glass from './instruments/glass.strudel'\nsetcpm(108 / 4)\nglass",
   );
   await page.getByRole("button", { name: /^Play/ }).click();
-  await page.getByText("Playing", { exact: true }).waitFor();
+  await page.getByRole("button", { name: /^Update/ }).waitFor();
   const importedSignal = await page.evaluate(async () => {
     const meter = window.__meters[0];
     let peak = 0;
@@ -445,7 +447,7 @@ note("c3*8").s("sine").gain(gain)`);
   await fs.access(path.join(projectRoot, "sketches/glass.strudel"));
   await assert.rejects(fs.access(glassPath));
   await page.getByRole("button", { name: /^Play/ }).click();
-  await page.getByText("Playing", { exact: true }).waitFor();
+  await page.getByRole("button", { name: /^Update/ }).waitFor();
   await page.getByRole("button", { name: "Stop playback" }).click();
   await replaceCode(originalRoot);
   await page.screenshot({ path: path.join(temporary, "linked-workspace.png") });

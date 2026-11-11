@@ -68,7 +68,9 @@ try {
     .poll(() => fs.readFile(path.join(projectRoot, "shared.strudel"), "utf8"))
     .toContain("level = 0.41");
   await page.getByRole("button", { name: /^Play/ }).click();
-  await page.getByText("Playing", { exact: true }).waitFor();
+  await expect(
+    page.getByRole("button", { name: "Stop playback" }),
+  ).toBeEnabled();
   await page.waitForFunction(() =>
     window
       .getPattern()
@@ -182,6 +184,36 @@ try {
   await expect
     .poll(() => fs.readFile(path.join(projectRoot, "master.strudel"), "utf8"))
     .toContain("gain = 0.51");
+  const enabledRow = panel
+    .getByRole("group", { name: "enabled control", exact: true })
+    .first();
+  await enabledRow.focus();
+  await enabledRow.press("Alt+ArrowDown");
+  await expect
+    .poll(async () => {
+      const source = await fs.readFile(
+        path.join(projectRoot, "shared.strudel"),
+        "utf8",
+      );
+      return source.indexOf("const level") < source.indexOf("const enabled");
+    })
+    .toBe(true);
+  await panel
+    .getByRole("button", { name: "Open full controls", exact: true })
+    .click();
+  await expect(panel).toHaveCount(0);
+  await page
+    .getByRole("spinbutton", { name: "level knob", exact: true })
+    .press("ArrowUp");
+  await expect
+    .poll(() => fs.readFile(path.join(projectRoot, "shared.strudel"), "utf8"))
+    .toContain("level = 0.43");
+  await page
+    .getByRole("button", { name: "Close controls", exact: true })
+    .click();
+  await expect(panel.getByLabel("level value", { exact: true })).toHaveText(
+    "0.43",
+  );
   await page.screenshot({ path: path.join(temporary, "grouped-controls.png") });
   assert.deepEqual(errors, []);
   console.log(

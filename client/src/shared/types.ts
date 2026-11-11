@@ -1,3 +1,4 @@
+import type { AssistRequest, AssistResponse } from "./assistant";
 import type { ModuleGraph } from "./modules";
 
 export interface Entry {
@@ -20,6 +21,8 @@ export interface SaveRequest {
 }
 
 export interface WorkspaceApi {
+  assist(id: string, request: AssistRequest): Promise<AssistResponse>;
+  cancelAssist(id: string): void;
   current(): Promise<Project>;
   open(): Promise<Project | null>;
   create(): Promise<Project | null>;
@@ -32,6 +35,7 @@ export interface WorkspaceApi {
   move(from: string, to: string): Promise<void>;
   trash(path: string): Promise<void>;
   reveal(): Promise<void>;
+  openExternalLink(url: string): Promise<void>;
   close(): void;
   onBeforeClose(callback: () => void): () => void;
   finishClose(): void;

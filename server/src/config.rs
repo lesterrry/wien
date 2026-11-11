@@ -2,19 +2,26 @@ use std::{fmt, path::Path};
 
 use serde::Deserialize;
 
+use crate::assistant::AssistantConfig;
 use crate::providers::ProviderKind;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub provider: ProviderKind,
+    #[serde(default)]
+    pub assistant: AssistantConfig,
 }
 
 impl Config {
     pub fn load(path: &Path) -> Result<Self, ConfigError> {
         let source = std::fs::read_to_string(path).map_err(|_| ConfigError::Read)?;
         // Do not expose TOML snippets: an accidentally pasted credential must not reach logs.
-        toml::from_str(&source).map_err(|_| ConfigError::Invalid)
+        let config: Self = toml::from_str(&source).map_err(|_| ConfigError::Invalid)?;
+        if config.assistant.model.trim().is_empty() || config.assistant.model.len() > 200 {
+            return Err(ConfigError::Invalid);
+        }
+        Ok(config)
     }
 }
 
@@ -31,7 +38,7 @@ impl fmt::Display for ConfigError {
                 "Cannot read server config. Check server/config.toml or WIEN_SERVER_CONFIG."
             }
             Self::Invalid => {
-                "Invalid server TOML config. Expected provider = \"codex\" and no unknown fields."
+                "Invalid server TOML config. Expected provider = \"codex\", an optional assistant.model, and no unknown fields."
             }
         })
     }

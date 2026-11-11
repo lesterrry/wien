@@ -333,57 +333,6 @@
   color: var(--color-secondary);
 }
 
-.playbackStrip {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin: 16px 27px 0;
-  padding: 15px 0 20px;
-  border-top: 1px solid var(--color-border);
-  font-size: 11px;
-  color: var(--color-muted);
-}
-
-.playbackState {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  white-space: nowrap;
-}
-
-.statusDot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--color-muted);
-}
-
-.playing {
-  color: var(--color-brand);
-}
-
-.playing .statusDot {
-  background: var(--color-brand);
-  box-shadow: 0 0 8px var(--color-brand-glow);
-}
-
-.playingFile {
-  color: var(--color-muted);
-  margin-left: 3px;
-}
-
-.keyboardHint {
-  color: var(--color-muted);
-  font-size: 10px;
-}
-
-.keyboardHint kbd {
-  margin-left: 12px;
-  font-size: 10px;
-  color: var(--color-muted);
-}
-
 .statusbar {
   height: 30px;
   flex-shrink: 0;
@@ -568,9 +517,6 @@
 }
 
 @media (max-width: 1050px) {
-  .keyboardHint {
-    display: none;
-  }
   .app {
     --sidebar-width: 235px;
   }

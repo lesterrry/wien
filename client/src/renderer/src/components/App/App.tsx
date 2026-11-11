@@ -24,6 +24,8 @@ import {
   Plus,
   RefreshCw,
   Search,
+  SlidersHorizontal,
+  Sparkles,
   Square,
   Trash2,
   X,
@@ -38,9 +40,10 @@ import {
 import {
   changeControl,
   ignoreControl,
+  moveControl,
   readControls,
 } from "../../../../shared/controls";
-import { editSource, hasExports } from "../../../../shared/modules";
+import { type Edit, editSource, hasExports } from "../../../../shared/modules";
 import {
   type Entry,
   isWithin,
@@ -48,6 +51,7 @@ import {
   type Project,
   parentPath,
 } from "../../../../shared/types";
+import { ControllerPanel } from "../ControllerPanel/ControllerPanel";
 import { ControlsPanel } from "../ControlsPanel/ControlsPanel";
 import { Dialog } from "../Dialog/Dialog";
 import { Explorer } from "../Explorer/Explorer";
@@ -117,6 +121,7 @@ export function App() {
     {},
   );
   const controlQueue = useRef(Promise.resolve());
+  const controlWrites = useRef(0);
   const liveUpdateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const navigationBack = useRef(new Map<string, string>());
   const [definitionTarget, setDefinitionTarget] = useState<{
@@ -152,6 +157,7 @@ export function App() {
   const [value, setValue] = useState("");
   const [modalError, setModalError] = useState<string | null>(null);
   const [position, setPosition] = useState([1, 1]);
+  const [controllerOpen, setControllerOpen] = useState(false);
 
   const updateTabs = useCallback((next: string[]) => {
     tabsRef.current = next;
@@ -284,6 +290,73 @@ export function App() {
     [activateFile, flush, run, updateDocument, updateTabs],
   );
 
+  function saveForeignEdit(
+    path: string,
+    transform: (code: string) => Edit | undefined,
+  ): Promise<void> {
+    controlWrites.current += 1;
+    const task = controlQueue.current.then(async () => {
+      const active = documentRef.current;
+      const code = active?.path === path ? active.code : await api.read(path);
+      const edit = transform(code);
+      if (!edit) return;
+      const next = editSource(code, [edit]);
+      if (active?.path === path) {
+        player.current?.replaceCode(next);
+        await flush();
+      } else {
+        await api.save({ path, content: next, expected: code });
+        players.current.get(path)?.replaceCode(next);
+        setEditors((current) =>
+          current[path]
+            ? { ...current, [path]: { path, code: next, saved: next } }
+            : current,
+        );
+      }
+      setTreeVersion((version) => version + 1);
+      scheduleLiveUpdate(path);
+    });
+    const settled = task.finally(() => {
+      controlWrites.current -= 1;
+      setTreeVersion((version) => version + 1);
+    });
+    controlQueue.current = settled.catch(() => {});
+    return settled;
+  }
+
+  function saveForeign(
+    path: string,
+    name: string,
+    value: number | boolean,
+  ): Promise<void> {
+    return saveForeignEdit(path, (code) => changeControl(code, name, value));
+  }
+
+  function saveForeignMove(
+    path: string,
+    name: string,
+    targetName: string,
+    placement: "before" | "after",
+  ): Promise<void> {
+    return saveForeignEdit(path, (code) =>
+      moveControl(code, name, targetName, placement),
+    );
+  }
+
+  function movePanelControl(
+    path: string,
+    name: string,
+    targetName: string,
+    placement: "before" | "after",
+  ) {
+    void saveForeignMove(path, name, targetName, placement).catch((error) =>
+      setControlErrors((current) => ({
+        ...current,
+        [JSON.stringify([path, name])]: message(error),
+      })),
+    );
+  }
+
   useEffect(() => {
     void api
       .current()
@@ -363,6 +436,19 @@ export function App() {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey)) return;
+      if (event.key === "," || event.code === "Comma") {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!event.repeat && !busyRef.current && !modal)
+          player.current?.assist();
+        return;
+      }
+      if (
+        event.target instanceof Element &&
+        event.target.closest("[data-assistant]") &&
+        event.key === "Enter"
+      )
+        return;
       if (event.key === "w") {
         event.preventDefault();
         event.stopPropagation();
@@ -390,7 +476,7 @@ export function App() {
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [closeTab, flush, play, stop]);
+  }, [closeTab, flush, play, stop, modal]);
 
   useEffect(() => {
     if (!context && !projectMenu) return;
@@ -408,6 +494,10 @@ export function App() {
       window.removeEventListener("keydown", handleEscape);
     };
   }, [context, projectMenu]);
+
+  useEffect(() => {
+    if (!document) setControllerOpen(false);
+  }, [document]);
 
   function showModal(next: Modal) {
     setContext(null);
@@ -639,7 +729,7 @@ export function App() {
           ? activeCode
           : api.read(path);
       }).then((tree) => {
-        if (!cancelled) {
+        if (!cancelled && controlWrites.current === 0) {
           setControlTree(tree);
           setTreeLoading(false);
         }
@@ -650,6 +740,29 @@ export function App() {
       clearTimeout(timer);
     };
   }, [panelRoot, treeRevision]);
+
+  function scheduleLiveUpdate(path: string) {
+    const playing = playingPath.current;
+    const running = playing ? players.current.get(playing) : undefined;
+    if (
+      !playing ||
+      !running?.dependsOn(path) ||
+      liveUpdateTimer.current !== null
+    )
+      return;
+    liveUpdateTimer.current = setTimeout(() => {
+      liveUpdateTimer.current = null;
+      void controlQueue.current
+        .then(async () => {
+          if (
+            playingPath.current === playing &&
+            players.current.get(playing) === running
+          )
+            await running.update();
+        })
+        .catch((error) => setError(message(error)));
+    }, 60);
+  }
 
   function editPanelControl(
     path: string,
@@ -674,6 +787,7 @@ export function App() {
       children: group.children.map(updateTree),
     });
     setControlTree((tree) => (tree ? updateTree(tree) : null));
+    controlWrites.current += 1;
     controlQueue.current = controlQueue.current.then(async () => {
       try {
         const current = documentRef.current;
@@ -713,34 +827,12 @@ export function App() {
           delete next[key];
           return next;
         });
-        const playing = playingPath.current;
-        const running = playing && players.current.get(playing);
-        if (
-          running &&
-          value !== undefined &&
-          running.dependsOn(path) &&
-          liveUpdateTimer.current === null
-        ) {
-          liveUpdateTimer.current = setTimeout(() => {
-            liveUpdateTimer.current = null;
-            void controlQueue.current
-              .then(async () => {
-                if (
-                  playingPath.current === playing &&
-                  players.current.get(playing) === running
-                )
-                  await running.update();
-              })
-              .catch((error) =>
-                setControlErrors((current) => ({
-                  ...current,
-                  [key]: message(error),
-                })),
-              );
-          }, 60);
-        }
+        if (value !== undefined) scheduleLiveUpdate(path);
       } catch (error) {
         setControlErrors((current) => ({ ...current, [key]: message(error) }));
+      } finally {
+        controlWrites.current -= 1;
+        setTreeVersion((version) => version + 1);
       }
     });
   }
@@ -771,7 +863,7 @@ export function App() {
     <div
       className={classNames(styles.app, {
         [styles.sidebarHidden]: !sidebar,
-        [styles.controlsHidden]: !controlsVisible,
+        [styles.controlsHidden]: !controlsVisible || controllerOpen,
       })}
     >
       <div className={styles.titlebar}>
@@ -806,8 +898,17 @@ export function App() {
             }))}
             active={document?.path ?? null}
             disabled={busy}
-            onSelect={(path) => void openFile(path)}
+            onSelect={(path) => {
+              setControllerOpen(false);
+              void openFile(path);
+            }}
             onClose={(path) => void closeTab(path)}
+            controller={{
+              open: controllerOpen,
+              disabled: busy,
+              onSelect: () => {},
+              onClose: () => setControllerOpen(false),
+            }}
           />
           <button
             type="button"
@@ -1015,7 +1116,9 @@ export function App() {
           <div className={styles.fileHeading}>
             {document ? (
               <>
-                {hasExports(document.code) ? (
+                {controllerOpen ? (
+                  <SlidersHorizontal size={17} />
+                ) : hasExports(document.code) ? (
                   <Package size={17} />
                 ) : (
                   <FileCode2 size={17} />
@@ -1035,6 +1138,16 @@ export function App() {
             )}
           </div>
           <div className={styles.transport}>
+            <button
+              type="button"
+              className={styles.iconButton}
+              aria-label="Ask Wien"
+              title={`Ask Wien (${shortcut} ,)`}
+              disabled={!document || busy}
+              onClick={() => player.current?.assist("bottom")}
+            >
+              <Sparkles size={16} />
+            </button>
             <button
               type="button"
               className={classNames(styles.iconButton, styles.stopButton)}
@@ -1063,32 +1176,43 @@ export function App() {
               </span>
               <kbd>{shortcut} ↵</kbd>
             </button>
-            <button
-              type="button"
-              className={styles.iconButton}
-              title="Snippet actions"
-              aria-label="Snippet actions"
-              disabled={!document || busy}
-              onClick={(event) => {
-                event.stopPropagation();
-                if (!document) return;
-                const rect = event.currentTarget.getBoundingClientRect();
-                setContext({
-                  entry: {
-                    id: document.path,
-                    name: filename ?? document.path,
-                    exported: hasExports(document.code),
-                  },
-                  x: rect.right - 220,
-                  y: rect.bottom + 8,
-                });
-              }}
-            >
-              <MoreHorizontal size={18} />
-            </button>
+            {controllerOpen && document ? (
+              <button
+                type="button"
+                className={styles.closeButton}
+                title="Close controls"
+                aria-label="Close controls"
+                onClick={() => setControllerOpen(false)}
+              >
+                <X size={15} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                className={styles.iconButton}
+                title="Snippet actions"
+                aria-label="Snippet actions"
+                disabled={!document || busy}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (!document) return;
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  setContext({
+                    entry: {
+                      id: document.path,
+                      name: filename ?? document.path,
+                      exported: hasExports(document.code),
+                    },
+                    x: rect.right - 220,
+                    y: rect.bottom + 8,
+                  });
+                }}
+              >
+                <MoreHorizontal size={18} />
+              </button>
+            )}
           </div>
         </header>
-
         {error && (
           <div role="alert" className={styles.errorBanner}>
             <span>{error}</span>
@@ -1118,12 +1242,15 @@ export function App() {
               key={`${project?.root}/${path}/${editorVersion}`}
               className={styles.editorSession}
               data-active={document?.path === path}
-              style={{ display: document?.path === path ? "flex" : "none" }}
+              style={{
+                display:
+                  !controllerOpen && document?.path === path ? "flex" : "none",
+              }}
             >
               <StrudelEditor
                 initialCode={editors[path].code}
                 path={path}
-                disabled={busy}
+                disabled={busy || document?.path !== path || controllerOpen}
                 onLink={(source) => void linkSnippet(source)}
                 onChange={(code) => {
                   const current = documentRef.current;
@@ -1177,6 +1304,22 @@ export function App() {
             </button>
           </div>
         )}
+        {controllerOpen && document && (
+          <ControllerPanel
+            document={document}
+            playback={playback}
+            disabled={busy}
+            onChange={(name, value) =>
+              editPanelControl(document.path, name, value)
+            }
+            onMove={(name, targetName, placement) =>
+              movePanelControl(document.path, name, targetName, placement)
+            }
+            onForeignChange={saveForeign}
+            onForeignMove={saveForeignMove}
+            onError={setError}
+          />
+        )}
         {playback.error && (
           <div className={styles.evaluationError} role="alert">
             <strong>Couldn’t run this code</strong>
@@ -1186,27 +1329,6 @@ export function App() {
             )}
           </div>
         )}
-        <div className={styles.playbackStrip}>
-          <div
-            className={classNames(styles.playbackState, {
-              [styles.playing]: playback.started,
-            })}
-          >
-            <span className={styles.statusDot} />
-            <span>{playback.started ? "Playing" : "Ready when you are"}</span>
-            {playback.started && (
-              <span className={styles.playingFile}>
-                {playingFile?.split("/").at(-1)}
-              </span>
-            )}
-          </div>
-          <span className={styles.keyboardHint}>
-            {playback.started
-              ? "Edit, then update to hear your changes"
-              : "A few notes can go a long way"}
-            <kbd>{shortcut} ↵</kbd>
-          </span>
-        </div>
         <footer className={styles.statusbar}>
           <span
             className={classNames({
@@ -1232,7 +1354,7 @@ export function App() {
         </footer>
       </main>
 
-      {controlsVisible && (
+      {controlsVisible && !controllerOpen && (
         <ControlsPanel
           key={`${project?.root}/${panelRoot}`}
           tree={controlTree?.path === panelRoot ? controlTree : null}
@@ -1258,6 +1380,8 @@ export function App() {
           onChange={editPanelControl}
           onIgnore={(path, name) => editPanelControl(path, name)}
           onDefinition={goToControl}
+          onMove={movePanelControl}
+          onOpenController={() => setControllerOpen(true)}
         />
       )}
 
@@ -1372,6 +1496,10 @@ export function App() {
               <div>
                 <span>Stop playback</span>
                 <kbd>{shortcut} .</kbd>
+              </div>
+              <div>
+                <span>Ask Wien</span>
+                <kbd>{shortcut} ,</kbd>
               </div>
               <div>
                 <span>Save now</span>

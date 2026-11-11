@@ -177,3 +177,78 @@
   margin: 0;
   border: 0;
 }
+
+.controllerButton {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+}
+
+.controllerButton:hover:not(:disabled) {
+  color: var(--color-primary);
+  background: var(--color-active);
+}
+
+.controllerButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.controlRow {
+  position: relative;
+  display: block;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0 0 0 2px;
+  border: 0;
+  min-width: 0;
+  min-inline-size: 0;
+  border-radius: 6px;
+  cursor: grab;
+}
+
+.controlRow > * {
+  flex: 1;
+  min-width: 0;
+}
+
+.controlRow:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
+
+.rowDragging {
+  opacity: 0.4;
+}
+
+.dropBefore::before,
+.dropAfter::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--color-brand);
+  pointer-events: none;
+}
+
+.dropBefore::before {
+  top: -3px;
+}
+
+.dropAfter::after {
+  bottom: -3px;
+}
+
+.dropForbidden {
+  cursor: not-allowed;
+}
