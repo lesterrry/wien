@@ -173,3 +173,87 @@
     transform: rotate(360deg);
   }
 }
+
+.controlRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 2px;
+  border-radius: 6px;
+}
+
+.controlRow > :not(.dragHandle) {
+  flex: 1;
+  min-width: 0;
+}
+
+.dragHandle {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: grab;
+  opacity: 0;
+  transition:
+    opacity 120ms ease,
+    color 120ms ease;
+}
+
+.controlRow:hover .dragHandle:not(:disabled),
+.dragHandle:focus-visible:not(:disabled) {
+  opacity: 1;
+}
+
+.dragHandle:hover:not(:disabled) {
+  color: var(--color-primary);
+  background: var(--color-hover);
+}
+
+.dragHandle:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 1px;
+}
+
+.dragHandle:active:not(:disabled) {
+  cursor: grabbing;
+}
+
+.dragHandle:disabled {
+  cursor: not-allowed;
+}
+
+.rowDragging {
+  opacity: 0.4;
+}
+
+.dropBefore::before,
+.dropAfter::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--color-brand);
+  pointer-events: none;
+}
+
+.dropBefore::before {
+  top: -3px;
+}
+
+.dropAfter::after {
+  bottom: -3px;
+}
+
+/* Cross-file hover: pointer feedback only — the row never becomes a
+   valid drop target, so there is no visual indicator line. */
+.dropForbidden .dragHandle {
+  cursor: not-allowed;
+}

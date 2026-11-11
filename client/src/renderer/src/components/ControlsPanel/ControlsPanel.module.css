@@ -81,3 +81,90 @@
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+.controlRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 2px;
+  border-radius: 6px;
+}
+
+.controlRow > :not(.dragHandle) {
+  flex: 1;
+  min-width: 0;
+}
+
+.dragHandle {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: grab;
+  opacity: 0;
+  transition:
+    opacity 120ms ease,
+    color 120ms ease;
+}
+
+/* Only reveal on hover/focus when the handle is actually usable. */
+.controlRow:hover .dragHandle:not(:disabled),
+.dragHandle:focus-visible:not(:disabled) {
+  opacity: 1;
+}
+
+.dragHandle:hover:not(:disabled) {
+  color: var(--color-primary);
+  background: var(--color-active);
+}
+
+.dragHandle:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 1px;
+}
+
+.dragHandle:active:not(:disabled) {
+  cursor: grabbing;
+}
+
+.dragHandle:disabled {
+  cursor: not-allowed;
+}
+
+/* The row being dragged fades so the drop indicator reads clearly. */
+.rowDragging {
+  opacity: 0.4;
+}
+
+/* 2px accent line above / below the row where the control will land. */
+.dropBefore::before,
+.dropAfter::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--color-brand);
+  pointer-events: none;
+}
+
+.dropBefore::before {
+  top: -3px;
+}
+
+.dropAfter::after {
+  bottom: -3px;
+}
+
+/* Used in ControllerPanel for cross-file hovers; the cursor makes the
+   "not allowed" state obvious without changing the row's layout. */
+.dropForbidden {
+  cursor: not-allowed;
+}

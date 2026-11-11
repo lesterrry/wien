@@ -1,8 +1,16 @@
-import { Maximize2, SlidersHorizontal } from "lucide-react";
+import classNames from "classnames";
+import { GripVertical, Maximize2, SlidersHorizontal } from "lucide-react";
+import { useState } from "react";
 import type { Control } from "../../../../shared/controls";
 import { BooleanSwitch } from "../BooleanSwitch/BooleanSwitch";
 import { NumberKnob } from "../NumberKnob/NumberKnob";
 import styles from "./ControlsPanel.module.css";
+
+type DragState = {
+  name: string;
+  over: string | null;
+  side: "before" | "after";
+};
 
 export function ControlsPanel({
   controls,
@@ -12,6 +20,7 @@ export function ControlsPanel({
   onChange,
   onIgnore,
   onOpenController,
+  onMove,
 }: {
   controls: Control[];
   valid: boolean;
@@ -20,7 +29,14 @@ export function ControlsPanel({
   onChange: (name: string, value: number | boolean) => void;
   onIgnore: (name: string) => void;
   onOpenController: () => void;
+  onMove: (
+    name: string,
+    targetName: string,
+    placement: "before" | "after",
+  ) => void;
 }) {
+  const [drag, setDrag] = useState<DragState | null>(null);
+
   return (
     <aside className={styles.controlsPanel} aria-label="Snippet controls">
       <div className={styles.controlsTitle}>
@@ -39,25 +55,102 @@ export function ControlsPanel({
         </button>
       </div>
       <div className={styles.controlsList}>
-        {controls.map((control) =>
-          control.kind === "number" ? (
-            <NumberKnob
+        {controls.map((control, index) => {
+          const isOver =
+            drag?.over === control.name && drag.name !== control.name;
+          return (
+            // biome-ignore lint/a11y/noStaticElementInteractions: this row is a pointer-only drop target; the drag handle button below provides the keyboard-accessible equivalent (Alt+↑ / Alt+↓).
+            <div
               key={control.name}
-              control={control}
-              disabled={disabled}
-              onChange={onChange}
-              onIgnore={onIgnore}
-            />
-          ) : (
-            <BooleanSwitch
-              key={control.name}
-              control={control}
-              disabled={disabled}
-              onChange={onChange}
-              onIgnore={onIgnore}
-            />
-          ),
-        )}
+              className={classNames(styles.controlRow, {
+                [styles.rowDragging]: drag?.name === control.name,
+                [styles.dropBefore]: isOver && drag?.side === "before",
+                [styles.dropAfter]: isOver && drag?.side === "after",
+              })}
+              onDragOver={(event) => {
+                if (!drag || drag.name === control.name) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+                const rect = event.currentTarget.getBoundingClientRect();
+                const side =
+                  event.clientY < rect.top + rect.height / 2
+                    ? "before"
+                    : "after";
+                setDrag({ ...drag, over: control.name, side });
+              }}
+              onDragLeave={(event) => {
+                const next = event.relatedTarget as Node | null;
+                if (next && event.currentTarget.contains(next)) return;
+                if (drag?.over === control.name)
+                  setDrag({ ...drag, over: null });
+              }}
+              onDrop={(event) => {
+                if (!drag || drag.name === control.name) return;
+                event.preventDefault();
+                const rect = event.currentTarget.getBoundingClientRect();
+                const side =
+                  event.clientY < rect.top + rect.height / 2
+                    ? "before"
+                    : "after";
+                onMove(drag.name, control.name, side);
+                setDrag(null);
+              }}
+            >
+              <button
+                type="button"
+                className={styles.dragHandle}
+                draggable={!disabled}
+                aria-label={`Reorder ${control.name}`}
+                title={`Reorder ${control.name} (Alt+↑ / Alt+↓)`}
+                onDragStart={(event) => {
+                  if (disabled) {
+                    event.preventDefault();
+                    return;
+                  }
+                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.setData("text/plain", control.name);
+                  setDrag({
+                    name: control.name,
+                    over: null,
+                    side: "before",
+                  });
+                }}
+                onDragEnd={() => setDrag(null)}
+                onKeyDown={(event) => {
+                  if (disabled || !event.altKey) return;
+                  if (event.key === "ArrowUp" && index > 0) {
+                    event.preventDefault();
+                    onMove(control.name, controls[index - 1].name, "before");
+                  }
+                  if (
+                    event.key === "ArrowDown" &&
+                    index < controls.length - 1
+                  ) {
+                    event.preventDefault();
+                    onMove(control.name, controls[index + 1].name, "after");
+                  }
+                }}
+              >
+                <GripVertical size={12} />
+              </button>
+              {control.kind === "number" ? (
+                <NumberKnob
+                  control={control}
+                  disabled={disabled}
+                  onChange={onChange}
+                  onIgnore={onIgnore}
+                />
+              ) : (
+                <BooleanSwitch
+                  control={control}
+                  disabled={disabled}
+                  onChange={onChange}
+                  onIgnore={onIgnore}
+                />
+              )}
+            </div>
+          );
+        })}
         {!controls.length && (
           <div className={styles.controlsEmpty}>
             <p>
