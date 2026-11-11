@@ -201,7 +201,7 @@ try {
   await expect(dialog).toBeHidden();
   await expect(code).toHaveText('note("c2")');
 
-  // Navigation unmounts the assistant and cancels its request.
+  // Navigation hides the editor and cancels its assistant request.
   await page.keyboard.press(`${mod}+,`);
   await input.fill("Wait for navigation");
   await input.press("Enter");
@@ -212,6 +212,10 @@ try {
     .click();
   await expect(dialog).toBeHidden();
   afterSwitch({ message: "Wrong tab.", code: edited });
+  await expect(
+    page.getByRole("tab", { name: "instruments/glass.strudel", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await expect(code).toBeEditable();
   await expect(code).not.toHaveText(edited.replaceAll("\n", ""));
 
   await code.click();

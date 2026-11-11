@@ -1,4 +1,3 @@
-import type { ReplState } from "@strudel/codemirror";
 import classNames from "classnames";
 import {
   ArrowDownToLine,
@@ -27,6 +26,7 @@ import {
   SlidersHorizontal,
   Sparkles,
   Square,
+  SquareX,
   Trash2,
   X,
 } from "lucide-react";
@@ -40,19 +40,18 @@ import {
   type Project,
   parentPath,
 } from "../../../../shared/types";
+import {
+  type Document,
+  useSnippetSessions,
+} from "../../hooks/useSnippetSessions";
 import { ControllerPanel } from "../ControllerPanel/ControllerPanel";
 import { ControlsPanel } from "../ControlsPanel/ControlsPanel";
 import { Dialog } from "../Dialog/Dialog";
 import { Explorer } from "../Explorer/Explorer";
 import { FileTabs } from "../FileTabs/FileTabs";
-import { type Player, StrudelEditor } from "../StrudelEditor/StrudelEditor";
+import { StrudelEditor } from "../StrudelEditor/StrudelEditor";
 import styles from "./App.module.css";
 
-interface Document {
-  path: string;
-  code: string;
-  saved: string;
-}
 type Modal =
   | { kind: "create"; parent: string; folder: boolean }
   | { kind: "rename"; entry: Entry }
@@ -91,18 +90,26 @@ const message = (error: unknown) =>
   );
 
 export function App() {
-  const [editorVersion, setEditorVersion] = useState(0);
   const [project, setProject] = useState<Project | null>(null);
-  const [document, setDocument] = useState<Document | null>(null);
+  const {
+    sessions,
+    sessionsRef,
+    document,
+    documentRef,
+    playback,
+    position,
+    player,
+    players,
+    updateDocument: selectDocument,
+    patchSession,
+    setPlayer,
+    removeSessions,
+    renameSessions,
+    stopAll,
+  } = useSnippetSessions();
   const [tabs, setTabs] = useState<string[]>([]);
   const tabsRef = useRef<string[]>([]);
-  const documentRef = useRef<Document | null>(null);
   const saving = useRef<Promise<void> | null>(null);
-  const player = useRef<Player | null>(null);
-  const [playback, setPlayback] = useState<ReplState>({
-    started: false,
-    pending: false,
-  });
   const [savedStatus, setSavedStatus] = useState("Saved locally");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -120,12 +127,7 @@ export function App() {
   const [modal, setModal] = useState<Modal | null>(null);
   const [value, setValue] = useState("");
   const [modalError, setModalError] = useState<string | null>(null);
-  const [position, setPosition] = useState([1, 1]);
   const [controllerOpen, setControllerOpen] = useState(false);
-  const playbackRef = useRef(playback);
-  useEffect(() => {
-    playbackRef.current = playback;
-  }, [playback]);
 
   const updateTabs = useCallback((next: string[]) => {
     tabsRef.current = next;
@@ -134,22 +136,22 @@ export function App() {
 
   const updateDocument = useCallback(
     (next: Document | null) => {
-      documentRef.current = next;
-      setDocument(next);
+      selectDocument(next);
       if (next && !tabsRef.current.includes(next.path))
         updateTabs([...tabsRef.current, next.path]);
     },
-    [updateTabs],
+    [selectDocument, updateTabs],
   );
 
   const flush = useCallback(async () => {
     if (saving.current) return saving.current;
     const work = async () => {
-      while (
-        documentRef.current &&
-        documentRef.current.code !== documentRef.current.saved
-      ) {
-        const snapshot = { ...documentRef.current };
+      for (;;) {
+        const session = sessionsRef.current.find(
+          (s) => s.document.code !== s.document.saved,
+        );
+        if (!session) break;
+        const snapshot = { ...session.document };
         setSavedStatus("Saving…");
         try {
           await api.save({
@@ -157,9 +159,11 @@ export function App() {
             content: snapshot.code,
             expected: snapshot.saved,
           });
-          const current = documentRef.current;
-          if (current?.path === snapshot.path)
-            updateDocument({ ...current, saved: snapshot.code });
+          const current = sessionsRef.current.find((s) => s.id === session.id);
+          if (current)
+            patchSession(current.id, {
+              document: { ...current.document, saved: snapshot.code },
+            });
           setProject((currentProject) =>
             currentProject
               ? {
@@ -185,7 +189,7 @@ export function App() {
     } finally {
       saving.current = null;
     }
-  }, [updateDocument]);
+  }, [patchSession, sessionsRef]);
 
   const run = useCallback(async (action: () => Promise<void>) => {
     if (busyRef.current) return;
@@ -205,14 +209,16 @@ export function App() {
   const activateFile = useCallback(
     async (path: string) => {
       await flush();
+      const existing = sessionsRef.current.find(
+        (s) => s.document.path === path,
+      );
       const code = await api.read(path);
-      await player.current?.stop();
-      setPlayback({ started: false, pending: false });
-      setPosition([1, 1]);
+      if (existing && code !== existing.document.code)
+        players.current.get(existing.id)?.replaceCode(code);
       updateDocument({ path, code, saved: code });
       setSavedStatus("Saved locally");
     },
-    [flush, updateDocument],
+    [flush, updateDocument, sessionsRef, players],
   );
 
   const openFile = useCallback(
@@ -220,7 +226,7 @@ export function App() {
       if (documentRef.current?.path === path) return;
       await run(() => activateFile(path));
     },
-    [activateFile, run],
+    [activateFile, run, documentRef],
   );
 
   const closeTab = useCallback(
@@ -233,16 +239,21 @@ export function App() {
           await flush();
           const next = remaining[Math.min(index, remaining.length - 1)];
           if (next) await activateFile(next);
-          else {
-            await player.current?.stop();
-            updateDocument(null);
-            setPlayback({ started: false, pending: false });
-          }
+          else updateDocument(null);
         }
+        await removeSessions([path]);
         updateTabs(remaining);
       });
     },
-    [activateFile, flush, run, updateDocument, updateTabs],
+    [
+      activateFile,
+      flush,
+      run,
+      updateDocument,
+      updateTabs,
+      removeSessions,
+      documentRef,
+    ],
   );
 
   const foreignSaves = useRef(new Map<string, Promise<void>>());
@@ -252,15 +263,33 @@ export function App() {
       // Serialize per file. Two concurrent read-then-save calls would
       // otherwise both compute `expected` from the same disk snapshot,
       // and the second would fail with "This file changed on disk".
+      const owner = sessionsRef.current.find(
+        (s) => s.document.path === documentRef.current?.path,
+      );
       const previous = foreignSaves.current.get(path) ?? Promise.resolve();
       const task = previous
         .catch(() => {})
         .then(async () => {
+          await flush();
           const code = await api.read(path);
           const edit = changeControl(code, name, value);
           if (!edit) return;
           const next = editSource(code, [edit]);
           await api.save({ path, content: next, expected: code });
+          const open = sessionsRef.current.find(
+            (s) => s.document.path === path,
+          );
+          if (open) {
+            players.current.get(open.id)?.replaceCode(next);
+            patchSession(open.id, {
+              document: { path, code: next, saved: next },
+            });
+            if (open.playback.started && open.id !== owner?.id)
+              void players.current
+                .get(open.id)
+                ?.play()
+                .catch((error) => setError(message(error)));
+          }
         });
 
       foreignSaves.current.set(path, task);
@@ -270,7 +299,15 @@ export function App() {
       const settle = (succeeded: boolean) => {
         if (foreignSaves.current.get(path) !== task) return;
         foreignSaves.current.delete(path);
-        if (succeeded && playbackRef.current.started) player.current?.play();
+        if (
+          succeeded &&
+          owner &&
+          sessionsRef.current.find((s) => s.id === owner.id)?.playback.started
+        )
+          void players.current
+            .get(owner.id)
+            ?.play()
+            .catch((error) => setError(message(error)));
       };
       task.then(
         () => settle(true),
@@ -279,7 +316,7 @@ export function App() {
 
       return task;
     },
-    [],
+    [documentRef, flush, patchSession, players, sessionsRef],
   );
 
   useEffect(() => {
@@ -297,17 +334,19 @@ export function App() {
   }, [updateDocument]);
 
   useEffect(() => {
-    if (!document || document.code === document.saved) return;
+    if (!sessions.some((s) => s.document.code !== s.document.saved)) return;
     const timer = setTimeout(() => {
       void flush().catch((error) => setError(message(error)));
     }, 650);
     return () => clearTimeout(timer);
-  }, [document, flush]);
+  }, [sessions, flush]);
 
   useEffect(() => {
     const protectPendingEdits = (event: BeforeUnloadEvent) => {
-      const current = documentRef.current;
-      if (!current || current.code === current.saved) return;
+      if (
+        !sessionsRef.current.some((s) => s.document.code !== s.document.saved)
+      )
+        return;
       event.preventDefault();
       event.returnValue = "";
       void flush().catch((error) => setError(message(error)));
@@ -315,7 +354,7 @@ export function App() {
     window.addEventListener("beforeunload", protectPendingEdits);
     return () =>
       window.removeEventListener("beforeunload", protectPendingEdits);
-  }, [flush]);
+  }, [flush, sessionsRef]);
 
   useEffect(
     () =>
@@ -327,7 +366,7 @@ export function App() {
         void run(async () => {
           try {
             await flush();
-            await player.current?.stop();
+            await stopAll();
             api.finishClose();
           } catch (error) {
             api.cancelClose();
@@ -335,15 +374,15 @@ export function App() {
           }
         });
       }),
-    [flush, run],
+    [flush, run, stopAll],
   );
 
   const play = useCallback(() => {
     void player.current?.play().catch((error) => setError(message(error)));
-  }, []);
+  }, [player]);
   const stop = useCallback(() => {
     void player.current?.stop();
-  }, []);
+  }, [player]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -351,8 +390,10 @@ export function App() {
       if (event.key === "," || event.code === "Comma") {
         event.preventDefault();
         event.stopPropagation();
-        if (!event.repeat && !busyRef.current && !modal)
+        if (!event.repeat && !busyRef.current && !modal) {
+          setControllerOpen(false);
           player.current?.assist();
+        }
         return;
       }
       if (
@@ -376,10 +417,11 @@ export function App() {
         event.stopPropagation();
         play();
       }
-      if (event.key === ".") {
+      if (event.key === "." || event.code === "Period") {
         event.preventDefault();
         event.stopPropagation();
-        stop();
+        if (event.shiftKey) void stopAll();
+        else stop();
       }
       if (event.key === "b") {
         event.preventDefault();
@@ -388,7 +430,7 @@ export function App() {
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [closeTab, flush, play, stop, modal]);
+  }, [closeTab, flush, play, stop, stopAll, modal, player, documentRef]);
 
   useEffect(() => {
     if (!context && !projectMenu) return;
@@ -431,11 +473,14 @@ export function App() {
   }
 
   async function syncDocument() {
-    const current = documentRef.current;
-    if (!current) return;
-    const code = await api.read(current.path);
-    if (code !== current.code) player.current?.replaceCode(code);
-    updateDocument({ ...current, code, saved: code });
+    for (const session of sessionsRef.current) {
+      const code = await api.read(session.document.path);
+      if (code !== session.document.code)
+        players.current.get(session.id)?.replaceCode(code);
+      patchSession(session.id, {
+        document: { ...session.document, code, saved: code },
+      });
+    }
     setSavedStatus("Saved locally");
   }
 
@@ -468,13 +513,7 @@ export function App() {
         isWithin(file, from) ? to + file.slice(from.length) : file,
       ),
     );
-    const current = documentRef.current;
-    if (current && isWithin(current.path, from)) {
-      updateDocument({
-        ...current,
-        path: to + current.path.slice(from.length),
-      });
-    }
+    renameSessions(from, to);
     setSelection(null);
     await syncDocument();
     await refresh();
@@ -485,10 +524,9 @@ export function App() {
       await flush();
       const next = await (create ? api.create() : api.open());
       if (!next) return;
-      await player.current?.stop();
+      await removeSessions(tabsRef.current);
       updateTabs([]);
       updateDocument(null);
-      setPlayback({ started: false, pending: false });
       setProject(next);
       setSearch("");
       setSelection(null);
@@ -511,7 +549,6 @@ export function App() {
         const path = await api.add(modal.parent, value, modal.folder);
         await refresh();
         if (!modal.folder) {
-          await player.current?.stop();
           const code = await api.read(path);
           updateDocument({ path, code, saved: code });
         }
@@ -521,8 +558,15 @@ export function App() {
           const code = await api.read(current.path);
           await player.current?.stop();
           updateDocument({ path: current.path, code, saved: code });
-          setEditorVersion((version) => version + 1);
-          setPlayback({ started: false, pending: false });
+          const session = sessionsRef.current.find(
+            (s) => s.document.path === current.path,
+          );
+          if (session)
+            patchSession(session.id, {
+              version: session.version + 1,
+              playback: { started: false, pending: false },
+              position: [1, 1],
+            });
           setSavedStatus("Saved locally");
           setError(null);
         }
@@ -538,14 +582,15 @@ export function App() {
         const remaining = tabsRef.current.filter(
           (file) => !isWithin(file, modal.entry.id),
         );
-        updateTabs(remaining);
-        if (
+        const deletedActive =
           documentRef.current &&
-          isWithin(documentRef.current.path, modal.entry.id)
-        ) {
-          await player.current?.stop();
+          isWithin(documentRef.current.path, modal.entry.id);
+        await removeSessions(
+          tabsRef.current.filter((path) => !remaining.includes(path)),
+        );
+        updateTabs(remaining);
+        if (deletedActive) {
           updateDocument(null);
-          setPlayback({ started: false, pending: false });
           if (remaining.length) await activateFile(remaining[0]);
         }
         setSelection(null);
@@ -611,8 +656,14 @@ export function App() {
                 path === document?.path
                   ? hasExports(document.code)
                   : Boolean(findEntry(project?.entries ?? [], path)?.exported),
-              dirty:
-                path === document?.path && document.code !== document.saved,
+              dirty: sessions.some(
+                (s) =>
+                  s.document.path === path &&
+                  s.document.code !== s.document.saved,
+              ),
+              playing: sessions.some(
+                (s) => s.document.path === path && s.playback.started,
+              ),
             }))}
             active={document?.path ?? null}
             disabled={busy}
@@ -862,7 +913,10 @@ export function App() {
               aria-label="Ask Wien"
               title={`Ask Wien (${shortcut} ,)`}
               disabled={!document || busy}
-              onClick={() => player.current?.assist("bottom")}
+              onClick={() => {
+                setControllerOpen(false);
+                player.current?.assist("bottom");
+              }}
             >
               <Sparkles size={16} />
             </button>
@@ -876,6 +930,19 @@ export function App() {
             >
               <Square size={14} fill="currentColor" />
             </button>
+            {sessions.some(
+              (s) => s.playback.started && s.document.path !== document?.path,
+            ) && (
+              <button
+                type="button"
+                className={styles.iconButton}
+                aria-label="Stop all playback"
+                title={`Stop all (${shortcut} ⇧ .)`}
+                onClick={() => void stopAll()}
+              >
+                <SquareX size={16} />
+              </button>
+            )}
             <button
               type="button"
               className={styles.playButton}
@@ -949,60 +1016,66 @@ export function App() {
             </button>
           </div>
         )}
-        {/*
-    Keep <StrudelEditor /> mounted so `player.current.changeControl`
-    keeps working while the controller panel is on screen.
-    `display: contents` keeps the original flex layout intact.
-  */}
-        <div
-          style={{
-            display: controllerOpen && document ? "none" : "contents",
-          }}
-        >
-          {document ? (
+        {sessions.map((session) => (
+          <div
+            key={`${project?.root}/${session.id}/${session.version}`}
+            style={{
+              display:
+                session.document.path === document?.path && !controllerOpen
+                  ? "contents"
+                  : "none",
+            }}
+          >
             <StrudelEditor
-              key={`${project?.root}/${document.path}/${editorVersion}`}
-              initialCode={document.code}
-              path={document.path}
+              initialCode={session.document.code}
+              path={session.document.path}
+              active={
+                session.document.path === document?.path && !controllerOpen
+              }
               disabled={busy}
               onLink={(source) => void linkSnippet(source)}
               onChange={(code) => {
-                const current = documentRef.current;
+                const current = sessionsRef.current.find(
+                  (s) => s.id === session.id,
+                );
                 if (current) {
-                  updateDocument({ ...current, code });
+                  patchSession(current.id, {
+                    document: { ...current.document, code },
+                  });
                   setSavedStatus("Unsaved changes");
                 }
               }}
-              onState={setPlayback}
-              onReady={(next) => {
-                player.current = next;
-              }}
-              onPosition={(line, column) => setPosition([line, column])}
+              onState={(playback) => patchSession(session.id, { playback })}
+              onReady={(next) => setPlayer(session.id, next)}
+              onPosition={(line, column) =>
+                patchSession(session.id, { position: [line, column] })
+              }
             />
-          ) : (
-            <div className={styles.emptyState}>
-              <div className={styles.emptyIcon}>
-                <Code2 size={30} strokeWidth={1.2} />
-              </div>
-              <h1>Make room for a little music.</h1>
-              <p>
-                Open a snippet, or start with a few notes.
-                <br />
-                There’s no wrong place to begin.
-              </p>
-              <button
-                type="button"
-                className={styles.primaryButton}
-                onClick={() =>
-                  showModal({ kind: "create", parent: "", folder: false })
-                }
-              >
-                <Plus size={15} />
-                New snippet
-              </button>
+          </div>
+        ))}
+        {!document && (
+          <div className={styles.emptyState}>
+            <div className={styles.emptyIcon}>
+              <Code2 size={30} strokeWidth={1.2} />
             </div>
-          )}
-        </div>
+            <h1>Make room for a little music.</h1>
+            <p>
+              Open a snippet, or start with a few notes.
+              <br />
+              There’s no wrong place to begin.
+            </p>
+            <button
+              type="button"
+              className={styles.primaryButton}
+              onClick={() =>
+                showModal({ kind: "create", parent: "", folder: false })
+              }
+            >
+              <Plus size={15} />
+              New snippet
+            </button>
+          </div>
+        )}
         {controllerOpen && document && (
           <ControllerPanel
             document={document}
@@ -1051,7 +1124,7 @@ export function App() {
 
       {controlsVisible && !controllerOpen && (
         <ControlsPanel
-          key={`${project?.root}/${document?.path}/${editorVersion}`}
+          key={`${project?.root}/${document?.path}`}
           controls={controlState.controls}
           valid={controlState.valid}
           hasDocument={Boolean(document)}
@@ -1171,8 +1244,12 @@ export function App() {
                 <kbd>{shortcut} Enter</kbd>
               </div>
               <div>
-                <span>Stop playback</span>
+                <span>Stop current snippet</span>
                 <kbd>{shortcut} .</kbd>
+              </div>
+              <div>
+                <span>Stop all snippets</span>
+                <kbd>{shortcut} ⇧ .</kbd>
               </div>
               <div>
                 <span>Ask Wien</span>

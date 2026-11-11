@@ -7,6 +7,7 @@ export interface FileTab {
   path: string;
   exported: boolean;
   dirty: boolean;
+  playing: boolean;
 }
 
 export function FileTabs({
@@ -59,20 +60,24 @@ export function FileTabs({
           <div
             className={classNames(styles.fileTab, {
               [styles.active]: selected,
+              [styles.playing]: tab.playing,
             })}
             key={tab.path}
             role="presentation"
+            data-playing={tab.playing || undefined}
           >
+            <span className={styles.playingRim} aria-hidden="true" />
             <button
               type="button"
               role="tab"
               id={`tab-${encodeURIComponent(tab.path)}`}
               aria-label={tab.path}
               aria-selected={selected}
+              aria-description={tab.playing ? "Playing" : undefined}
               aria-controls="snippet-panel"
               tabIndex={selected ? 0 : -1}
               disabled={disabled}
-              title={tab.path}
+              title={`${tab.path}${tab.playing ? " · Playing" : ""}`}
               className={styles.fileTabSelect}
               onClick={() => onSelect(tab.path)}
               onKeyDown={(event) => {
