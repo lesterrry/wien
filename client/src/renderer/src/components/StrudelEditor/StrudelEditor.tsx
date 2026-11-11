@@ -6,18 +6,14 @@ import * as mini from "@strudel/mini";
 import * as tonal from "@strudel/tonal";
 import { transpiler } from "@strudel/transpiler";
 import * as webaudio from "@strudel/webaudio";
-import {
-  getAudioContext,
-  initAudio,
-  registerSynthSounds,
-  webaudioOutput,
-} from "@strudel/webaudio";
+import { getAudioContext, initAudio, webaudioOutput } from "@strudel/webaudio";
 import classNames from "classnames";
 import { useEffect, useRef, useState } from "react";
 import { useDrop } from "react-dnd";
 import { changeControl, ignoreControl } from "../../../../shared/controls";
 import type { Entry } from "../../../../shared/types";
 import { compileGraph } from "../../module-compiler";
+import { registerStandardSounds } from "../../standard-sounds";
 import {
   type AssistantPlacement,
   AssistantPopover,
@@ -39,7 +35,7 @@ let audio: Promise<void> | undefined;
 function prepareScope() {
   scope ??= Promise.all([
     core.evalScope(core, mini, tonal, webaudio),
-    registerSynthSounds(),
+    registerStandardSounds(),
   ]);
   return scope;
 }

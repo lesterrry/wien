@@ -54,5 +54,18 @@ declare module "@strudel/webaudio" {
   export function getAudioContext(): AudioContext;
   export function initAudio(): Promise<void>;
   export function registerSynthSounds(): Promise<void>;
+  export function registerZZFXSounds(): void;
+  export function samples(
+    sampleMap: string | Record<string, unknown>,
+    baseUrl?: string,
+    options?: { prebake?: boolean; tag?: string },
+  ): Promise<void>;
+  export function aliasBank(
+    aliases: Record<string, string | string[]>,
+  ): Promise<void>;
   export const webaudioOutput: unknown;
+}
+
+declare module "@strudel/soundfonts" {
+  export function registerSoundfonts(): void;
 }
