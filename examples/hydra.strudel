@@ -1,0 +1,5 @@
+// Visual pattern follows the official Strudel Hydra integration example.
+// Audio uses an offline built-in synth and remains the final expression.
+await initHydra()
+shape(H("3 4 5 6")).out(o0)
+note("c2 [g2 c3]").s("sine").gain(0.2)
