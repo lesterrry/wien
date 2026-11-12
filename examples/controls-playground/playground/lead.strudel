@@ -1,11 +1,35 @@
 import { waveform, voiceDecay } from './tone.strudel'
 
+const Fx = Object.freeze({
+  Crush: 'crush',
+  Lowpass: 'lowpass',
+  Drive: 'drive',
+  Echo: 'echo',
+})
+
+// Drag the selected effects to change the actual serial audio chain.
+// Crush → Lowpass smooths quantization; Lowpass → Crush adds roughness afterwards.
+const effects = [Fx.Crush, Fx.Lowpass]
 const leadGain = 0.1
 const leadPan = 0.2 // @slider -1..1
 const enabled = true
+const leadVoice = {leadGain, leadPan, enabled, effects}
 
-export default note("<c4 eb4 g4 bb4>*2")
+const lead = note("<c4 eb4 g4 bb4>*2")
   .s(waveform)
   .attack(0.01).decay(voiceDecay).sustain(0.1).release(0.08)
   .pan(leadPan)
   .gain(enabled ? Math.max(0, leadGain) : 0)
+
+// FX creates separate DSP stages. Ordinary .crush().lpf() calls would only set
+// parameters and would not guarantee processing in the selected order.
+const stages = effects.map(effect => {
+  switch (effect) {
+    case Fx.Crush: return crush(3)
+    case Fx.Lowpass: return lpf(900).lpq(1.2)
+    case Fx.Drive: return distort(2).distortvol(0.5)
+    case Fx.Echo: return delay(0.45).delaytime(0.16).delayfeedback(0.35)
+  }
+})
+
+export default effects.length ? lead.FX(...stages).fxr(0.6) : lead

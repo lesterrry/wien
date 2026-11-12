@@ -96,6 +96,9 @@ try {
   await group.scrollIntoViewIfNeeded();
   const first = await group.getByText("Sine", { exact: true }).boundingBox();
   const last = await group.getByText("Saw", { exact: true }).boundingBox();
+  await expect(group).toHaveAttribute("aria-orientation", "vertical");
+  assert(Math.abs(first.x - last.x) < 1);
+  assert(last.y > first.y + first.height);
   await page.mouse.move(first.x + first.width / 2, first.y + first.height / 2);
   await page.mouse.down();
   await page.mouse.move(last.x + last.width / 2, last.y + last.height / 2, {

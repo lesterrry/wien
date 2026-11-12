@@ -219,6 +219,121 @@ try {
       voices.length > 0 && voices.every((hap) => hap.value.s === "sawtooth")
     );
   });
+  // Isolate the lead and compare the real spectrum before/after serial FX reorder.
+  for (const file of ["playground/bass.strudel", "playground/kick.strudel"])
+    await card(file)
+      .getByRole("switch", { name: "enabled switch", exact: true })
+      .click();
+  const spectralRoughness = () =>
+    page.evaluate(async () => {
+      const meter = window.__playgroundMeter;
+      const bins = new Float32Array(meter.frequencyBinCount);
+      const sampleRate = window.getAudioContext().sampleRate;
+      let high = 0,
+        low = 0;
+      for (let frame = 0; frame < 55; frame++) {
+        meter.getFloatFrequencyData(bins);
+        for (let index = 0; index < bins.length; index++) {
+          const hz = (index * sampleRate) / meter.fftSize;
+          const power = 10 ** (bins[index] / 10);
+          if (hz > 4000) high += power;
+          if (hz > 200 && hz < 2000) low += power;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 40));
+      }
+      return high / Math.max(low, 1e-20);
+    });
+  const beforeOrder = await spectralRoughness();
+  const effects = card("playground/lead.strudel").getByRole("group", {
+    name: "effects options",
+    exact: true,
+  });
+  await effects
+    .getByRole("button", { name: "Move Lowpass", exact: true })
+    .press("Alt+ArrowUp");
+  await page.waitForFunction(() =>
+    window
+      .getPattern()
+      .queryArc(0, 1)
+      .filter((hap) => hap.value.FX)
+      .every((hap) => hap.value.FX[0].cutoff === 900),
+  );
+  const afterOrder = await spectralRoughness();
+  console.log("Serial FX spectral roughness:", { beforeOrder, afterOrder });
+  assert(
+    afterOrder > beforeOrder * 1.5,
+    "Crush after Lowpass must generate more audible high-frequency energy",
+  );
+  await effects
+    .getByRole("checkbox", { name: "Drive", exact: true })
+    .press("Space");
+  await effects
+    .getByRole("checkbox", { name: "Echo", exact: true })
+    .press("Space");
+  await page.waitForFunction(() =>
+    window
+      .getPattern()
+      .queryArc(0, 1)
+      .filter((hap) => hap.value.FX)
+      .every((hap) => hap.value.FX.length === 4),
+  );
+  await expect.poll(peak).toBeGreaterThan(0.001);
+  await effects
+    .getByRole("checkbox", { name: "Crush", exact: true })
+    .press("Space");
+  await effects
+    .getByRole("checkbox", { name: "Lowpass", exact: true })
+    .press("Space");
+  await effects
+    .getByRole("checkbox", { name: "Drive", exact: true })
+    .press("Space");
+  await effects
+    .getByRole("checkbox", { name: "Echo", exact: true })
+    .press("Space");
+  await page.waitForFunction(() =>
+    window
+      .getPattern()
+      .queryArc(0, 1)
+      .filter((hap) => hap.value.FX)
+      .every((hap) => hap.value.FX.length === 0),
+  );
+  await expect
+    .poll(peak, {
+      message: "Empty multi-selection must keep the dry lead audible",
+    })
+    .toBeGreaterThan(0.001);
+  await card("playground/lead.strudel")
+    .getByRole("switch", { name: "enabled switch", exact: true })
+    .click();
+  await card("playground/kick.strudel")
+    .getByRole("switch", { name: "enabled switch", exact: true })
+    .click();
+  for (const [previous, bank, machine] of [
+    ["Synth", "tr909", "RolandTR909"],
+    ["TR909", "tr808", "RolandTR808"],
+    ["TR808", "linn", "AkaiLinn"],
+  ]) {
+    const downloaded = page.waitForResponse(
+      (response) => response.url().includes(`/${machine}/`) && response.ok(),
+      { timeout: 30000 },
+    );
+    await card("playground/rhythm.strudel")
+      .getByRole("radio", { name: previous, exact: true })
+      .press("ArrowRight");
+    await page.waitForFunction(
+      (bank) =>
+        window
+          .getPattern()
+          .queryArc(0, 1)
+          .some((hap) => hap.value.bank === bank && hap.value.s === "bd"),
+      bank,
+    );
+    await downloaded;
+    await expect.poll(peak, { timeout: 30000 }).toBeGreaterThan(0.001);
+  }
+  console.log(
+    "PASS: ordered serial FX change the real audio spectrum, all effect toggles and dry bypass work, and the drum bank enum plays actual Roland samples.",
+  );
   await page
     .getByRole("button", { name: "Open Graph View", exact: true })
     .click();

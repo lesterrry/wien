@@ -222,8 +222,8 @@ test("import playground uses every voice, including deep and shared control sour
   );
   assert(
     events.some(
-      ({ value }: { value: { note: string; gain: number } }) =>
-        value.note === "c1" && value.gain === 0.28,
+      ({ value }: { value: { s: string; gain: number } }) =>
+        value.s === "sbd" && value.gain === 0.28,
     ),
   );
   const edit = changeControl(sources["playground/kick.strudel"], "kickGain", {
@@ -239,7 +239,7 @@ test("import playground uses every voice, including deep and shared control sour
   assert(
     updated
       .queryArc(0, 1)
-      .filter(({ value }: { value: { note: string } }) => value.note === "c1")
+      .filter(({ value }: { value: { s: string } }) => value.s === "sbd")
       .every(({ value }: { value: { gain: number } }) => value.gain === 0),
   );
   const toneEdit = changeControl(
@@ -263,6 +263,92 @@ test("import playground uses every voice, including deep and shared control sour
   assert(
     voices.every(
       ({ value }: { value: { s: string } }) => value.s === "sawtooth",
+    ),
+  );
+  const lead = timbre
+    .queryArc(0, 1)
+    .filter(({ value }: { value: { FX?: unknown[] } }) => value.FX);
+  assert(lead.length > 0);
+  assert.deepEqual(lead[0].value.FX, [
+    { crush: 3 },
+    { cutoff: 900, resonance: 1.2 },
+  ]);
+  const reordered = changeControl(
+    sources["playground/lead.strudel"],
+    "effects",
+    { type: "reorder", order: ["Lowpass", "Crush", "Drive", "Echo"] },
+  );
+  assert(reordered);
+  sources["playground/lead.strudel"] = editSource(
+    sources["playground/lead.strudel"],
+    [reordered],
+  );
+  const orderedPattern = await evaluate(sources, "playground.strudel");
+  assert.deepEqual(
+    orderedPattern
+      .queryArc(0, 1)
+      .find(({ value }: { value: { FX?: unknown[] } }) => value.FX).value.FX,
+    [{ cutoff: 900, resonance: 1.2 }, { crush: 3 }],
+  );
+  const all = changeControl(sources["playground/lead.strudel"], "effects", {
+    type: "set",
+    value: ["lowpass", "crush", "drive", "echo"],
+  });
+  assert(all);
+  sources["playground/lead.strudel"] = editSource(
+    sources["playground/lead.strudel"],
+    [all],
+  );
+  const allPattern = await evaluate(sources, "playground.strudel");
+  assert.deepEqual(
+    allPattern
+      .queryArc(0, 1)
+      .find(({ value }: { value: { FX?: unknown[] } }) => value.FX).value.FX,
+    [
+      { cutoff: 900, resonance: 1.2 },
+      { crush: 3 },
+      { distort: 2, distortvol: 0.5 },
+      { delay: 0.45, delaytime: 0.16, delayfeedback: 0.35 },
+    ],
+  );
+  const dryEdit = changeControl(sources["playground/lead.strudel"], "effects", {
+    type: "set",
+    value: [],
+  });
+  assert(dryEdit);
+  sources["playground/lead.strudel"] = editSource(
+    sources["playground/lead.strudel"],
+    [dryEdit],
+  );
+  const dry = await evaluate(sources, "playground.strudel");
+  assert(
+    dry
+      .queryArc(0, 1)
+      .some(({ value }: { value: { note?: string } }) => value.note === "c4"),
+  );
+  assert(
+    dry
+      .queryArc(0, 1)
+      .every(({ value }: { value: { FX?: unknown[] } }) => !value.FX),
+  );
+  const bank = changeControl(sources["playground/rhythm.strudel"], "drumBank", {
+    type: "set",
+    value: "tr909",
+  });
+  assert(bank);
+  sources["playground/rhythm.strudel"] = editSource(
+    sources["playground/rhythm.strudel"],
+    [bank],
+  );
+  const sampled = await evaluate(sources, "playground.strudel");
+  const drums = sampled
+    .queryArc(0, 1)
+    .filter(({ value }: { value: { bank?: string } }) => value.bank);
+  assert(drums.length > 0);
+  assert(
+    drums.every(
+      ({ value }: { value: { bank: string; s: string } }) =>
+        value.bank === "tr909" && ["bd", "hh"].includes(value.s),
     ),
   );
 });

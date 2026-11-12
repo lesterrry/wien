@@ -6,7 +6,6 @@ const enabled = true
 // Compose these controls without repeating them outside the group.
 const kickVoice = {kickGain, kickDecay}
 
-export default note("c1*4")
-  .s("sine")
+export default s("sbd*4")
   .attack(0.001).decay(kickDecay).sustain(0).release(0.02)
   .gain(enabled ? Math.max(0, kickGain) : 0)

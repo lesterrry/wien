@@ -2,7 +2,9 @@
 // Expand Controls: every imported file gets its own panel, including deep imports.
 // kickGain / hatGain / bassGain / leadGain change the actual voices below.
 // Toggle each enabled switch to hear which part belongs to that file.
-// tone.strudel is shared by bass and lead: waveform changes both voices.
+// tone.strudel: waveform enum changes bass and lead.
+// rhythm.strudel: drumBank enum switches Synth / TR909 / TR808 / Linn.
+// lead.strudel: effects multi-selection is a real ordered serial FX chain.
 
 import rhythm from './playground/rhythm.strudel'
 import bass from './playground/bass.strudel'
