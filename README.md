@@ -151,6 +151,12 @@ docker compose exec skill strudel-rag remote health
 без вызовов модели или embeddings. Зелёный healthcheck не гарантирует доступность
 внешних API.
 
+## Ручной релиз приложения
+
+GitHub Actions → **Release app** → **Run workflow**. Собирает macOS (Apple Silicon
+и Intel), Windows x64 и Linux x64, затем публикует GitHub Release с датой и временем
+по Москве и установщиками. Подробнее — [client/README.md](client/README.md#релиз-приложения).
+
 ## Ручной релиз бэкенда
 
 Обычный CI запускается для pull request, push в `main` и вручную. Push в рабочую
