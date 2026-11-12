@@ -1,0 +1,68 @@
+.content fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+.content label {
+  margin-top: 16px;
+}
+.content input {
+  margin-top: 7px;
+}
+.content .error {
+  color: var(--color-danger);
+}
+.profile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0 22px;
+}
+.profile span {
+  color: var(--color-secondary);
+  font-size: 12px;
+}
+.actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 20px;
+}
+.actions button {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--color-secondary);
+  cursor: pointer;
+  font-size: 12px;
+}
+.actions button:hover {
+  color: var(--color-primary);
+}
+.primary {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 14px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 6px;
+  background: var(--color-primary);
+  color: var(--color-background);
+  cursor: pointer;
+  margin-top: 18px;
+}
+.content button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.spinner {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

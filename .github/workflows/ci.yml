@@ -50,6 +50,18 @@ jobs:
     name: Rust workspace checks and build
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: wien_test
+          POSTGRES_PASSWORD: test-only-password
+          POSTGRES_DB: wien_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U wien_test -d wien_test"
+          --health-interval 5s --health-timeout 3s --health-retries 12
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -65,6 +77,11 @@ jobs:
 
       - name: Run tests
         run: cargo test --locked --workspace --all-features
+
+      - name: Test account lifecycle with PostgreSQL
+        env:
+          DATABASE_URL: postgresql://wien_test:test-only-password@127.0.0.1:5432/wien_test
+        run: cargo test --locked -p wien-server --test accounts_db -- --ignored
 
       - name: Check generated HTTP contract
         run: bash server/scripts/generate-http.sh --check

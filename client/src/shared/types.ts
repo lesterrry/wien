@@ -1,3 +1,4 @@
+import type { Credentials, PasswordChange, UserProfile } from "./account";
 import type { AssistRequest, AssistResponse } from "./assistant";
 import type { PanelPreferences } from "./control-tree";
 import type { ModuleGraph } from "./modules";
@@ -28,6 +29,11 @@ export interface VersionEntry {
 }
 
 export interface WorkspaceApi {
+  accountCurrent(): Promise<UserProfile | null>;
+  accountRegister(credentials: Credentials): Promise<UserProfile>;
+  accountLogin(credentials: Credentials): Promise<UserProfile>;
+  accountLogout(): Promise<void>;
+  accountChangePassword(request: PasswordChange): Promise<UserProfile>;
   versions(): Promise<VersionEntry[]>;
   createVersion(message: string): Promise<void>;
   selectVersion(oid: string): Promise<void>;

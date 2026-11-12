@@ -135,6 +135,9 @@
 
 .projectPicker small {
   display: block;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
   margin-top: 4px;
   font-size: 11px;
   color: var(--color-muted);

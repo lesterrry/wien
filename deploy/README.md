@@ -19,9 +19,12 @@ The receiver retains two successful releases and their images.
 
 Production uses `deploy/compose.yaml`, not `just run-server` or the local Codex
 override. `/opt/wien/.env` and external volume `wien_skill-data` remain on the VPS.
-AI Tunnel credentials and the RAG corpus are never uploaded to GitHub Actions.
+AI Tunnel credentials, PostgreSQL credentials and the RAG corpus are never uploaded to GitHub Actions.
 Nginx serves HTTP behind Cloudflare; no certificates are created.
-Public `/v1/*` remains disabled until accounts and authentication are implemented.
+Public `/v1/*` remains disabled, including for signed-in users.
+Account endpoints `/auth/*` and `/users/me*` are forwarded to the server.
+Bot Fight Mode is unchanged; if it challenges desktop requests, the client reports
+the block explicitly instead of treating the HTML challenge as an API response.
 
 ## GitHub production environment
 
@@ -58,3 +61,30 @@ sudo env WIEN_RELEASE_ID="$(basename "$(pwd -P)")" docker compose \
 ```
 
 Do not run `docker compose down --volumes`: the RAG corpus must survive releases.
+
+## PostgreSQL and accounts
+
+Before the first release with accounts, run this once as the VPS operator:
+
+```sh
+ssh spacespace01 'sudo bash -s' < deploy/init-database.sh
+```
+
+This creates the external `wien_users-data` Docker volume and adds a random
+URL-safe hex `POSTGRES_PASSWORD` to `/opt/wien/.env` (0600), saving a private backup.
+It preserves an existing password and does not restart services.
+Keep the password persistent: changing the environment does not rotate an existing
+PostgreSQL user's password. PostgreSQL 18 stores its files under `/var/lib/postgresql`
+in this volume and has no published host port. The same DB survives image releases
+and rollback. Back it up independently of release archives.
+
+The server applies embedded SQLx migrations before accepting requests and fails
+startup if the database or migration is unavailable. `/ready` checks PostgreSQL
+as well as the RAG corpus. Migrations must remain compatible with the previous
+server version because image rollback does not reverse database migrations.
+
+Registration currently has no CAPTCHA. Limits shared through PostgreSQL allow
+20 registration attempts globally per 15 minutes and 10 login attempts per username
+per 15 minutes, plus 240 expensive auth attempts globally per 15 minutes and two
+concurrent password hashing operations per server. These initial limits are for
+small-scale use; they do not replace per-client abuse controls for public growth.

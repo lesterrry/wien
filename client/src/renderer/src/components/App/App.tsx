@@ -28,6 +28,7 @@ import {
   Square,
   SquareX,
   Trash2,
+  UserRound,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -59,6 +60,7 @@ import {
   type Document,
   useSnippetSessions,
 } from "../../hooks/useSnippetSessions";
+import { Account } from "../Account/Account";
 import { ControlsPanel } from "../ControlsPanel/ControlsPanel";
 import { Dialog } from "../Dialog/Dialog";
 import { Explorer } from "../Explorer/Explorer";
@@ -255,7 +257,7 @@ export function App() {
   const flush = useCallback(async () => {
     if (saving.current) return saving.current;
     const work = async () => {
-      for (;;) {
+      for (; ;) {
         const session = sessionsRef.current.find(
           (s) => s.document.code !== s.document.saved,
         );
@@ -276,13 +278,13 @@ export function App() {
           setProject((currentProject) =>
             currentProject
               ? {
-                  ...currentProject,
-                  entries: markExports(
-                    currentProject.entries,
-                    snapshot.path,
-                    hasExports(snapshot.code),
-                  ),
-                }
+                ...currentProject,
+                entries: markExports(
+                  currentProject.entries,
+                  snapshot.path,
+                  hasExports(snapshot.code),
+                ),
+              }
               : currentProject,
           );
         } catch (error) {
@@ -406,7 +408,7 @@ export function App() {
       controlWrites.current -= 1;
       setTreeVersion((version) => version + 1);
     });
-    controlQueue.current = settled.catch(() => {});
+    controlQueue.current = settled.catch(() => { });
     return settled;
   }
 
@@ -1020,7 +1022,7 @@ export function App() {
     let cancelled = false;
     const root = projectRoot;
     const task = preferencesSave.current
-      .catch(() => {})
+      .catch(() => { })
       .then(() => api.saveControlPreferences(root, preferences))
       .then(() => {
         try {
@@ -1104,11 +1106,11 @@ export function App() {
         value: change.value,
         ...(control.kind === "enum"
           ? {
-              selectedKey:
-                control.options.find((option) =>
-                  Object.is(option.value, change.value),
-                )?.key ?? control.selectedKey,
-            }
+            selectedKey:
+              control.options.find((option) =>
+                Object.is(option.value, change.value),
+              )?.key ?? control.selectedKey,
+          }
           : {}),
       } as Control;
     if (control.kind !== "multi-enum") return control;
@@ -1138,12 +1140,12 @@ export function App() {
       controls:
         group.path === path
           ? group.controls.flatMap((control) =>
-              control.name !== name
-                ? [control]
-                : change === undefined
-                  ? []
-                  : [previewControl(control, change)],
-            )
+            control.name !== name
+              ? [control]
+              : change === undefined
+                ? []
+                : [previewControl(control, change)],
+          )
           : group.controls,
       children: group.children.map(updateTree),
     });
@@ -1311,7 +1313,7 @@ export function App() {
             controller={{
               open: controllerOpen,
               disabled: busy,
-              onSelect: () => {},
+              onSelect: () => { },
               onClose: () => setWorkspaceView("editor"),
             }}
           />
@@ -1340,48 +1342,75 @@ export function App() {
 
       {sidebar && (
         <aside className={styles.sidebar}>
-          <div className={styles.projectPickerWrap}>
-            <button
-              className={styles.projectPicker}
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                setProjectMenu(!projectMenu);
-              }}
-              disabled={busy}
-            >
-              <span className={styles.projectAvatar}>
-                <Code2 size={18} />
-              </span>
-              <span>
-                <strong>{project?.name ?? "Opening workspace…"}</strong>
-                <small>Personal project</small>
-              </span>
-              <ChevronDown size={14} />
-            </button>
-            {projectMenu && (
-              <div className={classNames(styles.menu, styles.projectMenu)}>
-                <button type="button" onClick={() => void switchProject(true)}>
-                  <Plus size={15} />
-                  New project
-                </button>
-                <button type="button" onClick={() => void switchProject(false)}>
-                  <FolderOpen size={15} />
-                  Open project…
-                </button>
-                <div className={styles.menuDivider} />
+          <Account>
+            {(user, openProfile) => (
+              <div className={styles.projectPickerWrap}>
                 <button
+                  className={styles.projectPicker}
                   type="button"
-                  onClick={() =>
-                    void api.reveal().catch((error) => setError(message(error)))
-                  }
+                  aria-label="Project and account"
+                  aria-expanded={projectMenu}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setProjectMenu(!projectMenu);
+                  }}
+                  disabled={busy}
                 >
-                  <ArrowRight size={15} />
-                  Show project folder
+                  <span className={styles.projectAvatar}>
+                    <Code2 size={18} />
+                  </span>
+                  <span>
+                    <strong>{project?.name ?? "Opening workspace…"}</strong>
+                    <small title={user?.username}>
+                      {user?.username ?? "Not signed in"}
+                    </small>
+                  </span>
+                  <ChevronDown size={14} />
                 </button>
+                {projectMenu && (
+                  <div className={classNames(styles.menu, styles.projectMenu)}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProjectMenu(false);
+                        openProfile();
+                      }}
+                    >
+                      <UserRound size={15} />
+                      {user ? "Your profile" : "Sign in"}
+                    </button>
+                    <div className={styles.menuDivider} />
+                    <button
+                      type="button"
+                      onClick={() => void switchProject(true)}
+                    >
+                      <Plus size={15} />
+                      New project
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void switchProject(false)}
+                    >
+                      <FolderOpen size={15} />
+                      Open project…
+                    </button>
+                    <div className={styles.menuDivider} />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void api
+                          .reveal()
+                          .catch((error) => setError(message(error)))
+                      }
+                    >
+                      <ArrowRight size={15} />
+                      Show project folder
+                    </button>
+                  </div>
+                )}
               </div>
             )}
-          </div>
+          </Account>
           <label className={styles.searchBox}>
             <Search size={14} />
             <input
@@ -1452,10 +1481,10 @@ export function App() {
             entries={
               document
                 ? markExports(
-                    project?.entries ?? [],
-                    document.path,
-                    hasExports(document.code),
-                  )
+                  project?.entries ?? [],
+                  document.path,
+                  hasExports(document.code),
+                )
                 : (project?.entries ?? [])
             }
             selected={document?.path ?? null}
@@ -1625,16 +1654,16 @@ export function App() {
                   session.playback.started &&
                   session.document.path !== document?.path,
               ) && (
-                <button
-                  type="button"
-                  className={styles.iconButton}
-                  aria-label="Stop all playback"
-                  title={`Stop all (${shortcut} ⇧ .)`}
-                  onClick={() => void stopAll()}
-                >
-                  <SquareX size={16} />
-                </button>
-              )}
+                  <button
+                    type="button"
+                    className={styles.iconButton}
+                    aria-label="Stop all playback"
+                    title={`Stop all (${shortcut} ⇧ .)`}
+                    onClick={() => void stopAll()}
+                  >
+                    <SquareX size={16} />
+                  </button>
+                )}
               <button
                 type="button"
                 className={styles.playButton}
@@ -1766,7 +1795,7 @@ export function App() {
             style={{
               display:
                 session.document.path === document?.path &&
-                workspaceView === "editor"
+                  workspaceView === "editor"
                   ? "flex"
                   : "none",
             }}

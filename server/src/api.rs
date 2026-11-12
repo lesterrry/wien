@@ -96,6 +96,7 @@ struct AppState {
     generation: Arc<GenerationConfig>,
     tools: Arc<dyn AssistantTools>,
     assist_slots: Arc<Semaphore>,
+    database: Option<sqlx::PgPool>,
 }
 
 fn documented_routes() -> (Router<AppState>, OpenApi) {
@@ -105,6 +106,7 @@ fn documented_routes() -> (Router<AppState>, OpenApi) {
         .routes(routes!(health))
         .routes(routes!(ready))
         .split_for_parts();
+    spec.merge(crate::auth::openapi());
     spec.info = Info::new("Wien AI server", env!("CARGO_PKG_VERSION"));
     spec.servers = Some(vec![Server::new("/")]);
     (router, spec)
@@ -120,6 +122,15 @@ pub fn router(
     generation: GenerationConfig,
     tools: Arc<dyn AssistantTools>,
 ) -> Router {
+    router_with_database(provider, generation, tools, None)
+}
+
+pub fn router_with_database(
+    provider: Arc<dyn Provider>,
+    generation: GenerationConfig,
+    tools: Arc<dyn AssistantTools>,
+    database: Option<sqlx::PgPool>,
+) -> Router {
     let (router, spec) = documented_routes();
     router
         .merge(SwaggerUi::new("/docs").url("/openapi.json", spec))
@@ -127,6 +138,7 @@ pub fn router(
         .with_state(AppState {
             provider,
             tools,
+            database,
             generation: Arc::new(generation),
             assist_slots: Arc::new(Semaphore::new(MAX_ACTIVE_ASSISTS)),
         })
@@ -145,10 +157,22 @@ pub struct Readiness {
 
 /// Dependency readiness without a paid model or embedding request.
 #[utoipa::path(get, path = "/ready", responses(
-    (status = 200, description = "RAG corpus ready; external APIs are not probed", body = Readiness),
-    (status = 503, description = "RAG unavailable or corpus not ready", body = ApiError)
+    (status = 200, description = "PostgreSQL and RAG corpus ready; external APIs are not probed", body = Readiness),
+    (status = 503, description = "PostgreSQL or RAG unavailable, or corpus not ready", body = ApiError)
 ))]
 async fn ready(State(state): State<AppState>) -> Result<Json<Readiness>, ApiError> {
+    if let Some(database) = &state.database {
+        sqlx::query("SELECT 1")
+            .execute(database)
+            .await
+            .map_err(|_| {
+                ApiError::new(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "database_unavailable",
+                    "PostgreSQL is unavailable.",
+                )
+            })?;
+    }
     let corpus = state
         .tools
         .call("strudel_rag_get_corpus_info", serde_json::json!({}))

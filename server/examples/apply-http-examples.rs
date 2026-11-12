@@ -33,7 +33,27 @@ fn apply_example(spec: &Value, path: &Path) -> Result<(), Box<dyn std::error::Er
         .find_map(|line| line.strip_prefix("### Request: "))
         .and_then(|request| request.split_once(' '))
         .ok_or_else(invalid)?;
-    let media = &spec["paths"][route][method.to_ascii_lowercase()]["requestBody"]["content"]["application/json"];
+    let method = method.to_owned();
+    let route = route.to_owned();
+    let operation = &spec["paths"][&route][method.to_ascii_lowercase()];
+    let source = if operation["security"]
+        .as_array()
+        .is_some_and(|requirements| requirements.iter().any(|r| r.get("session").is_some()))
+    {
+        source
+            .replace(
+                "@contentType = application/json",
+                "@contentType = application/json\n@sessionToken = paste-token-from-login",
+            )
+            .replace(
+                "Content-Type: {{contentType}}",
+                "Content-Type: {{contentType}}\nAuthorization: Bearer {{sessionToken}}",
+            )
+    } else {
+        source
+    };
+    let lines: Vec<_> = source.lines().collect();
+    let media = &operation["requestBody"]["content"]["application/json"];
     let Some(example) = media.get("example") else {
         fs::write(path, format!("{}\n", source.trim_end()))?;
         return Ok(());

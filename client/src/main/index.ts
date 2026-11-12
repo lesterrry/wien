@@ -4,7 +4,10 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
 import type { AssistRequest } from "../shared/assistant";
 import { externalWebUrl } from "../shared/links";
 import type { SaveRequest } from "../shared/types";
+import { AccountClient } from "./account";
+import { AccountStorage } from "./account-storage";
 import { askAssistant } from "./assistant";
+import { backendConfig } from "./config";
 import { ProjectFs } from "./project-fs";
 import { ProjectVersions } from "./project-versions";
 import { starterFiles } from "./starter";
@@ -94,6 +97,35 @@ async function initializeProject() {
 }
 
 function registerIpc() {
+  const origin = backendConfig().url;
+  const account = new AccountClient(
+    origin,
+    new AccountStorage(app.getPath("userData"), origin),
+  );
+  let accountQueue: Promise<unknown> = Promise.resolve();
+  const accountHandlers = {
+    "account:current": () => account.current(),
+    "account:register": (value: Parameters<AccountClient["register"]>[0]) =>
+      account.register(value),
+    "account:login": (value: Parameters<AccountClient["login"]>[0]) =>
+      account.login(value),
+    "account:logout": () => account.logout(),
+    "account:password": (
+      value: Parameters<AccountClient["changePassword"]>[0],
+    ) => account.changePassword(value),
+  };
+  for (const [channel, action] of Object.entries(accountHandlers)) {
+    ipcMain.handle(channel, (event, value) => {
+      if (
+        event.sender !== window?.webContents ||
+        event.senderFrame !== window.webContents.mainFrame
+      )
+        throw new Error("Invalid account request.");
+      const result = accountQueue.then<unknown>(() => action(value));
+      accountQueue = result.catch(() => {});
+      return result;
+    });
+  }
   // Network requests must not block the serialized filesystem/autosave queue.
   ipcMain.handle(
     "assistant:send",

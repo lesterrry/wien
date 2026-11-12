@@ -10,6 +10,163 @@
     }
   ],
   "paths": {
+    "/auth/login": {
+      "post": {
+        "operationId": "login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Credentials"
+              },
+              "example": {
+                "password": "choose a long password",
+                "username": "music_maker"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedIn"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "operationId": "logout",
+        "responses": {
+          "204": {
+            "description": "Session revoked"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "summary": "Create an account; username is exact and is never silently normalized.",
+        "operationId": "register",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Credentials"
+              },
+              "example": {
+                "password": "choose a long password",
+                "username": "music_maker"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedIn"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Check server health without calling the model.",
@@ -34,7 +191,7 @@
         "operationId": "ready",
         "responses": {
           "200": {
-            "description": "RAG corpus ready; external APIs are not probed",
+            "description": "PostgreSQL and RAG corpus ready; external APIs are not probed",
             "content": {
               "application/json": {
                 "schema": {
@@ -44,7 +201,7 @@
             }
           },
           "503": {
-            "description": "RAG unavailable or corpus not ready",
+            "description": "PostgreSQL or RAG unavailable, or corpus not ready",
             "content": {
               "application/json": {
                 "schema": {
@@ -54,6 +211,117 @@
             }
           }
         }
+      }
+    },
+    "/users/me": {
+      "get": {
+        "operationId": "profile",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/users/me/password": {
+      "post": {
+        "summary": "Revoke all previous sessions and return a replacement for the current device.",
+        "operationId": "change_password",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePassword"
+              },
+              "example": {
+                "current_password": "choose a long password",
+                "new_password": "choose another long password"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedIn"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
       }
     },
     "/v1/assist": {
@@ -319,6 +587,38 @@
         },
         "additionalProperties": false
       },
+      "ChangePassword": {
+        "type": "object",
+        "required": [
+          "current_password",
+          "new_password"
+        ],
+        "properties": {
+          "current_password": {
+            "type": "string"
+          },
+          "new_password": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Credentials": {
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "properties": {
+          "password": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "Cursor": {
         "type": "object",
         "required": [
@@ -338,6 +638,21 @@
           }
         },
         "additionalProperties": false
+      },
+      "Error": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
       },
       "FileContext": {
         "type": "object",
@@ -401,6 +716,25 @@
           }
         }
       },
+      "Profile": {
+        "type": "object",
+        "required": [
+          "id",
+          "username",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
       "Readiness": {
         "type": "object",
         "required": [
@@ -409,6 +743,21 @@
         "properties": {
           "ready": {
             "type": "boolean"
+          }
+        }
+      },
+      "SignedIn": {
+        "type": "object",
+        "required": [
+          "user",
+          "token"
+        ],
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/Profile"
           }
         }
       },
@@ -436,6 +785,12 @@
             "minimum": 0
           }
         }
+      }
+    },
+    "securitySchemes": {
+      "session": {
+        "type": "http",
+        "scheme": "bearer"
       }
     }
   }

@@ -2,6 +2,14 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { WorkspaceApi } from "../shared/types";
 
 const api: WorkspaceApi = {
+  accountCurrent: () => ipcRenderer.invoke("account:current"),
+  accountRegister: (credentials) =>
+    ipcRenderer.invoke("account:register", credentials),
+  accountLogin: (credentials) =>
+    ipcRenderer.invoke("account:login", credentials),
+  accountLogout: () => ipcRenderer.invoke("account:logout"),
+  accountChangePassword: (request) =>
+    ipcRenderer.invoke("account:password", request),
   versions: () => ipcRenderer.invoke("versions:list"),
   createVersion: (message) => ipcRenderer.invoke("versions:create", message),
   selectVersion: (oid) => ipcRenderer.invoke("versions:select", oid),
