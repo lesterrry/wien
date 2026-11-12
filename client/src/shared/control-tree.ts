@@ -1,4 +1,8 @@
-import { type Control, readControls } from "./controls";
+import {
+  type Control,
+  type ControlComposition,
+  readControls,
+} from "./controls";
 import { importsOf, resolveImport } from "./modules";
 
 export interface ControlGroup {
@@ -6,6 +10,7 @@ export interface ControlGroup {
   path: string;
   repeated: boolean;
   controls: Control[];
+  compositions?: ControlComposition[];
   children: ControlGroup[];
   error?: string;
   issues?: { name: string; message: string }[];
@@ -41,6 +46,7 @@ export async function readControlTree(
       const code = await source;
       const result = readControls(code);
       group.controls = result.controls;
+      group.compositions = result.compositions;
       group.issues = [
         ...(result.issues ?? []),
         ...(result.errors ?? []).map((error) => {

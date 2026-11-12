@@ -244,9 +244,11 @@ export function StrudelEditor({
       update: () => evaluate(false),
       dependsOn: (file) => dependencies.has(file),
       revealControl: (name) => {
-        const control = readControls(mirror.code).controls.find(
-          (item) => item.name === name,
-        );
+        const result = readControls(mirror.code);
+        const control = [
+          ...result.controls,
+          ...(result.compositions ?? []),
+        ].find((item) => item.name === name);
         if (!control) return;
         mirror.editor.dispatch({
           selection: { anchor: control.start, head: control.end },

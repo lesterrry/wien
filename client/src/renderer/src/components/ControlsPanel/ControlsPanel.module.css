@@ -309,3 +309,40 @@
   margin: 0;
   align-self: stretch;
 }
+
+/* The heading occupies the same fixed row above grouped and standalone cells. */
+.composition {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  gap: 12px;
+  min-width: 0;
+  outline: 1px solid var(--color-border);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+.compositionHeading {
+  grid-column: 1 / -1;
+  height: 24px;
+  line-height: 24px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-secondary);
+  font-size: 11px;
+}
+
+.ungrouped {
+  padding-top: 36px;
+  min-width: 0;
+}
+
+.compositionHeading {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}

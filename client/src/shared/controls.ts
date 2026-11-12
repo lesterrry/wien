@@ -67,6 +67,11 @@ export type Control =
   | EnumControl
   | MultiEnumControl;
 
+export interface ControlComposition extends ControlSource {
+  members: string[];
+  references: { name: string; start: number; end: number }[];
+}
+
 function unwrapped(node: Expression): Expression {
   return node.type === "ParenthesizedExpression"
     ? unwrapped(node.expression)
@@ -334,6 +339,7 @@ function readMultiControl(
 
 export function readControls(code: string): {
   controls: Control[];
+  compositions?: ControlComposition[];
   valid: boolean;
   errors?: string[];
   issues?: { name: string; message: string }[];
@@ -351,6 +357,7 @@ export function readControls(code: string): {
     const controls: Control[] = [];
     const errors: string[] = [];
     const issues: { name: string; message: string }[] = [];
+    const candidates: ControlComposition[] = [];
     const names = new Map<string, number>();
     for (const statement of ast.body) {
       const node =
@@ -414,6 +421,40 @@ export function readControls(code: string): {
         // In a comma declaration, annotate just this binding.
         const ignoreAt =
           declaration.declarations.length === 1 ? statement.start : item.start;
+        const object = unwrapped(item.init);
+        if (
+          object.type === "ObjectExpression" &&
+          object.properties.length &&
+          object.properties.every(
+            (property) =>
+              property.type === "Property" &&
+              property.shorthand &&
+              !property.computed &&
+              !property.method &&
+              property.kind === "init" &&
+              property.value.type === "Identifier",
+          )
+        ) {
+          const references = object.properties.flatMap((property) =>
+            property.type === "Property" && property.value.type === "Identifier"
+              ? [
+                  {
+                    name: property.value.name,
+                    start: property.start,
+                    end: property.end,
+                  },
+                ]
+              : [],
+          );
+          candidates.push({
+            name,
+            start,
+            end,
+            ignoreAt,
+            members: references.map((reference) => reference.name),
+            references,
+          });
+        }
         const numeric = numberValue(item.init);
         const integer =
           Number.isInteger(numeric) && !usesDecimalLiteral(item.init);
@@ -512,9 +553,43 @@ export function readControls(code: string): {
       if (count > 1)
         issues.push({ name, message: "Multiple declarations use this name." });
     }
+    const available = controls.filter(
+      (control) => names.get(control.name) === 1,
+    );
+    const compositions: ControlComposition[] = [];
+    const grouped = new Set<string>();
+    for (const candidate of candidates) {
+      if (names.get(candidate.name) !== 1) continue;
+      let message: string | undefined;
+      if (
+        candidate.members.some((name) =>
+          candidates.some((group) => group.name === name),
+        )
+      )
+        message = "Control groups cannot contain other groups.";
+      else if (
+        !candidate.members.every((name) =>
+          available.some((control) => control.name === name),
+        )
+      )
+        continue; // Ordinary objects remain ordinary JavaScript.
+      else if (new Set(candidate.members).size !== candidate.members.length)
+        message = "Include each control only once.";
+      else if (candidate.members.some((name) => grouped.has(name)))
+        message =
+          "A control can belong to only one group; the first group takes precedence.";
+      if (message) issues.push({ name: candidate.name, message });
+      else {
+        compositions.push(candidate);
+        candidate.members.forEach((name) => {
+          grouped.add(name);
+        });
+      }
+    }
     return {
       ...(issues.length ? { issues } : {}),
-      controls: controls.filter((control) => names.get(control.name) === 1),
+      controls: available,
+      ...(compositions.length ? { compositions } : {}),
       valid: true,
       ...(errors.length ? { errors } : {}),
     };
@@ -956,6 +1031,34 @@ export function moveControl(
   placement: "before" | "after",
 ): Edit | undefined {
   if (name === targetName) return;
+  const compositions = readControls(code).compositions ?? [];
+  const sourceGroup = compositions.find((group) =>
+    group.members.includes(name),
+  );
+  const targetGroup = compositions.find((group) =>
+    group.members.includes(targetName),
+  );
+  if (sourceGroup !== targetGroup) return;
+  if (sourceGroup) {
+    const order = sourceGroup.members.filter((member) => member !== name);
+    order.splice(
+      order.indexOf(targetName) + (placement === "after" ? 1 : 0),
+      0,
+      name,
+    );
+    return {
+      start: sourceGroup.start,
+      end: sourceGroup.end,
+      text: editSource(
+        code.slice(sourceGroup.start, sourceGroup.end),
+        sourceGroup.references.map((reference, index) => ({
+          start: reference.start - sourceGroup.start,
+          end: reference.end - sourceGroup.start,
+          text: order[index],
+        })),
+      ),
+    };
+  }
   const { located, valid } = locateControls(code);
   if (!valid) return;
   const sorted = [...located].sort((a, b) => a.start - b.start);

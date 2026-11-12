@@ -8,3 +8,6 @@ const Wave = Object.freeze({
 
 export const waveform = Wave.Triangle
 export const voiceDecay = 0.18 // @slider 0.05..0.6
+
+// Both imports share this one control group.
+const tone = {waveform, voiceDecay}

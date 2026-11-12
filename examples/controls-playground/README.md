@@ -8,6 +8,7 @@ The master actually plays its imports: rhythm imports kick and hats; bass and
 lead share tone. All seven files appear as independent panels; tone appears
 once. No samples or network downloads are needed.
 
+- `kickVoice = {kickGain, kickDecay}` groups the kick controls; tone groups the shared controls.
 - Turn `kickGain` down to zero to mute the deeply imported kick.
 - Change `bassCutoff` or `leadPan` to hear each imported voice change.
 - Change `waveform` in tone to change both bass and lead.

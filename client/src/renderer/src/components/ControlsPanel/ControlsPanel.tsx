@@ -61,6 +61,7 @@ export function ControlInput({
 
 type Menu = { x: number; y: number } & (
   | { kind: "control"; path: string; control: Control }
+  | { kind: "composition"; path: string; name: string }
   | { kind: "group"; group: ControlGroup }
 );
 
@@ -154,6 +155,11 @@ export function ControlsPanel({
       !query ||
       matches(group.path, "") ||
       group.controls.some((control) => matches(group.path, control.name)) ||
+      Boolean(
+        group.compositions?.some((composition) =>
+          matches(group.path, composition.name),
+        ),
+      ) ||
       Boolean(group.issues?.some((issue) => matches(group.path, issue.name)))
     );
   }
@@ -161,6 +167,142 @@ export function ControlsPanel({
   function renderGroup(group: ControlGroup) {
     if (!contains(group)) return null;
     const collapsed = !query && Boolean(layout.collapsed[group.id]);
+    const ungrouped = group.controls.filter(
+      (control) =>
+        !group.compositions?.some((item) =>
+          item.members.includes(control.name),
+        ),
+    );
+    function renderControl(control: Control, siblings: Control[]) {
+      const index = siblings.indexOf(control);
+      const isOver =
+        drag?.file === group.path &&
+        drag?.over === control.name &&
+        drag.name !== control.name;
+      const error = errors[JSON.stringify([group.path, control.name])];
+      return (
+        <fieldset
+          key={control.name}
+          className={classNames(styles.controlRow, styles.control, {
+            [styles.rowDragging]:
+              drag?.file === group.path && drag?.name === control.name,
+            [styles.dropBefore]: isOver && drag?.side === "before",
+            [styles.dropAfter]: isOver && drag?.side === "after",
+          })}
+          aria-label={`${control.name} control`}
+          draggable={!disabled}
+          tabIndex={disabled ? undefined : 0}
+          title={`Drag to reorder ${control.name} (${shortcut}+↑ / ${shortcut}+↓)`}
+          onPointerDown={(event) => {
+            const target = event.target as HTMLElement | null;
+            dragAllowed.current = !target?.closest(
+              "button, input, textarea, select, a, legend",
+            );
+          }}
+          onDragStart={(event) => {
+            if (disabled || !dragAllowed.current) {
+              event.preventDefault();
+              return;
+            }
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData("text/plain", control.name);
+            setDrag({
+              file: group.path,
+              name: control.name,
+              over: null,
+              side: "before",
+            });
+          }}
+          onDragEnd={() => setDrag(null)}
+          onKeyDown={(event) => {
+            if (event.target !== event.currentTarget) return;
+            if (disabled || !event.altKey) return;
+            if (event.key === "ArrowUp" && index > 0) {
+              event.preventDefault();
+              onMove(
+                group.path,
+                control.name,
+                siblings[index - 1].name,
+                "before",
+              );
+            }
+            if (event.key === "ArrowDown" && index < siblings.length - 1) {
+              event.preventDefault();
+              onMove(
+                group.path,
+                control.name,
+                siblings[index + 1].name,
+                "after",
+              );
+            }
+          }}
+          onDragOver={(event) => {
+            if (
+              !drag ||
+              drag.file !== group.path ||
+              drag.name === control.name ||
+              !siblings.some((item) => item.name === drag.name)
+            )
+              return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "move";
+            const rect = event.currentTarget.getBoundingClientRect();
+            const side =
+              event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+            setDrag({ ...drag, over: control.name, side });
+          }}
+          onDragLeave={(event) => {
+            const next = event.relatedTarget as Node | null;
+            if (next && event.currentTarget.contains(next)) return;
+            if (drag?.over === control.name) setDrag({ ...drag, over: null });
+          }}
+          onDrop={(event) => {
+            if (
+              !drag ||
+              drag.file !== group.path ||
+              drag.name === control.name ||
+              !siblings.some((item) => item.name === drag.name)
+            )
+              return;
+            event.preventDefault();
+            const rect = event.currentTarget.getBoundingClientRect();
+            const side =
+              event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+            onMove(group.path, drag.name, control.name, side);
+            setDrag(null);
+          }}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            setMenu({
+              kind: "control",
+              path: group.path,
+              control,
+              x: Math.min(event.clientX, window.innerWidth - 210),
+              y: Math.min(event.clientY, window.innerHeight - 90),
+            });
+          }}
+        >
+          <ControlInput
+            control={control}
+            disabled={disabled}
+            onChange={(name, change) => onChange(group.path, name, change)}
+            onIgnore={(name) => onIgnore(group.path, name)}
+          />
+          {error && (
+            <p role="alert" className={styles.issue}>
+              {error}
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => onReloadSource(group.path)}
+              >
+                Reload source…
+              </button>
+            </p>
+          )}
+        </fieldset>
+      );
+    }
     return (
       <section
         key={group.id}
@@ -227,150 +369,59 @@ export function ControlsPanel({
               );
             })}
             <div className={styles.groupControls}>
-              {group.controls
-                .filter((control) => matches(group.path, control.name))
-                .map((control) => {
-                  const index = group.controls.indexOf(control);
-                  const isOver =
-                    drag?.file === group.path &&
-                    drag?.over === control.name &&
-                    drag.name !== control.name;
-                  const error =
-                    errors[JSON.stringify([group.path, control.name])];
-                  return (
-                    <fieldset
-                      key={control.name}
-                      className={classNames(styles.controlRow, styles.control, {
-                        [styles.rowDragging]:
-                          drag?.file === group.path &&
-                          drag?.name === control.name,
-                        [styles.dropBefore]: isOver && drag?.side === "before",
-                        [styles.dropAfter]: isOver && drag?.side === "after",
-                      })}
-                      aria-label={`${control.name} control`}
-                      draggable={!disabled}
-                      tabIndex={disabled ? undefined : 0}
-                      title={`Drag to reorder ${control.name} (${shortcut}+↑ / ${shortcut}+↓)`}
-                      onPointerDown={(event) => {
-                        const target = event.target as HTMLElement | null;
-                        dragAllowed.current = !target?.closest(
-                          "button, input, textarea, select, a, legend",
-                        );
-                      }}
-                      onDragStart={(event) => {
-                        if (disabled || !dragAllowed.current) {
-                          event.preventDefault();
-                          return;
-                        }
-                        event.dataTransfer.effectAllowed = "move";
-                        event.dataTransfer.setData("text/plain", control.name);
-                        setDrag({
-                          file: group.path,
-                          name: control.name,
-                          over: null,
-                          side: "before",
-                        });
-                      }}
-                      onDragEnd={() => setDrag(null)}
-                      onKeyDown={(event) => {
-                        if (event.target !== event.currentTarget) return;
-                        if (disabled || !event.altKey) return;
-                        if (event.key === "ArrowUp" && index > 0) {
-                          event.preventDefault();
-                          onMove(
-                            group.path,
-                            control.name,
-                            group.controls[index - 1].name,
-                            "before",
-                          );
-                        }
-                        if (
-                          event.key === "ArrowDown" &&
-                          index < group.controls.length - 1
-                        ) {
-                          event.preventDefault();
-                          onMove(
-                            group.path,
-                            control.name,
-                            group.controls[index + 1].name,
-                            "after",
-                          );
-                        }
-                      }}
-                      onDragOver={(event) => {
-                        if (
-                          !drag ||
-                          drag.file !== group.path ||
-                          drag.name === control.name
-                        )
-                          return;
-                        event.preventDefault();
-                        event.dataTransfer.dropEffect = "move";
-                        const rect =
-                          event.currentTarget.getBoundingClientRect();
-                        const side =
-                          event.clientY < rect.top + rect.height / 2
-                            ? "before"
-                            : "after";
-                        setDrag({ ...drag, over: control.name, side });
-                      }}
-                      onDragLeave={(event) => {
-                        const next = event.relatedTarget as Node | null;
-                        if (next && event.currentTarget.contains(next)) return;
-                        if (drag?.over === control.name)
-                          setDrag({ ...drag, over: null });
-                      }}
-                      onDrop={(event) => {
-                        if (
-                          !drag ||
-                          drag.file !== group.path ||
-                          drag.name === control.name
-                        )
-                          return;
-                        event.preventDefault();
-                        const rect =
-                          event.currentTarget.getBoundingClientRect();
-                        const side =
-                          event.clientY < rect.top + rect.height / 2
-                            ? "before"
-                            : "after";
-                        onMove(group.path, drag.name, control.name, side);
-                        setDrag(null);
-                      }}
+              {group.controls.map((control) => {
+                const composition = group.compositions?.find((item) =>
+                  item.members.includes(control.name),
+                );
+                if (!composition)
+                  return matches(group.path, control.name) ? (
+                    <div key={control.name} className={styles.ungrouped}>
+                      {renderControl(control, ungrouped)}
+                    </div>
+                  ) : null;
+                const members = composition.members.flatMap((name) =>
+                  group.controls.filter((item) => item.name === name),
+                );
+                if (
+                  group.controls.find((item) =>
+                    composition.members.includes(item.name),
+                  ) !== control
+                )
+                  return null;
+                const shown = members.filter(
+                  (item) =>
+                    matches(group.path, composition.name) ||
+                    matches(group.path, item.name),
+                );
+                if (!shown.length) return null;
+                return (
+                  <section
+                    key={composition.name}
+                    className={styles.composition}
+                    aria-label={`${composition.name} control group`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => onDefinition(group.path, composition.name)}
+                      className={styles.compositionHeading}
+                      title={composition.name}
                       onContextMenu={(event) => {
                         event.preventDefault();
                         setMenu({
-                          kind: "control",
+                          kind: "composition",
                           path: group.path,
-                          control,
+                          name: composition.name,
                           x: Math.min(event.clientX, window.innerWidth - 210),
                           y: Math.min(event.clientY, window.innerHeight - 90),
                         });
                       }}
                     >
-                      <ControlInput
-                        control={control}
-                        disabled={disabled}
-                        onChange={(name, change) =>
-                          onChange(group.path, name, change)
-                        }
-                        onIgnore={(name) => onIgnore(group.path, name)}
-                      />
-                      {error && (
-                        <p role="alert" className={styles.issue}>
-                          {error}
-                          <button
-                            type="button"
-                            disabled={disabled}
-                            onClick={() => onReloadSource(group.path)}
-                          >
-                            Reload source…
-                          </button>
-                        </p>
-                      )}
-                    </fieldset>
-                  );
-                })}
+                      {composition.name}
+                    </button>
+                    {shown.map((item) => renderControl(item, members))}
+                  </section>
+                );
+              })}
             </div>
             {!group.controls.length &&
               !group.error &&
@@ -490,13 +541,16 @@ export function ControlsPanel({
           className={styles.menu}
           style={{ left: menu.x, top: menu.y }}
         >
-          {menu.kind === "control" ? (
+          {menu.kind !== "group" ? (
             <button
               type="button"
               role="menuitem"
               disabled={disabled}
               onClick={() => {
-                onDefinition(menu.path, menu.control.name);
+                onDefinition(
+                  menu.path,
+                  menu.kind === "control" ? menu.control.name : menu.name,
+                );
                 setMenu(null);
               }}
             >

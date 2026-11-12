@@ -195,3 +195,22 @@ test("recursive imports become one independent card per file, preserving cycle e
   );
   assert.equal(updated.collapsed['["shared.strudel"]'], false);
 });
+
+test("shared imported files retain compositions once in the flattened master panel", async () => {
+  const files: Record<string, string> = {
+    "master.strudel": "import './a.strudel'; import './b.strudel';",
+    "a.strudel": "import './shared.strudel';",
+    "b.strudel": "import './shared.strudel';",
+    "shared.strudel":
+      "const gain=0.1,enabled=true; let voice={gain,enabled}; let invalid={voice,gain};",
+  };
+  const tree = await readControlTree(
+    "master.strudel",
+    async (path) => files[path],
+  );
+  const cards = flattenControlGroups(tree);
+  assert.equal(cards.length, 4);
+  const shared = cards.find((card) => card.path === "shared.strudel");
+  assert.deepEqual(shared?.compositions?.[0].members, ["gain", "enabled"]);
+  assert.equal(shared?.issues?.[0].name, "invalid");
+});
