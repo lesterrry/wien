@@ -1,11 +1,47 @@
 services:
-  skill:
+  server:
     build:
-      context: ./skill
+      context: .
       dockerfile: Dockerfile
+      target: server
     init: true
     restart: unless-stopped
     environment:
+      RUST_LOG: ${RUST_LOG:-info}
+      WIEN_SERVER_HOST: 0.0.0.0
+      WIEN_SERVER_PORT: "3001"
+      WIEN_SERVER_CONFIG: /app/config.toml
+      WIEN_CODEX_AUTH_FILE: /run/wien/auth.json
+      STRUDEL_RAG_ENDPOINT: http://skill:50051
+      STRUDEL_RAG_BEARER_TOKEN: ${STRUDEL_RAG_BEARER_TOKEN:?Set STRUDEL_RAG_BEARER_TOKEN in the environment or root .env}
+    ports:
+      - "127.0.0.1:${WIEN_SERVER_PORT:-3001}:3001"
+    volumes:
+      - type: bind
+        source: ${WIEN_SERVER_CONFIG:-./server/config.toml}
+        target: /app/config.toml
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${WIEN_CODEX_AUTH_FILE:-${CODEX_HOME:-${HOME}/.codex}/auth.json}
+        target: /run/wien/auth.json
+        read_only: true
+        bind:
+          create_host_path: false
+    depends_on:
+      skill:
+        condition: service_healthy
+
+  skill:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: skill
+    init: true
+    restart: unless-stopped
+    environment:
+      RUST_LOG: ${RUST_LOG:-info}
       STRUDEL_RAG_BEARER_TOKEN: ${STRUDEL_RAG_BEARER_TOKEN:?Set STRUDEL_RAG_BEARER_TOKEN in the environment or root .env}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       STRUDEL_RAG_EMBEDDING_API_KEY: ${STRUDEL_RAG_EMBEDDING_API_KEY:-}
@@ -14,8 +50,18 @@ services:
     ports:
       - "127.0.0.1:${STRUDEL_RAG_PORT:-50051}:50051"
     volumes:
+      - type: bind
+        source: ${STRUDEL_RAG_CONFIG:-./skill/config.toml}
+        target: /app/config.toml
+        read_only: true
+        bind:
+          create_host_path: false
       - skill-data:/var/lib/strudel-rag
       - ./skill/saved_html:/app/saved_html:ro
 
 volumes:
   skill-data:
+
+networks:
+  default:
+    enable_ipv6: ${WIEN_DOCKER_IPV6:-false}

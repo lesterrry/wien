@@ -1,5 +1,6 @@
 use super::*;
 use crate::RemoteClient;
+use crate::conversions::TryConvertFrom;
 use async_trait::async_trait;
 use strudel_rag_core::{self as core, EmbeddingBatch, EmbeddingIdentity, EmbeddingProvider};
 use tokio::sync::oneshot;
@@ -165,7 +166,7 @@ async fn real_search_get_parent_info_and_remote_domain_client() {
     let fixture = Fixture::new().await;
     let engine = fixture.engine(Arc::new(core::DeterministicMockProvider));
     let expected = engine
-        .search(core::SearchRequest::try_from(search()).unwrap())
+        .search(core::SearchRequest::try_convert_from(search()).unwrap())
         .await
         .unwrap();
     let server = RunningServer::start(&fixture.config, Some(engine), None).await;
@@ -244,7 +245,7 @@ async fn real_search_get_parent_info_and_remote_domain_client() {
     let mut remote = RemoteClient::connect(&config).await.unwrap();
     assert!(remote.health().await.unwrap());
     let actual = remote
-        .search(core::SearchRequest::try_from(search()).unwrap())
+        .search(core::SearchRequest::try_convert_from(search()).unwrap())
         .await
         .unwrap();
     assert_eq!(

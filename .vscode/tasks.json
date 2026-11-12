@@ -63,7 +63,7 @@
     {
       "label": "Wien: Build server",
       "type": "shell",
-      "command": "just build-server",
+      "command": "docker compose build server",
       "options": { "cwd": "${workspaceFolder}" },
       "problemMatcher": ["$rustc"]
     }

@@ -15,7 +15,7 @@ fn options() -> ModelOptions {
     }
 }
 
-async fn fixture(server: &MockServer, timeout: Duration) -> (TempDir, Codex) {
+pub(super) async fn fixture(server: &MockServer, timeout: Duration) -> (TempDir, Codex) {
     let dir = tempfile::tempdir().unwrap();
     let auth_file = dir.path().join("auth.json");
     write_auth(&auth_file, FAKE_TOKEN).await;
@@ -41,7 +41,7 @@ fn completed_event() -> Value {
     }})
 }
 
-fn sse(events: &[Value]) -> ResponseTemplate {
+pub(super) fn sse(events: &[Value]) -> ResponseTemplate {
     let body = events
         .iter()
         .map(|event| format!("data: {event}\n\n"))
@@ -84,6 +84,23 @@ async fn accepts_codex_sse_without_content_type_header() {
         .respond_with(
             ResponseTemplate::new(200).set_body_raw(format!("data: {}\n\n", completed_event()), ""),
         )
+        .mount(&server)
+        .await;
+    assert_eq!(
+        provider.send("hello", &options()).await.unwrap().text,
+        "Привет 🎶"
+    );
+}
+
+#[tokio::test]
+async fn accepts_codex_sse_labeled_as_plain_text() {
+    let server = MockServer::start().await;
+    let (_dir, provider) = fixture(&server, TIMEOUT).await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            format!("data: {}\n\n", completed_event()),
+            "text/plain; charset=utf-8",
+        ))
         .mount(&server)
         .await;
     assert_eq!(
@@ -204,8 +221,12 @@ async fn fails_on_incomplete_failed_malformed_or_non_stream_responses() {
             ProviderError::InvalidResponse,
         ),
         (
-            ResponseTemplate::new(200).set_body_string(FAKE_TOKEN),
+            ResponseTemplate::new(200).set_body_raw(FAKE_TOKEN, "text/html"),
             ProviderError::InvalidResponse,
+        ),
+        (
+            ResponseTemplate::new(200).set_body_raw(FAKE_TOKEN, "text/plain"),
+            ProviderError::Incomplete,
         ),
     ];
     for (response, expected) in cases {

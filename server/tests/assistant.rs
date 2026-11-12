@@ -1,3 +1,4 @@
+mod support;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
@@ -20,6 +21,17 @@ struct Stub {
 
 #[async_trait]
 impl Provider for Stub {
+    async fn turn(
+        &self,
+        request: &wien_server::providers::turn::TurnRequest,
+    ) -> Result<wien_server::providers::turn::TurnResponse, ProviderError> {
+        let text = request.input[0]["content"][0]["text"].as_str().unwrap();
+        Ok(wien_server::providers::turn::TurnResponse {
+            response: self.send(text, &request.options).await?,
+            output: vec![],
+            calls: vec![],
+        })
+    }
     async fn send(
         &self,
         text: &str,
@@ -58,7 +70,7 @@ async fn sends_full_context_and_master_prompt_and_returns_edit_or_answer() {
             output: output.to_string(),
             calls: Mutex::new(vec![]),
         });
-        let app = api::router(
+        let app = support::router(
             stub.clone(),
             AssistantConfig {
                 model: "configured-model".into(),
@@ -75,7 +87,15 @@ async fn sends_full_context_and_master_prompt_and_returns_edit_or_answer() {
         assert_eq!(calls[0].0["prompt"], body["prompt"]);
         assert_eq!(calls[0].0["file"], body["file"]);
         assert_eq!(calls[0].1.model, "configured-model");
-        assert_eq!(calls[0].1.instructions.as_deref(), Some(MASTER_PROMPT));
+        assert!(
+            calls[0]
+                .1
+                .instructions
+                .as_deref()
+                .unwrap()
+                .contains(MASTER_PROMPT)
+        );
+        assert_eq!(calls[0].0["rag_corpus"]["ready"], true);
     }
 }
 
@@ -85,7 +105,7 @@ async fn validates_context_and_origin_before_model_call() {
         output: "unused".into(),
         calls: Mutex::new(vec![]),
     });
-    let app = api::router(stub.clone(), Default::default());
+    let app = support::router(stub.clone(), Default::default());
     let mut bodies = vec![];
     for (field, value) in [
         ("prompt", json!(" ")),
@@ -146,7 +166,7 @@ async fn rejects_malformed_or_oversized_model_output_without_exposing_it() {
             output,
             calls: Mutex::new(vec![]),
         });
-        let response = api::router(stub, Default::default())
+        let response = support::router(stub, Default::default())
             .oneshot(request(context()))
             .await
             .unwrap();
@@ -164,7 +184,7 @@ async fn accepts_utf16_offsets_and_empty_file_from_generated_request() {
         output: json!({"message":"ok", "code":null}).to_string(),
         calls: Mutex::new(vec![]),
     });
-    let app = api::router(stub, Default::default());
+    let app = support::router(stub, Default::default());
     let generated =
         std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/http/PostAssist.http"))
             .unwrap();
@@ -200,7 +220,7 @@ async fn resolves_exact_selection_and_cursor_for_the_model_in_both_directions() 
             calls: Mutex::new(vec![]),
         });
         let body = json!({"prompt":"Что это?","file":{"path":"drums.strudel","content":content,"cursor":{"anchor":anchor,"head":head}}});
-        let response = api::router(stub.clone(), Default::default())
+        let response = support::router(stub.clone(), Default::default())
             .oneshot(request(body))
             .await
             .unwrap();
@@ -235,7 +255,7 @@ async fn resolves_multiline_selection_and_caret_without_splitting_unicode() {
             output: json!({"message":"ok","code":null}).to_string(),
             calls: Mutex::new(vec![]),
         });
-        let response = api::router(stub.clone(), Default::default()).oneshot(request(json!({"prompt":"explain","file":{"path":"test.strudel","content":content,"cursor":{"anchor":anchor,"head":head}}}))).await.unwrap();
+        let response = support::router(stub.clone(), Default::default()).oneshot(request(json!({"prompt":"explain","file":{"path":"test.strudel","content":content,"cursor":{"anchor":anchor,"head":head}}}))).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let calls = stub.calls.lock().unwrap();
         let editor = &calls[0].0["editor_context"];
@@ -249,7 +269,7 @@ async fn resolves_multiline_selection_and_caret_without_splitting_unicode() {
         output: "unused".into(),
         calls: Mutex::new(vec![]),
     });
-    let response = api::router(stub.clone(), Default::default()).oneshot(request(json!({"prompt":"explain","file":{"path":"test.strudel","content":content,"cursor":{"anchor":4,"head":4}}}))).await.unwrap();
+    let response = support::router(stub.clone(), Default::default()).oneshot(request(json!({"prompt":"explain","file":{"path":"test.strudel","content":content,"cursor":{"anchor":4,"head":4}}}))).await.unwrap();
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     assert!(stub.calls.lock().unwrap().is_empty());
 }

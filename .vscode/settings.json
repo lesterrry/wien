@@ -5,7 +5,7 @@
     "editor.defaultFormatter": "rust-lang.rust-analyzer",
     "editor.formatOnSave": true
   },
-  "rust-analyzer.linkedProjects": ["server/Cargo.toml"],
+  "rust-analyzer.linkedProjects": ["Cargo.toml"],
   "rust-analyzer.check.command": "clippy",
   "editor.codeActionsOnSave": {
     "source.fixAll.biome": "explicit",
@@ -18,7 +18,9 @@
   "search.exclude": {
     "client/out": true,
     "client/release": true,
-    "server/target": true
+    "target": true,
+    "server/target": true,
+    "skill/target": true
   },
   "biome.lsp.bin": "client/node_modules/@biomejs/biome/bin/biome",
   "biome.configurationPath": "client/biome.json"
