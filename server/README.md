@@ -1,26 +1,25 @@
 # Wien server
 
-Локальный Rust-бэкенд: `axum` + Tokio, `reqwest`, `eventsource-stream`, OpenAPI через
-`utoipa` и встроенный Swagger UI. `/v1/generate` делает один вызов модели,
-а `/v1/assist` выполняет ограниченный цикл инструментов Strudel RAG.
+Rust-бэкенд: `axum` + Tokio, `reqwest`, `eventsource-stream`, OpenAPI через
+`utoipa` и встроенный Swagger UI. `/v1/assist` выполняет ограниченный цикл
+инструментов Strudel RAG.
 История между пользовательскими запросами не сохраняется.
 
 ## Запуск
 
-Нужны работающий Docker с Compose, `just` и файл авторизации локального Codex
-с входом через личную подписку ChatGPT. Команды выполняются из корня репозитория:
+Нужны работающий Docker с Compose, `just` и ключ AI Tunnel в `AITUNNEL_KEY`. Команды выполняются из корня репозитория:
 
 ```sh
 cp .env.example .env
-# Заполни STRUDEL_RAG_BEARER_TOKEN в .env (например, результатом openssl rand -hex 32).
+# Заполни AITUNNEL_KEY и STRUDEL_RAG_BEARER_TOKEN в .env.
 just run-server
 # http://127.0.0.1:3001/docs/ — Swagger UI (ресурсы включены в бинарник)
 # http://127.0.0.1:3001/openapi.json — генерируемый OpenAPI-контракт
 # http://127.0.0.1:3001/health — проверка процесса, без обращения к модели
 ```
 
-`just run-server` собирает образы и запускает `server` и RAG `skill` с общими логами.
-Ctrl+C останавливает оба сервиса. RAG должен пройти healthcheck, но готовый индекс
+`just run-server` собирает образы и запускает `server`, RAG `skill` и PostgreSQL с общими логами.
+Ctrl+C останавливает сервисы. RAG должен пройти healthcheck, но готовый индекс
 для запуска не требуется. Подготовка индекса описана в [корневом README](../README.md).
 Для `/v1/assist` нужен готовый индекс: при пустом корпусе запрос завершается
 с `503 rag_not_ready` до обращения к модели. Compose передаёт серверу endpoint
@@ -31,7 +30,7 @@ Ctrl+C останавливает оба сервиса. RAG должен про
 Порт хоста можно изменить: `WIEN_SERVER_PORT=3002 just run-server`.
 Compose публикует его только на `127.0.0.1`; внутри контейнера сервер слушает
 `0.0.0.0:3001`. При запуске без Docker адрес по умолчанию — `127.0.0.1`,
-переопределяется через `WIEN_SERVER_HOST`. Сервер предназначен для локальной разработки.
+переопределяется через `WIEN_SERVER_HOST`. По умолчанию API принимает только локальные запросы.
 Настройки CORS не открыты сторонним сайтам; ручка также проверяет Host и Origin.
 Electron-клиент вызывает её из main process через ограниченный IPC; renderer не
 получает credentials и не обращается к провайдеру напрямую.
@@ -41,10 +40,11 @@ Electron-клиент вызывает её из main process через огр�
 Провайдер выбирается сервером при старте из `server/config.toml`:
 
 ```toml
-provider = "codex"
+provider = "aitunnel"
 
-[assistant]
-model = "gpt-6.1-sol"
+[generation]
+model = "gpt-6-luna"
+reasoning_effort = "low"
 ```
 
 Compose подключает `server/config.toml` только для чтения в `/app/config.toml`.
@@ -52,53 +52,18 @@ Compose подключает `server/config.toml` только для чтени
 `WIEN_SERVER_CONFIG=/absolute/path/config.toml just run-server`.
 Для изменения настройки нужен перезапуск сервера. Отсутствующий файл, некорректный TOML,
 неизвестный провайдер или лишние поля останавливают запуск без fallback.
-`assistant.model` задаёт модель редакторского ассистента (по умолчанию `gpt-6.1-sol`,
-reasoning — `low`). В этом конфиге нет токенов: авторизация читается из внешнего файла Codex.
+`generation.model` и `generation.reasoning_effort` задают настройки
+для `/v1/assist` (по умолчанию `gpt-6-luna` и `low`). Системные инструкции
+ассистента хранятся в `server/prompts/`. В этом конфиге нет токенов: AI Tunnel читает `AITUNNEL_KEY`
+из окружения при старте. Генерация и embeddings используют один ключ.
 
 HTTP-клиент не выбирает и не настраивает провайдера. Поля `provider` нет ни в запросе,
 ни в ответе, ни в OpenAPI-схемах; попытка передать его в запросе возвращает 400.
 
-## Запрос
-
-```sh
-curl --fail-with-body http://127.0.0.1:3001/v1/generate \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "text": "Предложи короткий басовый паттерн для Strudel. Верни только код.",
-    "options": {
-      "model": "gpt-6.1-sol",
-      "reasoning_effort": "low",
-      "instructions": "Ты помогаешь писать музыку в Strudel."
-    }
-  }'
-```
-
-`text` и `options.model` обязательны.
-Модель указывается явно и должна быть доступна твоему аккаунту; сервер не подменяет её.
-`reasoning_effort` и `instructions` необязательны. Поддерживаемые уровни reasoning
-зависят от выбранной модели. Неизвестные поля, включая `temperature`, отклоняются,
-чтобы неподдерживаемые настройки не игнорировались молча.
-
-HTTP-запрос ждёт завершения и возвращает один JSON:
-
-```json
-{
-  "id": "response-id",
-  "model": "gpt-6.1-sol",
-  "text": "note(\"<a1 f1 c2 g1>\").s(\"sawtooth\").lpf(650)",
-  "usage": { "input_tokens": 30, "output_tokens": 24, "total_tokens": 54 }
-}
-```
-
-`usage` может быть `null`. Внутри провайдер принимает SSE, но наружу отдаёт результат
-только после `response.completed`. Оборванный поток и `response.incomplete` не считаются
-успехом. Таймаут — 120 секунд; лимиты — 256 KiB JSON-запроса, 128 KiB текста/инструкций
-и 8 MiB ответа провайдера. Автоматических повторов запросов нет.
-
-Ошибки имеют вид `{"code":"provider_timeout","message":"…"}`:
-400 — некорректный ввод; 403 — не локальный Host/Origin;
-413 — большой запрос; 429 — лимит провайдера; 502 — сбой/неполный ответ провайдера;
-503 — нужна авторизация Codex; 504 — таймаут. Сырые ошибки upstream не возвращаются.
+Модель и reasoning задаются конфигом сервера; поля `options`, `model`,
+`reasoning_effort` и `instructions` в HTTP-запросе отклоняются с 400.
+Поддерживаемые уровни reasoning зависят от выбранной модели.
+После изменения конфига перезапусти сервер.
 
 ## Ассистент редактора
 
@@ -163,7 +128,7 @@ Unicode и многострочные фрагменты; смещения вн�
 Один процесс сервера выполняет до 4 запросов `/v1/assist` одновременно. Остальные
 сразу получают `429 assistant_busy` с `Retry-After: 2`, до любых вызовов RAG и модели.
 Серверной очереди нет; слот освобождается при завершении, ошибке, таймауте или
-отмене обработчика. `/health` и `/v1/generate` этим лимитом не ограничиваются.
+отмене обработчика. Служебные проверки этим лимитом не ограничиваются.
 
 Клиент повторяет только `429 assistant_busy`: максимум 3 повтора после первой
 попытки, с задержками 2, 4 и 8 секунд плюс случайные 0–499 мс. Если `Retry-After`
@@ -189,40 +154,42 @@ reasoning. Формат следует [Responses function calling](https://deve
 Если используешь другой порт, передай одинаковый `WIEN_SERVER_PORT` обеим командам
 запуска. Сгенерированный пример запроса — `http/PostAssist.http`.
 
-## Авторизация и токены
+## AI Tunnel и удалённый API
 
-Compose подключает существующий файл авторизации только для чтения в
-`/run/wien/auth.json`; dev-провайдер читает его **только во время запроса**.
-Приоритет пути на хосте: `WIEN_CODEX_AUTH_FILE`, затем `$CODEX_HOME/auth.json`, затем
-`$HOME/.codex/auth.json`. Отсутствующий файл не создаётся автоматически и блокирует
-запуск контейнера. Если нужен другой файл, указывай путь вне checkout:
+`src/providers/aitunnel/` обращается только к `https://api.aitunnel.ru/v1/responses`.
+Ключ берётся из `AITUNNEL_KEY`; fallback на другие сервисы отсутствует.
+Лимит — 4096 выходных токенов на шаг, 8 MiB ответа и 120 секунд;
+автоматических повторов генерации нет, чтобы не дублировать платные запросы.
+История инструментов и reasoning сохраняется между шагами в пределах одного запроса.
+HTTP 401/403 становится `provider_auth_required`, 402/429 — `provider_rate_limited`.
+Сырые ошибки провайдера и credentials клиенту не возвращаются.
+Если у ключа включён IP allowlist, исходящий IP сервера должен быть разрешён
+в AI Tunnel; иначе провайдер вернёт 403 даже с правильным ключом.
 
-```sh
-WIEN_CODEX_AUTH_FILE=/absolute/path/outside/repository/auth.json just run-server
-```
+В конфигурации следующего релиза публичный `/v1/assist` требует сессию и доступный остаток запросов.
+Nginx проксирует все маршруты бэкенда без отдельных ограничений по пути.
+Аккаунты доступны через `/auth/*` и `/users/me*`; `/health`, `/ready` и документация
+также доступны по домену. Авторизацию и лимиты проверяет бэкенд.
+Swagger использует текущий origin. После смены `AITUNNEL_KEY` пересоздай контейнеры,
+чтобы обновить окружение. Ключ не передаётся клиенту.
 
-Файл должен содержать ChatGPT login Codex (`tokens.access_token` и `tokens.account_id`).
-API key login не используется. Токены не копируются в репозиторий, не принимаются
-через HTTP-ручку, не выводятся в логи и не передаются клиенту. Redirects upstream
-отключены. В `.gitignore` исключены файлы авторизации, `.env` и приватные ключи.
-Сам сервер вообще не пишет файлы авторизации и не обновляет токены.
+## Опциональный локальный Codex
 
-Обновлением авторизации владеет Codex. При `provider_auth_required` обнови login на хосте.
-После замены файла пересоздай контейнер командой
-`docker compose up -d --force-recreate server`: bind mount отдельного файла
-может продолжать видеть старый файл после атомарной замены.
-При запуске без Docker перезапуск Wien не требуется. Если Codex хранит авторизацию
-только в системном keychain, текущий адаптер её не читает; понадобится file-based login
-Codex вне репозитория. Не вставляй токены в примеры, исходники или shell-команды.
+Адаптер `src/providers/codex/` сохранён. Для него поставь `provider = "codex"`
+в `server/config.toml` и выбери доступную аккаунту модель. RAG всё равно использует
+AI Tunnel. `just run-server` всегда добавляет `compose.codex.yaml` последним к
+списку `COMPOSE_FILE` из окружения или `.env` (по умолчанию `compose.yaml`).
+Дополнительные файлы, например `compose.ca.yaml`, сохраняются. Локальный файл
+авторизации Codex монтируется при любом выбранном адаптере и должен существовать.
+Команда `docker compose up` без этой локальной обёртки работает как прежде.
 
-Это прямой HTTP-адаптер **внутреннего протокола Codex**
-(`https://chatgpt.com/backend-api/codex/responses`), сверенный с
-[исходниками Codex](https://github.com/openai/codex/tree/main/codex-rs/model-provider-info).
-Он использует локальную подписку для разработки и не запускает CLI/агента.
-Это не стабильный публичный OpenAI API: совместимость зависит от изменений Codex.
-Для распространения/хостинга нужно отдельно выбрать поддерживаемую авторизацию,
-например [Sign in with ChatGPT](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference)
-или API-провайдера. Токен старого Codex login не следует считать токеном SIWC.
+Override монтирует файл read-only в `/run/wien/auth.json`. Приоритет пути:
+`WIEN_CODEX_AUTH_FILE`, затем `$CODEX_HOME/auth.json`, затем `$HOME/.codex/auth.json`.
+Нужны `tokens.access_token` и `tokens.account_id`; API key login и системный keychain
+не поддерживаются. Codex владеет обновлением токенов. После замены файла пересоздай
+контейнер сервера, поскольку bind mount может видеть прежний inode.
+Сервер читает credentials при запросе, не обновляет их и не запускает Codex CLI.
+Это dev-адаптер внутреннего Codex HTTP-протокола, а не основной провайдер деплоя.
 
 ## Контракт провайдеров
 
@@ -257,13 +224,13 @@ Cargo.lock хранится в корне общего workspace и исполь
 1. Выполни `just generate` из корня репозитория.
 2. Установи рекомендованное расширение **REST Client** (`humao.rest-client`).
 3. Запусти `just run-server`, открой `server/http/GetHealth.http` или
-   `server/http/PostGenerate.http` и нажми **Send Request** над запросом.
+   `server/http/PostAssist.http` и нажми **Send Request** над запросом. Для assist укажи токен сессии после регистрации или входа.
 
 Генерация экспортирует тот же контракт, что `/openapi.json`, в `server/openapi.json`,
 затем запускает [httpgenerator](https://github.com/christianhelle/httpgenerator)
 **1.1.0**. При первом запуске Cargo устанавливает эту версию с `--locked` в
 игнорируемый `target/tools`; для установки нужен интернет. Последующие запуски
-используют локальный бинарник. Сам Wien, его конфиг и авторизация Codex для генерации
+используют локальный бинарник. Сам Wien, его конфиг и credentials провайдеров для генерации
 не нужны. Генератор запускается с отключённой телеметрией (`--no-logging`).
 
 У версии 1.1.0 есть два ограничения: встроенная валидация не поддерживает OpenAPI 3.1,
@@ -279,7 +246,7 @@ Cargo.lock хранится в корне общего workspace и исполь
 Генерация обновляет помеченные файлы и удаляет устаревшие помеченные запросы.
 Рукописные `.http` сохраняются; при конфликте имён команда завершается ошибкой.
 Для экспериментов скопируй запрос в файл с другим именем и убери первую строку
-`# Generated by just generate...`. В своей копии можно менять `@baseUrl`, модель и текст.
+`# Generated by just generate...`. В своей копии можно менять `@baseUrl`, токен сессии, промпт и контекст файла.
 
 В VS Code установленный `rust-analyzer` форматирует Rust при сохранении.
 Default build task **Wien: Run** (`⌘⇧B`) запускает клиент и сервер параллельно
@@ -290,3 +257,90 @@ Default build task **Wien: Run** (`⌘⇧B`) запускает клиент и 
 тестовыми документами и HTTP-заглушку модели: проверяет guide → search → parent →
 ответ, передачу metadata, ревизий и encrypted reasoning. Это проверка протокола,
 не оценка реального корпуса или качества музыкальных ответов.
+
+## Аккаунты
+
+PostgreSQL через SQLx 0.9: обычные SQL-запросы с параметрами, пул до 8 соединений,
+миграции `server/migrations/` встроены в бинарник и применяются при старте.
+`just run-server` автоматически запускает PostgreSQL в Compose; данные сохраняются
+в отдельном томе `users-data`, порт базы наружу не открыт. Для `cargo run` нужен
+`DATABASE_URL`. Без базы сервер не стартует; `/ready` проверяет и БД, и RAG.
+
+- `GET /auth/registration`: публичный ключ Turnstile для веб-формы.
+- `POST /auth/register`: `{username, password, turnstile_token}`, только веб с
+  `X-Wien-Session: cookie` и корректным Origin; возвращает профиль и HttpOnly cookie.
+- `POST /auth/login`: те же поля; неверный пароль и неизвестный username дают одинаковую ошибку.
+- `GET /users/me`: профиль пользователя из текущей сессии.
+- `POST /auth/logout`: отзывает текущую сессию.
+- `POST /users/me/password`: `{current_password, new_password}`, отзывает все прежние
+  сессии и возвращает новую сессию для текущего устройства.
+
+Защищённые запросы используют `Authorization: Bearer <token>`. Username — строго
+`[a-z0-9_]{3,32}`, без автоматического приведения регистра. Пароль — 12–128 Unicode
+символов, без обрезки пробелов. В БД хранятся Argon2id-хеши с независимой случайной
+солью; 256-битные токены сессий хранятся только как SHA-256-хеши и истекают через
+30 дней. Ответы аккаунтов имеют `Cache-Control: no-store`.
+
+Регистрация требует Cloudflare Turnstile: сервер вызывает Siteverify и проверяет
+`success`, hostname и action `register`. Настройки в окружении:
+`TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, `TURNSTILE_HOSTNAMES` (через запятую).
+Без настроек регистрация закрыта, вход работает. Секрет не возвращается клиенту.
+Managed-виджет разрешает `wien.aydar.media`, `localhost` и `127.0.0.1`, чтобы локальный
+веб-стенд мог регистрировать аккаунты через продовый API. Нет почты и восстановления
+забытого пароля. Лимиты
+попыток сохраняются в PostgreSQL между перезапусками; просроченные сессии и счётчики
+удаляются раз в час. Смена пароля требует текущий пароль. Имя пользователя неизменно.
+При регистрации создаётся подписка `free` с 10 запросами assist; миграция выдаёт
+такой же разовый остаток существующим аккаунтам. `/users/me` и ответы входа содержат
+`tier` (`free`/`plus`/`pro`/`ultra`) и `assist_requests_remaining`.
+`POST /v1/assist` требует bearer token: без сессии — 401, при нулевом остатке —
+402 `assist_quota_exhausted`, до любых вызовов модели или RAG. Один успешный ответ
+тратит один запрос независимо от числа внутренних вызовов инструментов. Ошибки
+и отменённые до завершения обработчики ничего не списывают. Если сервер уже
+завершил ответ, закрытие окна или потеря ответа не отменяет списание.
+Резерв держит блокировку отдельной строки подписки в транзакции; параллельный
+запрос того же аккаунта получает 429 `assistant_busy`. При ошибке/отмене/падении
+процесса PostgreSQL откатывает резерв. Счётчик не сбрасывается при входе или релизе.
+
+PLUS / PRO / ULTRA пока только витрина (199 / 699 / 3990 ₽ в месяц).
+Лимиты платных тарифов не заданы, оплаты и API изменения тира нет.
+Бейджи отображают сохранённый в БД тир; переходов между тарифами из клиента нет.
+
+В Electron формы встроены в окно приложения. Токен хранится в main process,
+зашифрованный через системное хранилище Electron safeStorage, отдельно для каждого
+backend origin. При отсутствии защищённого системного хранилища сессия живёт только
+до закрытия приложения; пароль не сохраняется.
+
+Интеграционные тесты используют отдельные временные базы и требуют пользователя
+PostgreSQL с правом CREATE DATABASE (не направляй их на production):
+
+```sh
+DATABASE_URL=postgresql://test:password@127.0.0.1:5432/test \
+  cargo test --locked -p wien-server --test accounts_db --test subscriptions_db -- --ignored
+```
+
+Обычный `cargo test` пропускает только эти явно помеченные DB-тесты; GitHub CI
+поднимает PostgreSQL и запускает их отдельным обязательным шагом.
+
+Проверка форм Electron с одноразовой локальной БД и запущенным бэком:
+
+```sh
+cd client
+WIEN_BACKEND_URL=http://127.0.0.1:3009 WIEN_TEST_USERNAME=test_user \
+  WIEN_TEST_PASSWORD='password of the disposable account' node scripts/account-smoke.mjs
+```
+
+Сначала создайте одноразовый аккаунт через локальный веб. Сценарий проверяет вход
+и меняет его пароль; удалённый backend URL запрещён.
+
+## Browser sessions
+
+The existing account endpoints also accept `X-Wien-Session: cookie` on same-origin
+browser requests. Registration, login and password change then set an HttpOnly
+`__Host-wien_session` cookie (Secure; SameSite=Strict; Path=/; 30 days) and omit
+`token` from JSON. `/users/me`, `/v1/assist`, logout and password change accept
+this cookie only with the same custom header and valid Origin/Fetch Metadata.
+Cross-origin requests, including sibling subdomains, are rejected; no CORS is enabled.
+Logout clears the cookie, password changes revoke other sessions, and the database
+checks expiry as for bearer sessions. Localhost uses `wien_session` without Secure
+for HTTP development. Electron's bearer-token contract is unchanged.

@@ -5,6 +5,9 @@
 !server/
 server/**
 !server/Cargo.toml
+!server/build.rs
+!server/migrations/
+!server/migrations/**
 !server/config.toml
 !server/src/
 !server/src/**
@@ -23,6 +26,18 @@ skill/**
 !skill/corpus/sources.toml
 !crates/
 !crates/**
+!client/
+client/**
+!client/package.json
+!client/pnpm-lock.yaml
+!client/tsconfig.json
+!client/vite.web.config.ts
+!client/electron.vite.config.ts
+!client/src/
+!client/src/**
+!deploy/
+deploy/**
+!deploy/nginx.conf
 
 # Exclude local artifacts and secrets even inside source directories.
 **/target/**

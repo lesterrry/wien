@@ -1,15 +1,210 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Wien local AI server",
+    "title": "Wien AI server",
     "version": "0.1.0"
   },
   "servers": [
     {
-      "url": "http://127.0.0.1:3001"
+      "url": "/"
     }
   ],
   "paths": {
+    "/auth/login": {
+      "post": {
+        "operationId": "login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Credentials"
+              },
+              "example": {
+                "password": "choose a long password",
+                "username": "music_maker"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedIn"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "operationId": "logout",
+        "responses": {
+          "204": {
+            "description": "Session revoked"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "browser_session": []
+          }
+        ]
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "summary": "Register on the website with a verified Turnstile token; creates a cookie session.",
+        "operationId": "register",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Registration"
+              },
+              "example": {
+                "password": "choose a long password",
+                "turnstile_token": "token from the Turnstile widget",
+                "username": "music_maker"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedIn"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/registration": {
+      "get": {
+        "operationId": "registration_config",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistrationConfig"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Check server health without calling the model.",
@@ -34,7 +229,7 @@
         "operationId": "ready",
         "responses": {
           "200": {
-            "description": "RAG corpus ready; external APIs are not probed",
+            "description": "PostgreSQL and RAG corpus ready; external APIs are not probed",
             "content": {
               "application/json": {
                 "schema": {
@@ -44,7 +239,7 @@
             }
           },
           "503": {
-            "description": "RAG unavailable or corpus not ready",
+            "description": "PostgreSQL or RAG unavailable, or corpus not ready",
             "content": {
               "application/json": {
                 "schema": {
@@ -54,6 +249,123 @@
             }
           }
         }
+      }
+    },
+    "/users/me": {
+      "get": {
+        "operationId": "profile",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "browser_session": []
+          }
+        ]
+      }
+    },
+    "/users/me/password": {
+      "post": {
+        "summary": "Revoke all previous sessions and return a replacement for the current device.",
+        "operationId": "change_password",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePassword"
+              },
+              "example": {
+                "current_password": "choose a long password",
+                "new_password": "choose another long password"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedIn"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "browser_session": []
+          }
+        ]
       }
     },
     "/v1/assist": {
@@ -102,8 +414,18 @@
               }
             }
           },
-          "403": {
-            "description": "Non-local browser origin",
+          "401": {
+            "description": "Sign in required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Assist allowance exhausted",
             "content": {
               "application/json": {
                 "schema": {
@@ -162,112 +484,15 @@
               }
             }
           }
-        }
-      }
-    },
-    "/v1/generate": {
-      "post": {
-        "summary": "Generate a completed text response using the server's configured provider.",
-        "operationId": "generate",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/GenerateRequest"
-              },
-              "example": {
-                "options": {
-                  "model": "gpt-6.1-sol",
-                  "reasoning_effort": "low"
-                },
-                "text": "Hello!"
-              }
-            }
-          },
-          "required": true
         },
-        "responses": {
-          "200": {
-            "description": "Completed model response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ModelResponse"
-                }
-              }
-            }
+        "security": [
+          {
+            "session": []
           },
-          "400": {
-            "description": "Invalid JSON, text, model, or options",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Non-local browser origin",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "413": {
-            "description": "Request body too large",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Provider usage limit",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "Upstream error or incomplete response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Local Codex login required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "504": {
-            "description": "Provider timeout",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
+          {
+            "browser_session": []
           }
-        }
+        ]
       }
     }
   },
@@ -323,6 +548,38 @@
         },
         "additionalProperties": false
       },
+      "ChangePassword": {
+        "type": "object",
+        "required": [
+          "current_password",
+          "new_password"
+        ],
+        "properties": {
+          "current_password": {
+            "type": "string"
+          },
+          "new_password": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Credentials": {
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "properties": {
+          "password": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "Cursor": {
         "type": "object",
         "required": [
@@ -342,6 +599,21 @@
           }
         },
         "additionalProperties": false
+      },
+      "Error": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
       },
       "FileContext": {
         "type": "object",
@@ -364,78 +636,31 @@
         },
         "additionalProperties": false
       },
-      "GenerateRequest": {
-        "type": "object",
-        "required": [
-          "text",
-          "options"
-        ],
-        "properties": {
-          "options": {
-            "$ref": "#/components/schemas/ModelOptions"
-          },
-          "text": {
-            "type": "string"
-          }
-        },
-        "additionalProperties": false
-      },
-      "ModelOptions": {
-        "type": "object",
-        "description": "Explicitly supported model settings. Unknown settings are rejected, not ignored.",
-        "required": [
-          "model"
-        ],
-        "properties": {
-          "instructions": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "model": {
-            "type": "string",
-            "description": "Model slug available to your account; no implicit model substitution."
-          },
-          "reasoning_effort": {
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/ReasoningEffort"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "additionalProperties": false
-      },
-      "ModelResponse": {
+      "Profile": {
         "type": "object",
         "required": [
           "id",
-          "model",
-          "text"
+          "username",
+          "created_at",
+          "tier",
+          "assist_requests_remaining"
         ],
         "properties": {
+          "assist_requests_remaining": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "created_at": {
+            "type": "string"
+          },
           "id": {
             "type": "string"
           },
-          "model": {
-            "type": "string"
+          "tier": {
+            "$ref": "#/components/schemas/Tier"
           },
-          "text": {
+          "username": {
             "type": "string"
-          },
-          "usage": {
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/Usage"
-              },
-              {
-                "type": "null"
-              }
-            ]
           }
         }
       },
@@ -450,43 +675,75 @@
           }
         }
       },
-      "ReasoningEffort": {
-        "type": "string",
-        "enum": [
-          "none",
-          "minimal",
-          "low",
-          "medium",
-          "high",
-          "xhigh",
-          "max",
-          "ultra"
-        ]
-      },
-      "Usage": {
+      "Registration": {
         "type": "object",
         "required": [
-          "input_tokens",
-          "output_tokens",
-          "total_tokens"
+          "username",
+          "password",
+          "turnstile_token"
         ],
         "properties": {
-          "input_tokens": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0
+          "password": {
+            "type": "string"
           },
-          "output_tokens": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0
+          "turnstile_token": {
+            "type": "string"
           },
-          "total_tokens": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0
+          "username": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RegistrationConfig": {
+        "type": "object",
+        "required": [
+          "sitekey"
+        ],
+        "properties": {
+          "sitekey": {
+            "type": "string"
           }
         }
+      },
+      "SignedIn": {
+        "type": "object",
+        "required": [
+          "user"
+        ],
+        "properties": {
+          "token": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Present for desktop bearer sessions; browser sessions use an HttpOnly cookie."
+          },
+          "user": {
+            "$ref": "#/components/schemas/Profile"
+          }
+        }
+      },
+      "Tier": {
+        "type": "string",
+        "enum": [
+          "free",
+          "plus",
+          "pro",
+          "ultra"
+        ]
+      }
+    },
+    "securitySchemes": {
+      "browser_session": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "__Host-wien_session",
+        "description": "HttpOnly browser session. Send X-Wien-Session: cookie on same-origin requests. Local HTTP development uses wien_session."
+      },
+      "session": {
+        "type": "http",
+        "scheme": "bearer"
       }
     }
   }

@@ -12,13 +12,16 @@
     "typecheck": "tsc --noEmit",
     "format": "biome check --write .",
     "test": "pnpm check && pnpm test:unit",
-    "test:unit": "node --import tsx --test src/main/project-fs.test.ts src/main/assistant.test.ts src/shared/modules.test.ts src/shared/controls.test.ts src/shared/control-tree.test.ts src/shared/dependency-graph.test.ts src/renderer/src/components/GraphView/layout.test.ts && pnpm test:modules",
-    "test:smoke": "pnpm build && node scripts/smoke.mjs && node scripts/window-smoke.mjs && node scripts/assistant-smoke.mjs && node scripts/background-playback-smoke.mjs && node scripts/graph-smoke.mjs && node scripts/slider-smoke.mjs && node scripts/controls-smoke.mjs && node scripts/panel-modes-smoke.mjs && node scripts/playground-smoke.mjs",
+    "test:unit": "node --import tsx --test src/dev/web-api-proxy.test.ts src/main/project-fs.test.ts src/main/project-versions.test.ts src/main/assistant.test.ts src/main/account.test.ts src/shared/modules.test.ts src/shared/controls.test.ts src/shared/control-tree.test.ts src/shared/dependency-graph.test.ts src/renderer/src/components/GraphView/layout.test.ts && pnpm test:modules",
+    "test:smoke": "pnpm build && node scripts/smoke.mjs && node scripts/window-smoke.mjs && node scripts/assistant-smoke.mjs && node scripts/subscriptions-smoke.mjs && node scripts/background-playback-smoke.mjs && node scripts/graph-smoke.mjs && node scripts/slider-smoke.mjs && node scripts/controls-smoke.mjs && node scripts/panel-modes-smoke.mjs && node scripts/playground-smoke.mjs && node scripts/versions-smoke.mjs",
     "build": "pnpm typecheck && electron-vite build",
     "preview": "electron-vite preview",
-    "package": "pnpm build && electron-builder --dir",
+    "package": "pnpm build && node scripts/package.mjs",
     "test:banks": "pnpm build && node scripts/banks-smoke.mjs",
-    "test:modules": "esbuild src/renderer/src/module-compiler.test.ts --bundle --platform=node --main-fields=module,main --format=cjs --outfile=out/tests/modules.cjs && node --test out/tests/modules.cjs"
+    "test:modules": "esbuild src/renderer/src/module-compiler.test.ts --bundle --platform=node --main-fields=module,main --format=cjs --outfile=out/tests/modules.cjs && node --test out/tests/modules.cjs",
+    "dev:web": "vite --config vite.web.config.ts",
+    "build:web": "pnpm typecheck && vite build --config vite.web.config.ts",
+    "test:web": "node scripts/web-smoke.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.1",
@@ -35,6 +38,7 @@
     "@xyflow/react": "^12.12.1",
     "acorn": "^8.19.0",
     "classnames": "^2.5.1",
+    "isomorphic-git": "^1.44.12",
     "lucide-react": "^1.70.0",
     "react": "^19.3.1",
     "react-arborist": "4.0.1",
@@ -42,7 +46,8 @@
     "react-dnd-html5-backend": "^16.0.1",
     "react-dom": "^19.3.1",
     "react-markdown": "^10.1.0",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.6",

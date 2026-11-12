@@ -8,11 +8,29 @@ import { _electron as electron, expect } from "@playwright/test";
 const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "wien-assistant-"));
 const calls = [];
 let reply;
+const token = "a".repeat(64);
+const profile = {
+  id: "test-user",
+  username: "music_maker",
+  created_at: "2026-11-12T00:00:00Z",
+  tier: "free",
+  assist_requests_remaining: 10,
+};
 const server = http.createServer(async (req, res) => {
   let body = "";
   for await (const chunk of req) body += chunk;
+  if (req.url === "/auth/login") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ user: profile, token }));
+    return;
+  }
+  assert.equal(req.headers.authorization, `Bearer ${token}`);
+  if (req.url === "/users/me") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(profile));
+    return;
+  }
   assert.equal(req.url, "/v1/assist");
-  assert.equal(req.headers.authorization, undefined);
   calls.push(JSON.parse(body));
   reply = (payload, status = 200) => {
     res.writeHead(status, { "Content-Type": "application/json" });
@@ -23,7 +41,7 @@ await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 const environment = {
   ...process.env,
   WIEN_USER_DATA: temporary,
-  WIEN_SERVER_PORT: String(server.address().port),
+  WIEN_BACKEND_URL: `http://127.0.0.1:${server.address().port}`,
 };
 delete environment.ELECTRON_RUN_AS_NODE;
 const mod = process.platform === "darwin" ? "Meta" : "Control";
@@ -40,6 +58,22 @@ try {
   const code = page.getByLabel("Strudel code editor");
   await code.waitFor();
   await page
+    .getByRole("button", { name: "Project and account", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await page.getByLabel("Username", { exact: true }).fill(profile.username);
+  await page
+    .getByLabel("Password", { exact: true })
+    .fill("initial secure password");
+  await page
+    .getByRole("dialog", { name: "Sign in", exact: true })
+    .getByRole("button", { name: "Sign in", exact: true })
+    .click();
+  await expect(
+    page.getByRole("dialog", { name: "Your profile" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Close dialog", exact: true }).click();
+  await page
     .getByRole("button", { name: "first-light.strudel", exact: true })
     .click();
   const original = await fs.readFile(
@@ -50,8 +84,17 @@ try {
   const dialog = page.getByRole("dialog", { name: "Wien assistant" });
   const input = page.getByRole("textbox", { name: "Ask Wien" });
 
+  const trigger = page.getByRole("button", { name: /^Ask Wien/ });
+  await trigger.click();
+  await expect(input).toBeFocused();
+  await input.fill("Toolbar draft");
+  await trigger.click();
+  await expect(dialog).toBeHidden();
+  await expect(code).toBeFocused();
+  await trigger.click();
+  await expect(input).toHaveValue("Toolbar draft");
+
   // The shortcut closes a toolbar-opened popover without moving it to the cursor.
-  await page.getByRole("button", { name: /^Ask Wien/ }).click();
   await expect(input).toBeFocused();
   await input.fill("Keep this draft");
   const bottomTop = await dialog.evaluate((element) => element.style.top);
@@ -199,7 +242,7 @@ try {
   await input.press("Enter");
   await expect.poll(() => calls.length).toBe(4);
   reply({ code: "provider_auth_required", message: "test-only-secret" }, 503);
-  await expect(dialog).toContainText("codex login");
+  await expect(dialog).toContainText("model credentials");
   await expect(dialog).not.toContainText("test-only-secret");
 
   // Editing while waiting must not be overwritten by the old response.

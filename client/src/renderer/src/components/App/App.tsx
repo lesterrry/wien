@@ -28,6 +28,7 @@ import {
   Square,
   SquareX,
   Trash2,
+  UserRound,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -53,17 +54,20 @@ import {
   joinPath,
   type Project,
   parentPath,
+  type VersionEntry,
 } from "../../../../shared/types";
 import {
   type Document,
   useSnippetSessions,
 } from "../../hooks/useSnippetSessions";
+import { useAccount } from "../Account/Account";
 import { ControlsPanel } from "../ControlsPanel/ControlsPanel";
 import { Dialog } from "../Dialog/Dialog";
 import { Explorer } from "../Explorer/Explorer";
 import { FileTabs } from "../FileTabs/FileTabs";
 import { GraphView } from "../GraphView/GraphView";
 import { StrudelEditor } from "../StrudelEditor/StrudelEditor";
+import { VersionsPanel } from "../VersionsPanel/VersionsPanel";
 import styles from "./App.module.css";
 
 type Modal =
@@ -104,6 +108,12 @@ const message = (error: unknown) =>
   );
 
 export function App() {
+  const {
+    user,
+    openProfile,
+    openUpgrade,
+    refresh: refreshAccount,
+  } = useAccount();
   const [preferences, setPreferences] = useState<PanelPreferences>({
     pinned: null,
     roots: {},
@@ -145,6 +155,11 @@ export function App() {
     name: string;
   } | null>(null);
   const [project, setProject] = useState<Project | null>(null);
+  const [versions, setVersions] = useState<VersionEntry[]>([]);
+  const [versionError, setVersionError] = useState<string | null>(null);
+  const [selectedVersion, setSelectedVersion] = useState<string | null>(null);
+  const [recoveryBlocked, setRecoveryBlocked] = useState(false);
+  const recoveryBlockedRef = useRef(false);
   const {
     sessions,
     sessionsRef,
@@ -216,11 +231,11 @@ export function App() {
     (open: boolean) => setWorkspaceView(open ? "controls" : "editor"),
     [],
   );
-  const playingFile =
-    sessions
-      .filter((session) => session.playback.started)
-      .map((session) => session.document.path)
-      .join(", ") || null;
+  // const playingFile =
+  //   sessions
+  //     .filter((session) => session.playback.started)
+  //     .map((session) => session.document.path)
+  //     .join(", ") || null;
   const pendingControlPaths = useRef(new Set<string>());
 
   const updateTabs = useCallback((next: string[]) => {
@@ -236,6 +251,14 @@ export function App() {
     },
     [updateTabs, selectDocument],
   );
+
+  const blockRecovery = useCallback(async () => {
+    recoveryBlockedRef.current = true;
+    setRecoveryBlocked(true);
+    await removeSessions(tabsRef.current);
+    updateTabs([]);
+    updateDocument(null);
+  }, [removeSessions, updateDocument, updateTabs]);
 
   const flush = useCallback(async () => {
     if (saving.current) return saving.current;
@@ -429,6 +452,24 @@ export function App() {
   }
 
   useEffect(() => {
+    if (!project?.root || api.platform === "web") return;
+    let cancelled = false;
+    setVersions([]);
+    setVersionError(null);
+    void api
+      .versions()
+      .then((entries) => {
+        if (!cancelled) setVersions(entries);
+      })
+      .catch((error) => {
+        if (!cancelled) setVersionError(message(error));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [project?.root]);
+
+  useEffect(() => {
     void api
       .current()
       .then(async (project) => {
@@ -486,6 +527,22 @@ export function App() {
             await preferencesSave.current;
             await flush();
             await stopAll();
+            if (selectedVersion && !recoveryBlockedRef.current) {
+              try {
+                if (
+                  (await api.versionChanged()) &&
+                  !window.confirm("Discard edits made in this version?")
+                ) {
+                  api.cancelClose();
+                  return;
+                }
+                await api.restoreVersion();
+                setSelectedVersion(null);
+              } catch (error) {
+                await blockRecovery();
+                setError(message(error));
+              }
+            }
             api.finishClose();
           } catch (error) {
             api.cancelClose();
@@ -493,7 +550,7 @@ export function App() {
           }
         });
       }),
-    [flush, run, stopAll],
+    [blockRecovery, flush, run, selectedVersion, stopAll],
   );
 
   const play = useCallback(() => {
@@ -700,8 +757,38 @@ export function App() {
       await controlQueue.current;
       await preferencesSave.current;
       await flush();
+      if (selectedVersion && !recoveryBlockedRef.current) {
+        try {
+          if (
+            (await api.versionChanged()) &&
+            !window.confirm("Discard edits made in this version?")
+          )
+            return;
+          await removeSessions(tabsRef.current);
+          updateTabs([]);
+          updateDocument(null);
+          await api.restoreVersion();
+          setSelectedVersion(null);
+          const restored = await api.current();
+          setProject(restored);
+          setTreeVersion((version) => version + 1);
+          updateTabs([]);
+          updateDocument(null);
+          const first = restored.entries.find((entry) => !entry.children);
+          if (first) {
+            const code = await api.read(first.id);
+            updateDocument({ path: first.id, code, saved: code });
+          }
+        } catch (error) {
+          await blockRecovery();
+          setError(message(error));
+        }
+      }
       const next = await (create ? api.create() : api.open());
       if (!next) return;
+      recoveryBlockedRef.current = false;
+      setRecoveryBlocked(false);
+      setSelectedVersion(null);
       await removeSessions(tabsRef.current);
       updateTabs([]);
       updateDocument(null);
@@ -719,6 +806,72 @@ export function App() {
         updateDocument({ path: first.id, code, saved: code });
       }
     });
+  }
+
+  async function changeVersion(oid: string | null) {
+    await run(async () => {
+      await controlQueue.current;
+      await preferencesSave.current;
+      await flush();
+      if (
+        selectedVersion &&
+        (await api.versionChanged()) &&
+        !window.confirm("Discard edits made in this version?")
+      )
+        return;
+      if (liveUpdateTimer.current !== null) {
+        clearTimeout(liveUpdateTimer.current);
+        liveUpdateTimer.current = null;
+      }
+      pendingControlPaths.current.clear();
+      await removeSessions(tabsRef.current);
+      updateTabs([]);
+      updateDocument(null);
+      setGraphOpen(false);
+      setWorkspaceView("editor");
+      try {
+        if (oid) await api.selectVersion(oid);
+        else await api.restoreVersion();
+      } catch (error) {
+        if (await api.versionActive()) {
+          await blockRecovery();
+          setSelectedVersion(oid ?? selectedVersion ?? "recovery");
+        }
+        throw error;
+      }
+      recoveryBlockedRef.current = false;
+      setRecoveryBlocked(false);
+      setSelectedVersion(oid);
+      const next = await api.current();
+      setProject(next);
+      setTreeVersion((version) => version + 1);
+      updateTabs([]);
+      updateDocument(null);
+      setSelection(null);
+      const first = next.entries.find((entry) => !entry.children);
+      if (first) {
+        const code = await api.read(first.id);
+        updateDocument({ path: first.id, code, saved: code });
+      }
+    });
+  }
+
+  async function createVersion(versionMessage: string) {
+    let saved = false;
+    await run(async () => {
+      await controlQueue.current;
+      await preferencesSave.current;
+      await flush();
+      try {
+        await api.createVersion(versionMessage);
+      } catch (error) {
+        setVersionError(message(error));
+        throw error;
+      }
+      setVersions(await api.versions());
+      saved = true;
+    });
+    return saved;
   }
 
   async function submitModal() {
@@ -1069,6 +1222,7 @@ export function App() {
   return (
     <div
       className={classNames(styles.app, {
+        [styles.webApp]: api.platform === "web",
         [styles.sidebarHidden]: !sidebar,
         [styles.controlsHidden]:
           !controlsVisible || controllerOpen || graphActive,
@@ -1159,9 +1313,12 @@ export function App() {
             <button
               className={styles.projectPicker}
               type="button"
+              aria-label="Project and account"
+              aria-expanded={projectMenu}
               onClick={(event) => {
                 event.stopPropagation();
                 setProjectMenu(!projectMenu);
+                if (!projectMenu) void refreshAccount().catch(() => {});
               }}
               disabled={busy}
             >
@@ -1170,12 +1327,55 @@ export function App() {
               </span>
               <span>
                 <strong>{project?.name ?? "Opening workspace…"}</strong>
-                <small>Personal project</small>
+                <small className={styles.accountIdentity}>
+                  <span title={user?.username}>
+                    {user?.username ?? "Not signed in"}
+                  </span>
+                  {user && user.tier !== "free" && (
+                    <span className={styles.tierBadge} data-tier={user.tier}>
+                      {user.tier.toUpperCase()}
+                    </span>
+                  )}
+                </small>
               </span>
               <ChevronDown size={14} />
             </button>
             {projectMenu && (
               <div className={classNames(styles.menu, styles.projectMenu)}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProjectMenu(false);
+                    openProfile();
+                  }}
+                >
+                  <UserRound size={15} />
+                  {user ? "Your profile" : "Sign in"}
+                </button>
+                {user && (
+                  <div className={styles.subscription}>
+                    <div>
+                      <strong>
+                        {user.tier === "free"
+                          ? "Free"
+                          : user.tier.toUpperCase()}
+                      </strong>
+                      <span>
+                        {user.assist_requests_remaining} assist requests left
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProjectMenu(false);
+                        openUpgrade();
+                      }}
+                    >
+                      <span>Explore plans</span> <ArrowRight size={13} />
+                    </button>
+                  </div>
+                )}
+                <div className={styles.menuDivider} />
                 <button type="button" onClick={() => void switchProject(true)}>
                   <Plus size={15} />
                   New project
@@ -1185,15 +1385,32 @@ export function App() {
                   Open project…
                 </button>
                 <div className={styles.menuDivider} />
-                <button
-                  type="button"
-                  onClick={() =>
-                    void api.reveal().catch((error) => setError(message(error)))
-                  }
-                >
-                  <ArrowRight size={15} />
-                  Show project folder
-                </button>
+                {api.platform === "web" ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProjectMenu(false);
+                      void run(async () => {
+                        await flush();
+                        await api.exportProject?.();
+                      });
+                    }}
+                  >
+                    Export project…
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void api
+                        .reveal()
+                        .catch((error) => setError(message(error)))
+                    }
+                  >
+                    <ArrowRight size={15} />
+                    Show project folder
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -1298,6 +1515,37 @@ export function App() {
               })
             }
           />
+          {api.platform !== "web" && (
+            <VersionsPanel
+              versions={versions}
+              selected={selectedVersion}
+              disabled={busy}
+              recoveryBlocked={recoveryBlocked}
+              error={versionError}
+              onRetry={() => {
+                void api
+                  .versions()
+                  .then((entries) => {
+                    setVersions(entries);
+                    setVersionError(null);
+                  })
+                  .catch((error) => setVersionError(message(error)));
+              }}
+              onCreate={createVersion}
+              onSelect={(oid) => void changeVersion(oid)}
+            />
+          )}
+          {api.platform === "web" && (
+            <a
+              className={styles.downloadApp}
+              href="https://github.com/lesterrry/wien/releases"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <ArrowDownToLine size={16} aria-hidden="true" />
+              Скачать приложение
+            </a>
+          )}
           <div className={styles.sidebarBottom}>
             <button
               type="button"
@@ -1305,11 +1553,10 @@ export function App() {
               onClick={() => openGraph()}
               disabled={!project || busy}
               aria-label="Open Graph View"
-              aria-current={graphActive ? "page" : undefined}
             >
               <Network size={16} />
               <span>
-                Graph View<small>Explore snippet dependencies</small>
+                Graph View<small>Explore project dependencies</small>
               </span>
               <ArrowRight size={13} />
             </button>
@@ -1388,18 +1635,19 @@ export function App() {
                   Back to controls
                 </button>
               )}
-              {playback.started && (
+              {/* {playback.started && (
                 <small
                   className={styles.playingTarget}
                   title={playingFile ?? undefined}
                 >
                   Playing {playingFile?.split("/").at(-1)}
                 </small>
-              )}
+              )} */}
               <button
                 type="button"
                 className={styles.iconButton}
                 aria-label="Ask Wien"
+                data-assistant-trigger
                 title={`Ask Wien (${shortcut} ,)`}
                 disabled={!document || busy || controllerOpen}
                 onClick={() => player.current?.assist("bottom")}
@@ -1743,7 +1991,7 @@ export function App() {
             onClick={() => showModal({ kind: "delete", entry: context.entry })}
           >
             <Trash2 size={14} />
-            Move to Trash
+            {api.platform === "web" ? "Delete" : "Move to Trash"}
           </button>
         </div>
       )}
@@ -1756,13 +2004,15 @@ export function App() {
                 ? "New folder"
                 : "New snippet"
               : modal.kind === "reload"
-                ? "Reload from disk?"
+                ? "Reload saved file?"
                 : modal.kind === "rename"
                   ? "Rename"
                   : modal.kind === "move"
                     ? "Move to folder"
                     : modal.kind === "delete"
-                      ? "Move to Trash?"
+                      ? api.platform === "web"
+                        ? "Delete?"
+                        : "Move to Trash?"
                       : "A place to play"
           }
           onClose={() => {
@@ -1772,8 +2022,10 @@ export function App() {
           {modal.kind === "help" ? (
             <div className={styles.helpContent}>
               <p>
-                Write Strudel code, play it, and follow the sound. Your snippets
-                are plain files on your computer.
+                Write Strudel code, play it, and follow the sound.{" "}
+                {api.platform === "web"
+                  ? "Your projects are saved in this browser. Export a project to keep a backup or move it to another browser."
+                  : "Your snippets are plain files on your computer."}
               </p>
               <div>
                 <span>Play / update code</span>
@@ -1820,13 +2072,15 @@ export function App() {
               {modal.kind === "reload" ? (
                 <p>
                   Unsaved edits will be discarded. Copy anything you want to
-                  keep before reloading the file from disk.
+                  keep before reloading the saved file.
                 </p>
               ) : modal.kind === "delete" ? (
                 <p>
                   <strong>{modal.entry.name}</strong>
-                  {modal.entry.children ? " and everything inside it" : ""} will
-                  move to your computer’s Trash.
+                  {modal.entry.children ? " and everything inside it" : ""}
+                  {api.platform === "web"
+                    ? " will be permanently deleted from this browser project."
+                    : " will move to your computer’s Trash."}
                 </p>
               ) : modal.kind === "move" ? (
                 <>
@@ -1908,7 +2162,9 @@ export function App() {
                   {modal.kind === "create"
                     ? "Create"
                     : modal.kind === "delete"
-                      ? "Move to Trash"
+                      ? api.platform === "web"
+                        ? "Delete"
+                        : "Move to Trash"
                       : modal.kind === "move"
                         ? "Move"
                         : modal.kind === "reload"

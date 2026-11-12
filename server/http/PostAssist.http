@@ -2,6 +2,7 @@
 
 @baseUrl = http://127.0.0.1:3001
 @contentType = application/json
+@sessionToken = paste-token-from-login
 
 #####################################################################################################
 ### Request: POST /v1/assist
@@ -11,6 +12,7 @@
 
 POST {{baseUrl}}/v1/assist
 Content-Type: {{contentType}}
+Authorization: Bearer {{sessionToken}}
 
 {
   "file": {

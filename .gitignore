@@ -1,6 +1,8 @@
 /target/
+/.cache/httpgenerator/
 node_modules/
 client/out/
+client/out-web/
 client/release/
 .DS_Store
 *.log
@@ -22,10 +24,12 @@ credentials.json
 # Skill ignore
 /skill/target/
 /skill/data/
-/skill/data-fixture/
 /skill/strudel-rag.toml
 /skill/.env
 /skill/.env.*
 !/skill/.env.example
 /skill/.DS_Store
 /skill/*.log
+
+# Local deployment keys and operator files.
+/.local/

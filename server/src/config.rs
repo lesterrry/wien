@@ -2,15 +2,42 @@ use std::{fmt, path::Path};
 
 use serde::Deserialize;
 
-use crate::assistant::AssistantConfig;
 use crate::providers::ProviderKind;
+use crate::providers::{ModelOptions, ReasoningEffort};
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub provider: ProviderKind,
     #[serde(default)]
-    pub assistant: AssistantConfig,
+    pub generation: GenerationConfig,
+}
+
+/// Model settings for the editor assistant.
+#[derive(Debug, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct GenerationConfig {
+    pub model: String,
+    pub reasoning_effort: ReasoningEffort,
+}
+
+impl Default for GenerationConfig {
+    fn default() -> Self {
+        Self {
+            model: "gpt-6-luna".into(),
+            reasoning_effort: ReasoningEffort::Low,
+        }
+    }
+}
+
+impl GenerationConfig {
+    pub fn options(&self) -> ModelOptions {
+        ModelOptions {
+            model: self.model.clone(),
+            reasoning_effort: Some(self.reasoning_effort.clone()),
+            instructions: None,
+        }
+    }
 }
 
 impl Config {
@@ -18,7 +45,7 @@ impl Config {
         let source = std::fs::read_to_string(path).map_err(|_| ConfigError::Read)?;
         // Do not expose TOML snippets: an accidentally pasted credential must not reach logs.
         let config: Self = toml::from_str(&source).map_err(|_| ConfigError::Invalid)?;
-        if config.assistant.model.trim().is_empty() || config.assistant.model.len() > 200 {
+        if config.generation.model.trim().is_empty() || config.generation.model.len() > 200 {
             return Err(ConfigError::Invalid);
         }
         Ok(config)
@@ -38,7 +65,7 @@ impl fmt::Display for ConfigError {
                 "Cannot read server config. Check server/config.toml or WIEN_SERVER_CONFIG."
             }
             Self::Invalid => {
-                "Invalid server TOML config. Expected provider = \"codex\", an optional assistant.model, and no unknown fields."
+                "Invalid server TOML config. Expected provider = \"aitunnel\" or \"codex\", an optional generation section, and no unknown fields."
             }
         })
     }
@@ -54,7 +81,18 @@ mod tests {
     fn loads_checked_in_provider_config() {
         let config =
             Config::load(&Path::new(env!("CARGO_MANIFEST_DIR")).join("config.toml")).unwrap();
-        assert_eq!(config.provider, ProviderKind::Codex);
+        assert_eq!(config.provider, ProviderKind::Aitunnel);
+        assert_eq!(config.generation.reasoning_effort, ReasoningEffort::Low);
+    }
+
+    #[test]
+    fn loads_generation_settings_from_toml() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "provider = 'aitunnel'\n[generation]\nmodel = 'configured-model'\nreasoning_effort = 'high'").unwrap();
+        let config = Config::load(&path).unwrap();
+        assert_eq!(config.generation.model, "configured-model");
+        assert_eq!(config.generation.reasoning_effort, ReasoningEffort::High);
     }
 
     #[test]
@@ -66,6 +104,9 @@ mod tests {
             "",
             "provider = 'unknown'",
             "provider = 42",
+            "provider = 'aitunnel'\n[generation]\nmodel = ''",
+            "provider = 'aitunnel'\n[generation]\nreasoning_effort = 'invalid'",
+            "provider = 'aitunnel'\n[assistant]\nmodel = 'old-setting'",
             "provider = 'codex'\nsecret = 'test-only-secret'",
             "provider = 'test-only-secret",
         ] {

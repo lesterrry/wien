@@ -1,4 +1,5 @@
-provider = "codex"
+provider = "aitunnel"
 
-[assistant]
-model = "gpt-6.1-sol"
+[generation]
+model = "gpt-6-luna"
+reasoning_effort = "low"

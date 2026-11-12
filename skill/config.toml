@@ -4,10 +4,8 @@ data_dir = "./data"
 sources_manifest = "./corpus/sources.toml"
 
 [embedding]
-provider = "http"
-base_url = "https://api.openai.com/v1/"
+provider = "aitunnel"
 model = "text-embedding-3-small"
-api_key_env = "OPENAI_API_KEY"
 batch_size = 32
 timeout_secs = 30
 max_retries = 3

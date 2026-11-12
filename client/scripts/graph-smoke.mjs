@@ -44,6 +44,10 @@ try {
     .getByRole("button", { name: "Open Graph View", exact: true })
     .click();
   await expect(graphTab).toHaveAttribute("aria-selected", "true");
+  await expect(
+    page.getByRole("button", { name: "Open Graph View", exact: true }),
+  ).not.toHaveAttribute("aria-current", "page");
+  await expect(graph.locator(".react-flow__attribution")).toHaveCount(0);
   await expect(graph).toHaveAttribute("aria-busy", "false");
   await expect(graph.locator(".react-flow__node")).toHaveCount(5);
   await expect(graph.locator(".react-flow__edge")).toHaveCount(1);
@@ -193,7 +197,9 @@ try {
   await fs.writeFile(path.join(project, "broken.js"), 'import "./missing.js";');
   await graph.getByRole("button", { name: "Refresh graph" }).click();
   await expect(graph.locator(".react-flow__node")).toHaveCount(7);
-  await expect(graph).toContainText("1 snippet with dependency issues");
+  await expect(
+    node("broken.js").getByRole("img", { name: "Dependency issue" }),
+  ).toBeVisible();
   await graph.getByRole("button", { name: "Fit all snippets" }).click();
   await node("broken.js").click();
   await expect(graph).toContainText("Missing snippet: ./missing.js");

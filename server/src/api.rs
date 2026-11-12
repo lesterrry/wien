@@ -6,7 +6,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tokio::sync::Semaphore;
 use utoipa::ToSchema;
 use utoipa::openapi::{Info, OpenApi, Server};
@@ -14,19 +14,12 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::assistant::{
-    self, AssistRequest, AssistResponse, AssistantConfig, error::AssistError, tools::AssistantTools,
+    self, AssistRequest, AssistResponse, error::AssistError, tools::AssistantTools,
 };
-use crate::providers::{ModelOptions, ModelResponse, Provider, ProviderError};
+use crate::config::GenerationConfig;
+use crate::providers::{Provider, ProviderError};
 
-const MAX_TEXT_BYTES: usize = 128 * 1024;
 const MAX_ACTIVE_ASSISTS: usize = 4;
-
-#[derive(Deserialize, ToSchema)]
-#[serde(deny_unknown_fields)]
-pub struct GenerateRequest {
-    pub text: String,
-    pub options: ModelOptions,
-}
 
 #[derive(Serialize, ToSchema)]
 pub struct ApiError {
@@ -43,6 +36,39 @@ impl ApiError {
             code,
             message,
         }
+    }
+}
+
+impl From<crate::auth::Error> for ApiError {
+    fn from(error: crate::auth::Error) -> Self {
+        Self::new(error.status, error.code, error.message)
+    }
+}
+impl From<crate::subscriptions::ReserveError> for ApiError {
+    fn from(error: crate::subscriptions::ReserveError) -> Self {
+        use crate::subscriptions::ReserveError;
+        match error {
+            ReserveError::Exhausted => Self::new(
+                StatusCode::PAYMENT_REQUIRED,
+                "assist_quota_exhausted",
+                "You have used all your assist requests. Explore subscription plans.",
+            ),
+            ReserveError::Busy => Self::new(
+                StatusCode::TOO_MANY_REQUESTS,
+                "assistant_busy",
+                "An assistant request is already running for this account.",
+            ),
+            ReserveError::Database(_) => Self::database(),
+        }
+    }
+}
+impl ApiError {
+    fn database() -> Self {
+        Self::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "accounts_unavailable",
+            "Accounts are temporarily unavailable.",
+        )
     }
 }
 
@@ -93,20 +119,21 @@ impl IntoResponse for ApiError {
 #[derive(Clone)]
 struct AppState {
     provider: Arc<dyn Provider>,
-    assistant: Arc<AssistantConfig>,
+    generation: Arc<GenerationConfig>,
     tools: Arc<dyn AssistantTools>,
     assist_slots: Arc<Semaphore>,
+    database: Option<sqlx::PgPool>,
 }
 
 fn documented_routes() -> (Router<AppState>, OpenApi) {
     let (router, mut spec) = OpenApiRouter::new()
-        .routes(routes!(generate))
         .routes(routes!(assist))
         .routes(routes!(health))
         .routes(routes!(ready))
         .split_for_parts();
-    spec.info = Info::new("Wien local AI server", env!("CARGO_PKG_VERSION"));
-    spec.servers = Some(vec![Server::new("http://127.0.0.1:3001")]);
+    spec.merge(crate::auth::openapi());
+    spec.info = Info::new("Wien AI server", env!("CARGO_PKG_VERSION"));
+    spec.servers = Some(vec![Server::new("/")]);
     (router, spec)
 }
 
@@ -117,8 +144,17 @@ pub fn openapi() -> OpenApi {
 
 pub fn router(
     provider: Arc<dyn Provider>,
-    assistant: AssistantConfig,
+    generation: GenerationConfig,
     tools: Arc<dyn AssistantTools>,
+) -> Router {
+    router_with_database(provider, generation, tools, None)
+}
+
+pub fn router_with_database(
+    provider: Arc<dyn Provider>,
+    generation: GenerationConfig,
+    tools: Arc<dyn AssistantTools>,
+    database: Option<sqlx::PgPool>,
 ) -> Router {
     let (router, spec) = documented_routes();
     router
@@ -127,7 +163,8 @@ pub fn router(
         .with_state(AppState {
             provider,
             tools,
-            assistant: Arc::new(assistant),
+            database,
+            generation: Arc::new(generation),
             assist_slots: Arc::new(Semaphore::new(MAX_ACTIVE_ASSISTS)),
         })
 }
@@ -145,10 +182,22 @@ pub struct Readiness {
 
 /// Dependency readiness without a paid model or embedding request.
 #[utoipa::path(get, path = "/ready", responses(
-    (status = 200, description = "RAG corpus ready; external APIs are not probed", body = Readiness),
-    (status = 503, description = "RAG unavailable or corpus not ready", body = ApiError)
+    (status = 200, description = "PostgreSQL and RAG corpus ready; external APIs are not probed", body = Readiness),
+    (status = 503, description = "PostgreSQL or RAG unavailable, or corpus not ready", body = ApiError)
 ))]
 async fn ready(State(state): State<AppState>) -> Result<Json<Readiness>, ApiError> {
+    if let Some(database) = &state.database {
+        sqlx::query("SELECT 1")
+            .execute(database)
+            .await
+            .map_err(|_| {
+                ApiError::new(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "database_unavailable",
+                    "PostgreSQL is unavailable.",
+                )
+            })?;
+    }
     let corpus = state
         .tools
         .call("strudel_rag_get_corpus_info", serde_json::json!({}))
@@ -158,51 +207,6 @@ async fn ready(State(state): State<AppState>) -> Result<Json<Readiness>, ApiErro
         return Err(AssistError::from(assistant::tools::ToolError::NotReady).into());
     }
     Ok(Json(Readiness { ready: true }))
-}
-
-/// Generate a completed text response using the server's configured provider.
-#[utoipa::path(
-    post, path = "/v1/generate",
-    request_body(content = GenerateRequest, example = json!({
-        "text": "Hello!",
-        "options": {"model": "gpt-6.1-sol", "reasoning_effort": "low"}
-    })),
-    responses(
-        (status = 200, description = "Completed model response", body = ModelResponse),
-        (status = 400, description = "Invalid JSON, text, model, or options", body = ApiError),
-        (status = 403, description = "Non-local browser origin", body = ApiError),
-        (status = 413, description = "Request body too large", body = ApiError),
-        (status = 429, description = "Provider usage limit", body = ApiError),
-        (status = 502, description = "Upstream error or incomplete response", body = ApiError),
-        (status = 503, description = "Local Codex login required", body = ApiError),
-        (status = 504, description = "Provider timeout", body = ApiError)
-    )
-)]
-async fn generate(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    body: Result<Json<GenerateRequest>, JsonRejection>,
-) -> Result<Json<ModelResponse>, ApiError> {
-    check_local(&headers)?;
-    let request = parse_body(body)?;
-    if request.text.trim().is_empty()
-        || request.text.len() > MAX_TEXT_BYTES
-        || request.options.model.trim().is_empty()
-        || request.options.model.len() > 200
-        || request
-            .options
-            .instructions
-            .as_ref()
-            .is_some_and(|value| value.len() > MAX_TEXT_BYTES)
-    {
-        return Err(ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "invalid_request",
-            "Text must be nonempty and at most 128 KiB; model must be 1–200 bytes; instructions at most 128 KiB.",
-        ));
-    }
-    let response = state.provider.send(&request.text, &request.options).await?;
-    Ok(Json(response))
 }
 
 fn check_local(headers: &HeaderMap) -> Result<(), ApiError> {
@@ -249,6 +253,7 @@ fn parse_body<T>(body: Result<Json<T>, JsonRejection>) -> Result<T, ApiError> {
 /// Ask the editor assistant; selection is context, edits replace the entire current file.
 #[utoipa::path(
     post, path = "/v1/assist",
+    security(("session"=[]), ("browser_session"=[])),
     request_body(content = AssistRequest, example = json!({
         "prompt": "Make the bass softer. Reply briefly.",
         "file": {"path": "first-light.strudel", "content": "note(\"a1\").s(\"sawtooth\").gain(0.2)", "cursor": {"anchor": 0, "head": 10}}
@@ -256,7 +261,8 @@ fn parse_body<T>(body: Result<Json<T>, JsonRejection>) -> Result<T, ApiError> {
     responses(
         (status = 200, description = "Short answer and optional complete replacement code", body = AssistResponse),
         (status = 400, description = "Invalid prompt, file or cursor offsets", body = ApiError),
-        (status = 403, description = "Non-local browser origin", body = ApiError),
+        (status = 401, description = "Sign in required", body = ApiError),
+        (status = 402, description = "Assist allowance exhausted", body = ApiError),
         (status = 413, description = "Request body too large", body = ApiError),
         (status = 429, description = "Assistant busy (assistant_busy, Retry-After: 2) or provider usage limit", body = ApiError),
         (status = 502, description = "Invalid or incomplete model response", body = ApiError),
@@ -269,7 +275,13 @@ async fn assist(
     headers: HeaderMap,
     body: Result<Json<AssistRequest>, JsonRejection>,
 ) -> Result<Json<AssistResponse>, ApiError> {
-    check_local(&headers)?;
+    let user_id = if let Some(database) = &state.database {
+        Some(crate::auth::authenticate(database, &headers).await?)
+    } else {
+        // The database-free router is only used by isolated provider tests.
+        check_local(&headers)?;
+        None
+    };
     let request = parse_body(body)?;
     if !request.is_valid() {
         return Err(ApiError::new(
@@ -287,13 +299,24 @@ async fn assist(
             "The assistant is busy. Try again shortly.",
         )
     })?;
-    Ok(Json(
-        assistant::send(
-            state.provider.as_ref(),
-            &state.assistant,
-            state.tools.as_ref(),
-            &request,
-        )
-        .await?,
-    ))
+    let reservation = match (&state.database, user_id.as_deref()) {
+        (Some(database), Some(user_id)) => {
+            Some(crate::subscriptions::Reservation::begin(database, user_id).await?)
+        }
+        _ => None,
+    };
+    let response = assistant::send(
+        state.provider.as_ref(),
+        &state.generation,
+        state.tools.as_ref(),
+        &request,
+    )
+    .await?;
+    if let Some(reservation) = reservation {
+        reservation
+            .commit()
+            .await
+            .map_err(|_| ApiError::database())?;
+    }
+    Ok(Json(response))
 }

@@ -1,0 +1,192 @@
+name: Release App
+run-name: Release App · ${{ github.ref_name }} · ${{ github.sha }}
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-app
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare dated release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      title: ${{ steps.release.outputs.title }}
+    steps:
+      - name: Set release date and unique tag
+        id: release
+        shell: bash
+        run: |
+          stamp=$(date -u +'%Y%m%d-%H%M%S')
+          display=$(TZ=Europe/Moscow date +'%Y-%m-%d %H:%M:%S MSK')
+          {
+            echo "tag=app-${stamp}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            echo "title=Wien · ${display}"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.platform }}
+    needs: prepare
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: mac
+            runner: macos-26
+          - platform: win
+            runner: windows-2025
+          - platform: linux
+            runner: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: client
+        shell: bash
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      - name: Check out selected revision
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          package_json_file: client/package.json
+          cache: true
+          cache_dependency_path: client/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check client
+        run: pnpm check
+
+      - name: Run client tests
+        if: matrix.platform == 'linux'
+        run: pnpm test:unit
+
+      - name: Select production backend for packaged app
+        run: |
+          node --input-type=module -e "import { writeFileSync } from 'node:fs'; writeFileSync('config.yaml', 'backendUrl: https://wien.aydar.media\n');"
+
+      - name: Check Xcode for Liquid Glass icon
+        if: matrix.platform == 'mac'
+        run: |
+          xcodebuild -version
+          xcrun --find actool
+
+      - name: Install AppImage build dependency
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfuse2t64
+
+      - name: Build Electron app
+        run: pnpm build
+
+      - name: Package installers
+        env:
+          TARGET_PLATFORM: ${{ matrix.platform }}
+        run: pnpm exec electron-builder --config electron-builder.release.yml --publish never "--${TARGET_PLATFORM}"
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v7
+        with:
+          name: app-${{ matrix.platform }}
+          path: |
+            client/release/*.dmg
+            client/release/*.exe
+            client/release/*.AppImage
+            client/release/*.deb
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  publish:
+    name: Publish GitHub Release
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+      RELEASE_TITLE: ${{ needs.prepare.outputs.title }}
+    steps:
+      - name: Download all installers
+        uses: actions/download-artifact@v8
+        with:
+          pattern: app-*
+          merge-multiple: true
+          path: installers
+
+      - name: Check installers and generate checksums
+        shell: bash
+        working-directory: installers
+        run: |
+          shopt -s nullglob
+          for pattern in '*-mac-arm64.dmg' '*-mac-x64.dmg' '*-win-x64.exe' '*-linux-x64.AppImage' '*-linux-x64.deb'; do
+            matches=()
+            while IFS= read -r file; do
+              matches+=("$file")
+            done < <(compgen -G "$pattern" || true)
+            if [ "${#matches[@]}" -ne 1 ]; then
+              echo "Expected one installer matching $pattern, found ${#matches[@]}" >&2
+              exit 1
+            fi
+            test -s "${matches[0]}"
+          done
+          sha256sum *.dmg *.exe *.AppImage *.deb > SHA256SUMS.txt
+
+      - name: Publish complete release
+        shell: bash
+        run: |
+          cat > release-notes.md <<EOF
+          ${RELEASE_TITLE}
+
+          | Platform | Download |
+          | --- | --- |
+          | macOS Apple Silicon | arm64.dmg |
+          | macOS Intel | x64.dmg |
+          | Windows x64 | .exe installer |
+          | Linux x64 | .AppImage or .deb |
+
+          Backend: https://wien.aydar.media
+
+          Builds are unsigned; macOS notarization and Windows code signing are not configured.
+          SHA-256 checksums are included in SHA256SUMS.txt.
+
+          Commit: ${GITHUB_SHA}
+          Build: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+          EOF
+          if draft=$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft 2>/dev/null); then
+            if [ "$draft" != true ]; then
+              echo "Release is already published; refusing to replace its assets." >&2
+              exit 1
+            fi
+          else
+            gh release create "$RELEASE_TAG" --draft --target "$GITHUB_SHA" \
+              --title "$RELEASE_TITLE" --notes-file release-notes.md
+          fi
+          gh release upload "$RELEASE_TAG" installers/* --clobber
+          gh release edit "$RELEASE_TAG" --draft=false --latest \
+            --title "$RELEASE_TITLE" --notes-file release-notes.md
+          gh release view "$RELEASE_TAG" --json url --jq '"Release: " + .url' >> "$GITHUB_STEP_SUMMARY"

@@ -11,3 +11,5 @@ export interface AssistResponse {
   message: string;
   code: string | null;
 }
+
+export type AssistResult = AssistResponse | { action: "sign_in" | "upgrade" };

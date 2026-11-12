@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# Keep this version equal to rust-toolchain.toml (checked by scripts/check-workspace.py).
+# Keep this version equal to rust-toolchain.toml.
 FROM rust:1.98.1-bookworm AS build
 WORKDIR /build
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
@@ -43,3 +43,17 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD ["strudel-rag", "remote", "--endpoint", "http://127.0.0.1:50051", "--timeout-secs", "5", "info"]
 ENTRYPOINT ["strudel-rag"]
 CMD ["serve"]
+
+FROM node:22-bookworm-slim AS web-build
+WORKDIR /build/client
+ENV ELECTRON_SKIP_BINARY_DOWNLOAD=1
+RUN corepack enable
+COPY client/package.json client/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile --ignore-scripts
+COPY client/src/ ./src/
+COPY client/tsconfig.json client/vite.web.config.ts client/electron.vite.config.ts ./
+RUN pnpm build:web
+
+FROM nginx:stable-alpine AS web
+COPY --from=web-build /build/client/out-web/ /usr/share/nginx/html/
+COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf

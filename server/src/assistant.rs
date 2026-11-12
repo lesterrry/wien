@@ -12,24 +12,13 @@ use std::{collections::HashSet, time::Duration};
 use tools::{AssistantTools, ToolError};
 use utoipa::ToSchema;
 
-use crate::providers::{ModelOptions, Provider, ProviderError, ReasoningEffort};
+use crate::{
+    config::GenerationConfig,
+    providers::{Provider, ProviderError},
+};
 
 const MAX_CODE_BYTES: usize = 128 * 1024;
 pub const MASTER_PROMPT: &str = include_str!("../prompts/assistant.md");
-
-#[derive(Debug, Deserialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct AssistantConfig {
-    pub model: String,
-}
-
-impl Default for AssistantConfig {
-    fn default() -> Self {
-        Self {
-            model: "gpt-6.1-sol".into(),
-        }
-    }
-}
 
 #[derive(Deserialize, Serialize, ToSchema)]
 #[serde(deny_unknown_fields)]
@@ -149,7 +138,7 @@ pub fn instructions() -> String {
 
 pub async fn send(
     provider: &dyn Provider,
-    config: &AssistantConfig,
+    config: &GenerationConfig,
     tools: &dyn AssistantTools,
     request: &AssistRequest,
 ) -> Result<AssistResponse, AssistError> {
@@ -163,15 +152,12 @@ pub async fn send(
 
 async fn run(
     provider: &dyn Provider,
-    config: &AssistantConfig,
+    config: &GenerationConfig,
     tools: &dyn AssistantTools,
     request: &AssistRequest,
 ) -> Result<AssistResponse, AssistError> {
-    let options = ModelOptions {
-        model: config.model.clone(),
-        reasoning_effort: Some(ReasoningEffort::Low),
-        instructions: Some(instructions()),
-    };
+    let mut options = config.options();
+    options.instructions = Some(instructions());
     let mut context = model_context(request).ok_or(ProviderError::InvalidResponse)?;
     let corpus = tools.call("strudel_rag_get_corpus_info", json!({})).await?;
     if corpus["ready"] != true {

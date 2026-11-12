@@ -12,31 +12,34 @@ init:
 run-client:
     pnpm --dir client dev
 
-# Build the desktop client
+# Package the desktop client and print its location
 build-client:
-    pnpm --dir client build
+    pnpm --dir client package
 
-# Build and launch the AI server and RAG; Ctrl+C stops both
+# Launch the browser client; API requests use client/config.yaml
+run-web:
+    pnpm --dir client dev:web
+
+# Build the static browser client
+build-web:
+    pnpm --dir client build:web
+
+# Launch local AI server and RAG with Codex credentials mounted; Ctrl+C stops both
 run-server:
-    docker compose up --build server skill
-
-# Export OpenAPI and generate VS Code HTTP requests
-generate:
-    bash server/scripts/generate-http.sh
-
-# Check both Rust services with the same pipeline as CI
-check-rust:
-    bash scripts/check-rust.sh
+    just --dotenv-path .env --command sh -cu 'export COMPOSE_FILE="${COMPOSE_FILE:-compose.yaml}${COMPOSE_PATH_SEPARATOR:-:}compose.codex.yaml"; exec docker compose up --build server skill'
 
 # Build both production Rust binaries
 build-server:
     cargo build --locked --release -p wien-server -p strudel-rag-cli
 
-# Exercise fixture retrieval without credentials or external APIs
-smoke-rag:
-    bash scripts/smoke-rag.sh
+# Export OpenAPI and generate VS Code HTTP requests
+generate:
+    bash server/scripts/generate-http.sh
 
 # Check lint, formatting, types, and run tests for all components
 test:
     pnpm --dir client test
-    just check-rust
+    cargo fmt --all -- --check
+    cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+    cargo test --locked --workspace --all-features
+    bash server/scripts/generate-http.sh --check
