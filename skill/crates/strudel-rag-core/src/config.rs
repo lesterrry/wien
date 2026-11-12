@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct Config {
     pub data_dir: PathBuf,
     pub sources_manifest: PathBuf,
@@ -18,7 +18,7 @@ pub struct Config {
     pub allow_fixture: bool,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct EmbeddingConfig {
     pub provider: String,
     pub base_url: String,
@@ -30,13 +30,13 @@ pub struct EmbeddingConfig {
     pub max_retries: u32,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct ChunkConfig {
     pub target_tokens_approx: usize,
     pub max_tokens_approx: usize,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct RetrievalConfig {
     pub candidate_k: usize,
     pub top_k: usize,
@@ -45,7 +45,7 @@ pub struct RetrievalConfig {
     pub min_cosine: f32,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct ServerConfig {
     pub bind: SocketAddr,
     pub bearer_token_env: String,
@@ -55,7 +55,7 @@ pub struct ServerConfig {
     pub max_concurrent_searches: usize,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct ClientConfig {
     pub endpoint: String,
     pub bearer_token_env: String,
@@ -152,22 +152,16 @@ fn secret(key: &str) -> Option<String> {
 impl Config {
     pub fn load(path: Option<&Path>) -> Result<Self> {
         let from_env = std::env::var_os("STRUDEL_RAG_CONFIG").map(PathBuf::from);
-        let explicit = path.is_some() || from_env.is_some();
         let file = path
             .map(PathBuf::from)
             .or(from_env)
-            .unwrap_or_else(|| "strudel-rag.toml".into());
-        let mut c = if file.exists() {
-            toml::from_str::<Self>(&std::fs::read_to_string(&file)?)
-                .map_err(|e| Error::Config(e.to_string()))?
-        } else if explicit {
-            return Err(Error::Config(format!(
-                "config file does not exist: {}",
-                file.display()
-            )));
-        } else {
-            Self::default()
-        };
+            .unwrap_or_else(|| "skill/config.toml".into());
+        let source = std::fs::read_to_string(&file).map_err(|_| {
+            Error::Config("cannot read RAG config; set --config or STRUDEL_RAG_CONFIG".into())
+        })?;
+        let mut c = toml::from_str::<Self>(&source).map_err(|_| {
+            Error::Config("invalid RAG TOML config; unknown fields are not allowed".into())
+        })?;
         if file.exists() {
             let base = file.parent().unwrap_or(Path::new("."));
             if c.data_dir.is_relative() {
@@ -293,5 +287,38 @@ impl Config {
             ));
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn config_requires_file_rejects_unknown_fields_and_hides_contents() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        assert!(Config::load(Some(&path)).is_err());
+        for source in [
+            "secret = 'test-only-secret'",
+            "[embedding]\nsecret = 'test-only-secret'",
+            "[server]\nsecret = 'test-only-secret'",
+            "[client]\nsecret = 'test-only-secret'",
+            "[chunking]\nsecret = 'test-only-secret'",
+            "[retrieval]\nsecret = 'test-only-secret'",
+            "model = 'test-only-secret",
+        ] {
+            std::fs::write(&path, source).unwrap();
+            let error = Config::load(Some(&path)).unwrap_err();
+            assert!(!format!("{error:?} {error}").contains("test-only-secret"));
+        }
+        std::fs::write(
+            &path,
+            "data_dir = './data'\nsources_manifest = './sources.toml'",
+        )
+        .unwrap();
+        let config = Config::load(Some(&path)).unwrap();
+        assert_eq!(config.data_dir, dir.path().join("./data"));
+        assert_eq!(config.sources_manifest, dir.path().join("./sources.toml"));
     }
 }

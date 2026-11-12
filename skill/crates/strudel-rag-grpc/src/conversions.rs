@@ -2,6 +2,34 @@
 use crate::pb;
 use strudel_rag_core as core;
 
+// These traits are local because domain and wire types belong to separate crates.
+// Keeping conversions here avoids coupling the protocol crate to the RAG engine.
+pub trait ConvertFrom<T> {
+    fn convert_from(value: T) -> Self;
+}
+pub trait ConvertInto<T> {
+    fn convert_into(self) -> T;
+}
+impl<T, U: ConvertFrom<T>> ConvertInto<U> for T {
+    fn convert_into(self) -> U {
+        U::convert_from(self)
+    }
+}
+pub trait TryConvertFrom<T>: Sized {
+    type Error;
+    fn try_convert_from(value: T) -> Result<Self, Self::Error>;
+}
+pub trait TryConvertInto<T> {
+    type Error;
+    fn try_convert_into(self) -> Result<T, Self::Error>;
+}
+impl<T, U: TryConvertFrom<T>> TryConvertInto<U> for T {
+    type Error = U::Error;
+    fn try_convert_into(self) -> Result<U, Self::Error> {
+        U::try_convert_from(self)
+    }
+}
+
 fn invalid(message: &str) -> core::Error {
     core::Error::InvalidArgument(message.into())
 }
@@ -16,8 +44,8 @@ fn domain_count(value: u64) -> core::Result<usize> {
     usize::try_from(value).map_err(|_| invalid("count exceeds platform range"))
 }
 
-impl From<core::DocumentKind> for pb::DocumentKind {
-    fn from(value: core::DocumentKind) -> Self {
+impl ConvertFrom<core::DocumentKind> for pb::DocumentKind {
+    fn convert_from(value: core::DocumentKind) -> Self {
         match value {
             core::DocumentKind::Api => Self::Api,
             core::DocumentKind::Theory => Self::Theory,
@@ -33,8 +61,8 @@ fn document_kind(value: i32) -> core::Result<core::DocumentKind> {
         _ => Err(invalid("unknown or unspecified document kind")),
     }
 }
-impl From<core::VerificationStatus> for pb::VerificationStatus {
-    fn from(value: core::VerificationStatus) -> Self {
+impl ConvertFrom<core::VerificationStatus> for pb::VerificationStatus {
+    fn convert_from(value: core::VerificationStatus) -> Self {
         match value {
             core::VerificationStatus::SourceOnly => Self::SourceOnly,
             core::VerificationStatus::StaticallyChecked => Self::StaticallyChecked,
@@ -54,8 +82,8 @@ fn verification_status(value: i32) -> core::Result<core::VerificationStatus> {
 }
 macro_rules! identical {
     ($name:ident { $($field:ident),* $(,)? }) => {
-        impl From<core::$name> for pb::$name { fn from(v: core::$name) -> Self { Self { $($field: v.$field),* } } }
-        impl From<pb::$name> for core::$name { fn from(v: pb::$name) -> Self { Self { $($field: v.$field),* } } }
+        impl ConvertFrom<core::$name> for pb::$name { fn convert_from(v: core::$name) -> Self { Self { $($field: v.$field),* } } }
+        impl ConvertFrom<pb::$name> for core::$name { fn convert_from(v: pb::$name) -> Self { Self { $($field: v.$field),* } } }
     }
 }
 identical!(LicenseInfo {
@@ -73,14 +101,14 @@ identical!(ExampleMetadata {
     related_api,
     musical_concepts
 });
-impl From<core::SourceRef> for pb::SourceRef {
-    fn from(v: core::SourceRef) -> Self {
+impl ConvertFrom<core::SourceRef> for pb::SourceRef {
+    fn convert_from(v: core::SourceRef) -> Self {
         Self {
             source_id: v.source_id,
             source_url: v.source_url,
             source_path: v.source_path,
             source_revision: v.source_revision,
-            license: v.license.map(Into::into),
+            license: v.license.map(ConvertInto::convert_into),
             fetched_at: v.fetched_at,
             etag: v.etag,
             last_modified: v.last_modified,
@@ -88,14 +116,14 @@ impl From<core::SourceRef> for pb::SourceRef {
         }
     }
 }
-impl From<pb::SourceRef> for core::SourceRef {
-    fn from(v: pb::SourceRef) -> Self {
+impl ConvertFrom<pb::SourceRef> for core::SourceRef {
+    fn convert_from(v: pb::SourceRef) -> Self {
         Self {
             source_id: v.source_id,
             source_url: v.source_url,
             source_path: v.source_path,
             source_revision: v.source_revision,
-            license: v.license.map(Into::into),
+            license: v.license.map(ConvertInto::convert_into),
             fetched_at: v.fetched_at,
             etag: v.etag,
             last_modified: v.last_modified,
@@ -103,30 +131,34 @@ impl From<pb::SourceRef> for core::SourceRef {
         }
     }
 }
-impl From<core::Record> for pb::Record {
-    fn from(v: core::Record) -> Self {
+impl ConvertFrom<core::Record> for pb::Record {
+    fn convert_from(v: core::Record) -> Self {
         Self {
             document_id: v.document_id,
-            kind: pb::DocumentKind::from(v.kind) as i32,
+            kind: pb::DocumentKind::convert_from(v.kind) as i32,
             title: v.title,
             heading_path: v.heading_path,
-            source: Some(v.source.into()),
+            source: Some(v.source.convert_into()),
             language: v.language,
             content: v.content,
-            code_blocks: v.code_blocks.into_iter().map(Into::into).collect(),
+            code_blocks: v
+                .code_blocks
+                .into_iter()
+                .map(ConvertInto::convert_into)
+                .collect(),
             tags: v.tags,
             parent_document_id: v.parent_document_id,
             content_hash: v.content_hash,
-            verification_status: pb::VerificationStatus::from(v.verification_status) as i32,
+            verification_status: pb::VerificationStatus::convert_from(v.verification_status) as i32,
             verification_evidence: v.verification_evidence,
-            example_metadata: v.example_metadata.map(Into::into),
+            example_metadata: v.example_metadata.map(ConvertInto::convert_into),
             chunk_id: v.chunk_id,
         }
     }
 }
-impl TryFrom<pb::Record> for core::Record {
+impl TryConvertFrom<pb::Record> for core::Record {
     type Error = core::Error;
-    fn try_from(v: pb::Record) -> core::Result<Self> {
+    fn try_convert_from(v: pb::Record) -> core::Result<Self> {
         if v.example_metadata
             .as_ref()
             .and_then(|m| m.bpm)
@@ -139,23 +171,27 @@ impl TryFrom<pb::Record> for core::Record {
             kind: document_kind(v.kind)?,
             title: v.title,
             heading_path: v.heading_path,
-            source: required(v.source, "missing record source")?.into(),
+            source: required(v.source, "missing record source")?.convert_into(),
             language: v.language,
             content: v.content,
-            code_blocks: v.code_blocks.into_iter().map(Into::into).collect(),
+            code_blocks: v
+                .code_blocks
+                .into_iter()
+                .map(ConvertInto::convert_into)
+                .collect(),
             tags: v.tags,
             parent_document_id: v.parent_document_id,
             content_hash: v.content_hash,
             verification_status: verification_status(v.verification_status)?,
             verification_evidence: v.verification_evidence,
-            example_metadata: v.example_metadata.map(Into::into),
+            example_metadata: v.example_metadata.map(ConvertInto::convert_into),
             chunk_id: v.chunk_id,
         })
     }
 }
-impl TryFrom<core::SearchRequest> for pb::SearchRequest {
+impl TryConvertFrom<core::SearchRequest> for pb::SearchRequest {
     type Error = core::Error;
-    fn try_from(v: core::SearchRequest) -> core::Result<Self> {
+    fn try_convert_from(v: core::SearchRequest) -> core::Result<Self> {
         Ok(Self {
             query: v.query,
             intent: match v.intent {
@@ -170,7 +206,7 @@ impl TryFrom<core::SearchRequest> for pb::SearchRequest {
                     .filters
                     .kinds
                     .into_iter()
-                    .map(|v| pb::DocumentKind::from(v) as i32)
+                    .map(|v| pb::DocumentKind::convert_from(v) as i32)
                     .collect(),
                 source_ids: v.filters.source_ids,
                 tags: v.filters.tags,
@@ -179,9 +215,9 @@ impl TryFrom<core::SearchRequest> for pb::SearchRequest {
         })
     }
 }
-impl TryFrom<pb::SearchRequest> for core::SearchRequest {
+impl TryConvertFrom<pb::SearchRequest> for core::SearchRequest {
     type Error = core::Error;
-    fn try_from(v: pb::SearchRequest) -> core::Result<Self> {
+    fn try_convert_from(v: pb::SearchRequest) -> core::Result<Self> {
         let intent = match pb::SearchIntent::try_from(v.intent) {
             Ok(pb::SearchIntent::Unspecified | pb::SearchIntent::Mixed) => {
                 core::SearchIntent::Mixed
@@ -217,23 +253,27 @@ impl TryFrom<pb::SearchRequest> for core::SearchRequest {
         })
     }
 }
-impl TryFrom<core::SearchHit> for pb::SearchHit {
+impl TryConvertFrom<core::SearchHit> for pb::SearchHit {
     type Error = core::Error;
-    fn try_from(v: core::SearchHit) -> core::Result<Self> {
+    fn try_convert_from(v: core::SearchHit) -> core::Result<Self> {
         Ok(Self {
-            record: Some(v.record.into()),
+            record: Some(v.record.convert_into()),
             lexical_rank: v.lexical_rank.map(wire_count).transpose()?,
             lexical_score: v.lexical_score,
             vector_rank: v.vector_rank.map(wire_count).transpose()?,
             vector_score: v.vector_score,
             fusion_score: v.fusion_score,
-            alternate_sources: v.alternate_sources.into_iter().map(Into::into).collect(),
+            alternate_sources: v
+                .alternate_sources
+                .into_iter()
+                .map(ConvertInto::convert_into)
+                .collect(),
         })
     }
 }
-impl TryFrom<pb::SearchHit> for core::SearchHit {
+impl TryConvertFrom<pb::SearchHit> for core::SearchHit {
     type Error = core::Error;
-    fn try_from(v: pb::SearchHit) -> core::Result<Self> {
+    fn try_convert_from(v: pb::SearchHit) -> core::Result<Self> {
         if !v.fusion_score.is_finite()
             || v.lexical_score.is_some_and(|x| !x.is_finite())
             || v.vector_score.is_some_and(|x| !x.is_finite())
@@ -241,25 +281,29 @@ impl TryFrom<pb::SearchHit> for core::SearchHit {
             return Err(invalid("nonfinite retrieval score"));
         }
         Ok(Self {
-            record: required(v.record, "missing hit record")?.try_into()?,
+            record: required(v.record, "missing hit record")?.try_convert_into()?,
             lexical_rank: v.lexical_rank.map(|v| v as usize),
             lexical_score: v.lexical_score,
             vector_rank: v.vector_rank.map(|v| v as usize),
             vector_score: v.vector_score,
             fusion_score: v.fusion_score,
-            alternate_sources: v.alternate_sources.into_iter().map(Into::into).collect(),
+            alternate_sources: v
+                .alternate_sources
+                .into_iter()
+                .map(ConvertInto::convert_into)
+                .collect(),
         })
     }
 }
-impl TryFrom<core::SearchResponse> for pb::SearchResponse {
+impl TryConvertFrom<core::SearchResponse> for pb::SearchResponse {
     type Error = core::Error;
-    fn try_from(v: core::SearchResponse) -> core::Result<Self> {
+    fn try_convert_from(v: core::SearchResponse) -> core::Result<Self> {
         let d = v.diagnostics;
         Ok(Self {
             results: v
                 .results
                 .into_iter()
-                .map(TryInto::try_into)
+                .map(TryConvertInto::try_convert_into)
                 .collect::<core::Result<_>>()?,
             diagnostics: Some(pb::SearchDiagnostics {
                 generation: d.generation,
@@ -274,15 +318,15 @@ impl TryFrom<core::SearchResponse> for pb::SearchResponse {
         })
     }
 }
-impl TryFrom<pb::SearchResponse> for core::SearchResponse {
+impl TryConvertFrom<pb::SearchResponse> for core::SearchResponse {
     type Error = core::Error;
-    fn try_from(v: pb::SearchResponse) -> core::Result<Self> {
+    fn try_convert_from(v: pb::SearchResponse) -> core::Result<Self> {
         let d = required(v.diagnostics, "missing search diagnostics")?;
         Ok(Self {
             results: v
                 .results
                 .into_iter()
-                .map(TryInto::try_into)
+                .map(TryConvertInto::try_convert_into)
                 .collect::<core::Result<_>>()?,
             diagnostics: core::SearchDiagnostics {
                 generation: d.generation,
@@ -297,8 +341,8 @@ impl TryFrom<pb::SearchResponse> for core::SearchResponse {
         })
     }
 }
-impl From<(core::DocumentReference, bool)> for pb::GetDocumentRequest {
-    fn from((reference, parent_context): (core::DocumentReference, bool)) -> Self {
+impl ConvertFrom<(core::DocumentReference, bool)> for pb::GetDocumentRequest {
+    fn convert_from((reference, parent_context): (core::DocumentReference, bool)) -> Self {
         Self {
             reference: Some(match reference {
                 core::DocumentReference::DocumentId(id) => {
@@ -312,9 +356,9 @@ impl From<(core::DocumentReference, bool)> for pb::GetDocumentRequest {
         }
     }
 }
-impl TryFrom<pb::GetDocumentRequest> for (core::DocumentReference, bool) {
+impl TryConvertFrom<pb::GetDocumentRequest> for (core::DocumentReference, bool) {
     type Error = core::Error;
-    fn try_from(v: pb::GetDocumentRequest) -> core::Result<Self> {
+    fn try_convert_from(v: pb::GetDocumentRequest) -> core::Result<Self> {
         let reference = match required(v.reference, "missing document or chunk reference")? {
             pb::get_document_request::Reference::DocumentId(id) if !id.is_empty() => {
                 core::DocumentReference::DocumentId(id)
@@ -327,26 +371,26 @@ impl TryFrom<pb::GetDocumentRequest> for (core::DocumentReference, bool) {
         Ok((reference, v.parent_context))
     }
 }
-impl From<core::DocumentResponse> for pb::GetDocumentResponse {
-    fn from(v: core::DocumentResponse) -> Self {
+impl ConvertFrom<core::DocumentResponse> for pb::GetDocumentResponse {
+    fn convert_from(v: core::DocumentResponse) -> Self {
         Self {
-            record: Some(v.record.into()),
+            record: Some(v.record.convert_into()),
             index_version: v.index_version,
         }
     }
 }
-impl TryFrom<pb::GetDocumentResponse> for core::DocumentResponse {
+impl TryConvertFrom<pb::GetDocumentResponse> for core::DocumentResponse {
     type Error = core::Error;
-    fn try_from(v: pb::GetDocumentResponse) -> core::Result<Self> {
+    fn try_convert_from(v: pb::GetDocumentResponse) -> core::Result<Self> {
         Ok(Self {
-            record: required(v.record, "missing document record")?.try_into()?,
+            record: required(v.record, "missing document record")?.try_convert_into()?,
             index_version: v.index_version,
         })
     }
 }
-impl TryFrom<core::CorpusInfo> for pb::GetCorpusInfoResponse {
+impl TryConvertFrom<core::CorpusInfo> for pb::GetCorpusInfoResponse {
     type Error = core::Error;
-    fn try_from(v: core::CorpusInfo) -> core::Result<Self> {
+    fn try_convert_from(v: core::CorpusInfo) -> core::Result<Self> {
         Ok(Self {
             ready: v.ready,
             readiness_reason: v.readiness_reason,
@@ -356,7 +400,7 @@ impl TryFrom<core::CorpusInfo> for pb::GetCorpusInfoResponse {
                 .counts_by_kind
                 .into_iter()
                 .map(|k| pb::KindCount {
-                    kind: pb::DocumentKind::from(k.kind) as i32,
+                    kind: pb::DocumentKind::convert_from(k.kind) as i32,
                     documents: k.documents as u64,
                     chunks: k.chunks as u64,
                 })
@@ -367,7 +411,7 @@ impl TryFrom<core::CorpusInfo> for pb::GetCorpusInfoResponse {
                 .map(|s| pb::SourceInfo {
                     source_id: s.source_id,
                     revision: s.revision,
-                    license: s.license.map(Into::into),
+                    license: s.license.map(ConvertInto::convert_into),
                     coverage_gaps: s.coverage_gaps,
                 })
                 .collect(),
@@ -380,9 +424,9 @@ impl TryFrom<core::CorpusInfo> for pb::GetCorpusInfoResponse {
         })
     }
 }
-impl TryFrom<pb::GetCorpusInfoResponse> for core::CorpusInfo {
+impl TryConvertFrom<pb::GetCorpusInfoResponse> for core::CorpusInfo {
     type Error = core::Error;
-    fn try_from(v: pb::GetCorpusInfoResponse) -> core::Result<Self> {
+    fn try_convert_from(v: pb::GetCorpusInfoResponse) -> core::Result<Self> {
         Ok(Self {
             ready: v.ready,
             readiness_reason: v.readiness_reason,
@@ -405,7 +449,7 @@ impl TryFrom<pb::GetCorpusInfoResponse> for core::CorpusInfo {
                 .map(|s| core::SourceInfo {
                     source_id: s.source_id,
                     revision: s.revision,
-                    license: s.license.map(Into::into),
+                    license: s.license.map(ConvertInto::convert_into),
                     coverage_gaps: s.coverage_gaps,
                 })
                 .collect(),
@@ -434,7 +478,7 @@ mod tests {
             ("ok", Some(1), 99),
         ] {
             assert!(
-                core::SearchRequest::try_from(pb::SearchRequest {
+                core::SearchRequest::try_convert_from(pb::SearchRequest {
                     query: query.into(),
                     top_k,
                     intent,
@@ -444,12 +488,13 @@ mod tests {
             );
         }
         assert!(
-            <(core::DocumentReference, bool)>::try_from(pb::GetDocumentRequest::default()).is_err()
+            <(core::DocumentReference, bool)>::try_convert_from(pb::GetDocumentRequest::default())
+                .is_err()
         );
     }
     #[test]
     fn unspecified_intent_is_mixed() {
-        let request = core::SearchRequest::try_from(pb::SearchRequest {
+        let request = core::SearchRequest::try_convert_from(pb::SearchRequest {
             query: "slow".into(),
             ..Default::default()
         })

@@ -1,4 +1,5 @@
 pub mod codex;
+pub mod turn;
 
 use std::sync::Arc;
 
@@ -54,6 +55,14 @@ pub trait Provider: Send + Sync {
         text: &str,
         options: &ModelOptions,
     ) -> Result<ModelResponse, ProviderError>;
+
+    /// One inference step. Tool execution and request history belong to the assistant.
+    async fn turn(
+        &self,
+        _request: &turn::TurnRequest,
+    ) -> Result<turn::TurnResponse, ProviderError> {
+        Err(ProviderError::Rejected)
+    }
 }
 
 /// Server configuration only; deliberately not part of the HTTP/OpenAPI schema.

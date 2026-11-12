@@ -9,6 +9,7 @@ use reqwest::{Client, StatusCode, header};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
+use super::turn::{ToolCall, TurnRequest, TurnResponse, user_input};
 use super::{ModelOptions, ModelResponse, Provider, ProviderError, Usage};
 
 const RESPONSES_URL: &str = "https://chatgpt.com/backend-api/codex/responses";
@@ -45,23 +46,23 @@ impl Codex {
         })
     }
 
-    async fn request(
-        &self,
-        text: &str,
-        options: &ModelOptions,
-    ) -> Result<ModelResponse, ProviderError> {
+    async fn request(&self, request: &TurnRequest) -> Result<TurnResponse, ProviderError> {
+        let options = &request.options;
         // Re-read on each request: Codex owns refresh/login and can replace the file at any time.
         let credentials = auth::load(&self.auth_file).await?;
         let mut body = json!({
             "model": options.model,
             "instructions": options.instructions.as_deref().unwrap_or("You are a helpful assistant."),
-            "input": [{"role": "user", "content": [{"type": "input_text", "text": text}]}],
-            "tools": [],
-            "tool_choice": "none",
+            "input": request.input,
+            "tools": request.tools,
+            "tool_choice": if request.tools.is_empty() { "none" } else { "auto" },
             "parallel_tool_calls": false,
             "store": false,
             "stream": true
         });
+        if !request.tools.is_empty() {
+            body["include"] = json!(["reasoning.encrypted_content"]);
+        }
         if let Some(effort) = &options.reasoning_effort {
             body["reasoning"] = json!({ "effort": effort });
         }
@@ -76,6 +77,10 @@ impl Codex {
             .await
             .map_err(transport_error)?;
         if !response.status().is_success() {
+            tracing::warn!(
+                status = response.status().as_u16(),
+                "Model provider rejected HTTP request"
+            );
             // Never deserialize, log, or expose an upstream error body.
             return Err(match response.status() {
                 StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => ProviderError::AuthRequired,
@@ -84,19 +89,16 @@ impl Codex {
                 _ => ProviderError::Unavailable,
             });
         }
-        // Codex can omit Content-Type even when the body is SSE. Still reject an
-        // explicitly different format; the SSE parser and terminal event validate the body.
+        // Codex can omit Content-Type or label SSE as text/plain. The SSE parser
+        // and successful terminal event still validate the body in all cases.
         if response
             .headers()
             .get(header::CONTENT_TYPE)
             .is_some_and(|value| {
                 !value.to_str().ok().is_some_and(|value| {
-                    value
-                        .split(';')
-                        .next()
-                        .unwrap_or_default()
-                        .trim()
-                        .eq_ignore_ascii_case("text/event-stream")
+                    let media_type = value.split(';').next().unwrap_or_default().trim();
+                    media_type.eq_ignore_ascii_case("text/event-stream")
+                        || media_type.eq_ignore_ascii_case("text/plain")
                 })
             })
         {
@@ -127,7 +129,7 @@ impl Codex {
             let data: Value =
                 serde_json::from_str(&event.data).map_err(|_| ProviderError::InvalidResponse)?;
             match data["type"].as_str() {
-                Some("response.completed") => return completed(&data["response"]),
+                Some("response.completed") => return completed_turn(&data["response"]),
                 Some("response.failed" | "error") => {
                     let code = data
                         .pointer("/response/error/code")
@@ -159,13 +161,33 @@ impl Provider for Codex {
         text: &str,
         options: &ModelOptions,
     ) -> Result<ModelResponse, ProviderError> {
-        tokio::time::timeout(self.timeout, self.request(text, options))
+        let result = self
+            .turn(&TurnRequest {
+                input: vec![user_input(text)],
+                tools: vec![],
+                options: options.clone(),
+            })
+            .await?;
+        if !result.calls.is_empty() || result.response.text.trim().is_empty() {
+            return Err(ProviderError::InvalidResponse);
+        }
+        Ok(result.response)
+    }
+
+    async fn turn(&self, request: &TurnRequest) -> Result<TurnResponse, ProviderError> {
+        tokio::time::timeout(self.timeout, self.request(request))
             .await
             .map_err(|_| ProviderError::Timeout)?
     }
 }
 
 fn transport_error(error: reqwest::Error) -> ProviderError {
+    // Do not log the raw error: it can carry request URLs or sensitive context.
+    tracing::warn!(
+        timeout = error.is_timeout(),
+        connect = error.is_connect(),
+        "Model provider transport failed; check network and TLS trust"
+    );
     if error.is_timeout() {
         ProviderError::Timeout
     } else {
@@ -189,6 +211,11 @@ enum Output {
         content: Vec<Content>,
     },
     Reasoning,
+    FunctionCall {
+        call_id: String,
+        name: String,
+        arguments: String,
+    },
     #[serde(other)]
     Unsupported,
 }
@@ -206,13 +233,14 @@ enum Content {
     Unsupported,
 }
 
-fn completed(value: &Value) -> Result<ModelResponse, ProviderError> {
+fn completed_turn(value: &Value) -> Result<TurnResponse, ProviderError> {
     let response: CompletedResponse =
         serde_json::from_value(value.clone()).map_err(|_| ProviderError::InvalidResponse)?;
     if response.status != "completed" {
         return Err(ProviderError::Incomplete);
     }
     let mut parts = Vec::new();
+    let mut calls = Vec::new();
     for item in response.output {
         match item {
             Output::Message { content } => {
@@ -224,20 +252,60 @@ fn completed(value: &Value) -> Result<ModelResponse, ProviderError> {
                     }
                 }
             }
+            Output::FunctionCall {
+                call_id,
+                name,
+                arguments,
+            } => {
+                if call_id.is_empty()
+                    || call_id.len() > 200
+                    || name.is_empty()
+                    || name.len() > 100
+                    || arguments.len() > 16 * 1024
+                    || calls.len() >= 12
+                    || calls.iter().any(|call: &ToolCall| call.call_id == call_id)
+                {
+                    return Err(ProviderError::InvalidResponse);
+                }
+                calls.push(ToolCall {
+                    call_id,
+                    name,
+                    arguments,
+                });
+            }
             Output::Reasoning => {}
             Output::Unsupported => return Err(ProviderError::InvalidResponse),
         }
     }
-    if parts.is_empty() {
+    if parts.is_empty() && calls.is_empty() {
         return Err(ProviderError::InvalidResponse);
     }
-    Ok(ModelResponse {
-        id: response.id,
-        model: response.model,
-        text: parts.join("\n"),
-        usage: response.usage,
+    Ok(TurnResponse {
+        output: value["output"]
+            .as_array()
+            .ok_or(ProviderError::InvalidResponse)?
+            .clone(),
+        calls,
+        response: ModelResponse {
+            id: response.id,
+            model: response.model,
+            text: parts.join("\n"),
+            usage: response.usage,
+        },
     })
 }
 
 #[cfg(test)]
+fn completed(value: &Value) -> Result<ModelResponse, ProviderError> {
+    let turn = completed_turn(value)?;
+    if !turn.calls.is_empty() || turn.response.text.trim().is_empty() {
+        return Err(ProviderError::InvalidResponse);
+    }
+    Ok(turn.response)
+}
+
+#[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod rag_tests;

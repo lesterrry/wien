@@ -1,4 +1,4 @@
-# Copy to strudel-rag.toml and adjust paths/model for your deployment.
+# Non-secret defaults. Override with STRUDEL_RAG_CONFIG or --config.
 # Relative paths are resolved from this file's directory. Never put secrets here.
 data_dir = "./data"
 sources_manifest = "./corpus/sources.toml"

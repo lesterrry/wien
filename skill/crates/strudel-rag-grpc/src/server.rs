@@ -1,3 +1,4 @@
+use crate::conversions::{ConvertInto, TryConvertInto};
 use crate::{auth::BearerAuth, pb, status::to_status};
 use http_body_util::BodyExt;
 use prost::Message;
@@ -37,7 +38,7 @@ impl pb::strudel_rag_server::StrudelRag for RagService {
         &self,
         request: Request<pb::SearchRequest>,
     ) -> std::result::Result<Response<pb::SearchResponse>, Status> {
-        let request = request.into_inner().try_into().map_err(to_status)?;
+        let request = request.into_inner().try_convert_into().map_err(to_status)?;
         let engine = self.engine()?;
         let _permit = self
             .searches
@@ -45,19 +46,19 @@ impl pb::strudel_rag_server::StrudelRag for RagService {
             .try_acquire_owned()
             .map_err(|_| Status::resource_exhausted("concurrent search limit reached"))?;
         let result = engine.search(request).await.map_err(to_status)?;
-        self.response(result.try_into().map_err(to_status)?)
+        self.response(result.try_convert_into().map_err(to_status)?)
     }
     async fn get_document(
         &self,
         request: Request<pb::GetDocumentRequest>,
     ) -> std::result::Result<Response<pb::GetDocumentResponse>, Status> {
-        let (reference, parent) = request.into_inner().try_into().map_err(to_status)?;
+        let (reference, parent) = request.into_inner().try_convert_into().map_err(to_status)?;
         let engine = self.engine()?;
         let document = tokio::task::spawn_blocking(move || engine.get_document(reference, parent))
             .await
             .map_err(|_| Status::internal("document retrieval worker failed"))?
             .map_err(to_status)?;
-        self.response(document.into())
+        self.response(document.convert_into())
     }
     async fn get_corpus_info(
         &self,
@@ -77,7 +78,7 @@ impl pb::strudel_rag_server::StrudelRag for RagService {
                 "retrieval index is absent, incompatible, or corrupt; run local doctor".into(),
             );
         }
-        self.response(info.try_into().map_err(to_status)?)
+        self.response(info.try_convert_into().map_err(to_status)?)
     }
 }
 

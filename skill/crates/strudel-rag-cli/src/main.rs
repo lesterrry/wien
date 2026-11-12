@@ -190,12 +190,7 @@ enum RemoteCommand {
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "warn".into()),
-        )
-        .with_writer(std::io::stderr)
-        .init();
+    service_runtime::init_logging();
     let cli = match Cli::try_parse() {
         Ok(cli) => cli,
         Err(error) => {
@@ -325,7 +320,13 @@ async fn run(cli: Cli) -> Result<Value> {
                 Command::Info => to_json(engine(&config)?.corpus_info()),
                 Command::Serve { .. } => {
                     let engine = Arc::new(engine(&config)?);
-                    strudel_rag_grpc::serve(&config, Some(engine), shutdown_signal()).await?;
+                    tracing::info!(address = %config.server.bind, "starting gRPC server");
+                    strudel_rag_grpc::serve(
+                        &config,
+                        Some(engine),
+                        service_runtime::shutdown_signal(),
+                    )
+                    .await?;
                     Ok(json!({"stopped": true}))
                 }
                 Command::Doctor { check_embeddings } => doctor(&config, check_embeddings).await,
@@ -489,29 +490,6 @@ async fn doctor(config: &Config, check_embeddings: bool) -> Result<Value> {
         "embedding_check": embedding_check,
         "network_checked": check_embeddings
     }))
-}
-
-async fn shutdown_signal() {
-    #[cfg(unix)]
-    {
-        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
-            Ok(mut terminate) => {
-                tokio::select! {
-                    result = tokio::signal::ctrl_c() => {
-                        if result.is_err() { tracing::warn!("failed to listen for SIGINT"); }
-                    }
-                    _ = terminate.recv() => {}
-                }
-            }
-            Err(_) => {
-                let _ = tokio::signal::ctrl_c().await;
-            }
-        }
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = tokio::signal::ctrl_c().await;
-    }
 }
 
 #[cfg(test)]
