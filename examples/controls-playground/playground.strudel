@@ -1,0 +1,19 @@
+// Import playground: play THIS file and pin it as master in Controls.
+// Expand Controls: every imported file gets its own panel, including deep imports.
+// kickGain / hatGain / bassGain / leadGain change the actual voices below.
+// Toggle each enabled switch to hear which part belongs to that file.
+// tone.strudel: waveform enum changes bass and lead.
+// rhythm.strudel: drumBank enum switches Synth / TR909 / TR808 / Linn.
+// lead.strudel: effects multi-selection is a real ordered serial FX chain.
+
+import rhythm from './playground/rhythm.strudel'
+import bass from './playground/bass.strudel'
+import lead from './playground/lead.strudel'
+
+const tempo = 108 // @slider 70..150
+const enabled = true
+
+setcpm(tempo / 4)
+
+// No replacement gain here: each imported voice keeps its own controls.
+enabled ? stack(rhythm, bass, lead) : silence

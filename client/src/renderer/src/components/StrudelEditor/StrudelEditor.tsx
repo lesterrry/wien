@@ -15,6 +15,7 @@ import {
   changeControl,
   ignoreControl,
   moveControl,
+  readControls,
 } from "../../../../shared/controls";
 import type { Entry } from "../../../../shared/types";
 import { compileGraph } from "../../module-compiler";
@@ -28,6 +29,9 @@ import styles from "./StrudelEditor.module.css";
 export interface Player {
   assist(placement?: AssistantPlacement): void;
   play(): Promise<void>;
+  update(): Promise<void>;
+  dependsOn(path: string): boolean;
+  revealControl(name: string): void;
   stop(): Promise<void>;
   replaceCode(code: string): void;
   changeControl(name: string, value: ControlChange): void;
@@ -116,9 +120,9 @@ export function StrudelEditor({
     let evaluationGeneration = 0;
     let requested: boolean | null = null;
     let evaluating: Promise<void> | undefined;
-    let liveTimer: ReturnType<typeof setTimeout> | undefined;
     let evaluationCode: string | undefined;
     let compiled: ReturnType<typeof compileGraph> | undefined;
+    let dependencies = new Set<string>();
     const mirror = new StrudelMirror({
       root: root.current,
       initialCode: code.current,
@@ -140,6 +144,7 @@ export function StrudelEditor({
           if (!alive || evaluationGeneration !== generation)
             throw new Error("Evaluation cancelled.");
           compiled = compileGraph(graph, transpiler);
+          dependencies = new Set(Object.keys(graph.sources));
         } catch (error) {
           throw new Error(
             String(error instanceof Error ? error.message : error).replace(
@@ -222,8 +227,6 @@ export function StrudelEditor({
     };
     const cancelLive = () => {
       generation++;
-      clearTimeout(liveTimer);
-      liveTimer = undefined;
       requested = null;
     };
     // Route Strudel's own editor shortcuts through the same queue and cancellation.
@@ -238,6 +241,21 @@ export function StrudelEditor({
         setAssistantInvocation((value) => value + 1);
       },
       play: () => evaluate(true),
+      update: () => evaluate(false),
+      dependsOn: (file) => dependencies.has(file),
+      revealControl: (name) => {
+        const result = readControls(mirror.code);
+        const control = [
+          ...result.controls,
+          ...(result.compositions ?? []),
+        ].find((item) => item.name === name);
+        if (!control) return;
+        mirror.editor.dispatch({
+          selection: { anchor: control.start, head: control.end },
+          scrollIntoView: true,
+        });
+        mirror.editor.focus();
+      },
       stop: () => mirror.stop(),
       changeControl: (name, change) => {
         const edit = changeControl(mirror.code, name, change);
@@ -249,11 +267,6 @@ export function StrudelEditor({
               ? "input.control"
               : undefined,
         });
-        if (!mirror.repl.state.started || liveTimer !== undefined) return;
-        liveTimer = setTimeout(() => {
-          liveTimer = undefined;
-          if (alive && mirror.repl.state.started) void evaluate(false);
-        }, 60);
       },
       ignoreControl: (name) => {
         const edit = ignoreControl(mirror.code, name);
@@ -276,11 +289,6 @@ export function StrudelEditor({
         mirror.editor.dispatch({
           changes: { from: edit.start, to: edit.end, insert: edit.text },
         });
-        if (!mirror.repl.state.started || liveTimer !== undefined) return;
-        liveTimer = setTimeout(() => {
-          liveTimer = undefined;
-          if (alive && mirror.repl.state.started) void evaluate(false);
-        }, 60);
       },
     });
     editor.current = mirror.editor;

@@ -1,0 +1,20 @@
+// Hiding/collapsing this panel does not hide kick or hats.
+import kick from './kick.strudel'
+import hats from './hats.strudel'
+
+const Bank = Object.freeze({
+  Synth: 'synth',
+  TR909: 'tr909',
+  TR808: 'tr808',
+  Linn: 'linn',
+})
+
+// Synth starts without downloads. Other choices use real bank samples on demand.
+const drumBank = Bank.Synth
+const enabled = true
+
+const drums = drumBank === Bank.Synth
+  ? stack(kick, hats)
+  : stack(kick.s("bd"), hats.s("hh")).bank(drumBank)
+
+export default enabled ? drums : silence

@@ -96,6 +96,9 @@ try {
   await group.scrollIntoViewIfNeeded();
   const first = await group.getByText("Sine", { exact: true }).boundingBox();
   const last = await group.getByText("Saw", { exact: true }).boundingBox();
+  await expect(group).toHaveAttribute("aria-orientation", "vertical");
+  assert(Math.abs(first.x - last.x) < 1);
+  assert(last.y > first.y + first.height);
   await page.mouse.move(first.x + first.width / 2, first.y + first.height / 2);
   await page.mouse.down();
   await page.mouse.move(last.x + last.width / 2, last.y + last.height / 2, {
@@ -191,7 +194,7 @@ try {
     effects
       .locator("[data-option]")
       .evaluateAll((rows) => rows.map((row) => row.dataset.option));
-  assert.deepEqual(await rowOrder(), ["Echo", "Chorus", "Crush"]);
+  await expect.poll(rowOrder).toEqual(["Echo", "Chorus", "Crush"]);
   await effects.scrollIntoViewIfNeeded();
   const handle = effects.getByRole("button", {
     name: "Move Chorus",
@@ -209,18 +212,19 @@ try {
   );
   assert.equal(await code.textContent(), beforeDrag);
   await page.mouse.up();
-  assert.deepEqual(await rowOrder(), ["Echo", "Crush", "Chorus"]);
+  await expect.poll(rowOrder).toEqual(["Echo", "Crush", "Chorus"]);
   assert.match(await code.textContent(), /order=Echo,Crush,Chorus/);
   const afterDrag = await code.textContent();
   await code.press(`${modifier}+z`);
   assert.equal(await code.textContent(), beforeDrag);
-  assert.deepEqual(await rowOrder(), ["Echo", "Chorus", "Crush"]);
+  await expect.poll(rowOrder).toEqual(["Echo", "Chorus", "Crush"]);
   await code.press(`${modifier}+Shift+z`);
   assert.equal(await code.textContent(), afterDrag);
+  await expect.poll(rowOrder).toEqual(["Echo", "Crush", "Chorus"]);
   await effects
     .getByRole("button", { name: "Move Crush", exact: true })
     .press("Alt+ArrowUp");
-  assert.deepEqual(await rowOrder(), ["Crush", "Echo", "Chorus"]);
+  await expect.poll(rowOrder).toEqual(["Crush", "Echo", "Chorus"]);
   assert.match(
     await code.textContent(),
     /const effects = \[Fx.Crush, Fx.Echo\]/,
@@ -228,7 +232,7 @@ try {
   await effects
     .getByRole("button", { name: "Move Crush", exact: true })
     .press("Alt+ArrowDown");
-  assert.deepEqual(await rowOrder(), ["Echo", "Crush", "Chorus"]);
+  await expect.poll(rowOrder).toEqual(["Echo", "Crush", "Chorus"]);
   await effects.scrollIntoViewIfNeeded();
   const cancelHandle = await effects
     .getByRole("button", { name: "Move Echo", exact: true })

@@ -218,3 +218,107 @@ test("a failed second write rolls back automatic export conversion", async () =>
     await cleanup();
   }
 });
+
+test("panel settings travel with a copied project and follow file and folder renames", async () => {
+  const { project, directory, cleanup } = await fixture();
+  const copied = `${directory}-copy`;
+  try {
+    await project.add("", "parts", true);
+    await project.add("parts", "voice.strudel", false);
+    const id = JSON.stringify(["parts/voice.strudel"]);
+    const preferences = {
+      pinned: "parts/voice.strudel",
+      roots: {
+        "parts/voice.strudel": {
+          hidden: { [id]: true },
+          collapsed: { [id]: false },
+        },
+      },
+    };
+    assert.equal(await project.readControlPreferences(), null);
+    await project.saveControlPreferences(preferences);
+    await fs.cp(directory, copied, { recursive: true });
+    assert.deepEqual(
+      await new ProjectFs(copied).readControlPreferences(),
+      preferences,
+    );
+    await project.move("parts", "instruments");
+    await project.move("instruments/voice.strudel", "instruments/bass.strudel");
+    const result = await project.readControlPreferences();
+    assert.equal(result?.pinned, "instruments/bass.strudel");
+    assert.deepEqual(result?.roots["instruments/bass.strudel"], {
+      hidden: { '["instruments/bass.strudel"]': true },
+      collapsed: { '["instruments/bass.strudel"]': false },
+    });
+    assert.equal(
+      (await project.project()).entries.some(
+        (entry) => entry.name === ".wien-controls.json",
+      ),
+      false,
+    );
+  } finally {
+    await cleanup();
+    await fs.rm(copied, { recursive: true, force: true });
+  }
+});
+
+test("invalid or symlinked panel settings are rejected without touching other files", async () => {
+  const { project, directory, cleanup } = await fixture();
+  try {
+    await project.add("", "voice.strudel", false);
+    const source = await project.read("voice.strudel");
+    await assert.rejects(
+      project.saveControlPreferences({
+        pinned: "../outside.strudel",
+        roots: {},
+      }),
+      /Invalid/,
+    );
+    await fs.symlink(
+      "voice.strudel",
+      path.join(directory, ".wien-controls.json"),
+    );
+    await assert.rejects(project.readControlPreferences(), /Invalid/);
+    await assert.rejects(
+      project.saveControlPreferences({ pinned: null, roots: {} }),
+      /Invalid/,
+    );
+    assert.equal(await project.read("voice.strudel"), source);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("a failed settings migration rolls back file moves and rewritten imports", async () => {
+  const { project, cleanup } = await fixture();
+  try {
+    await project.add("", "voice.strudel", false);
+    await project.add("", "master.strudel", false);
+    const original = await project.read("master.strudel");
+    await project.save({
+      path: "master.strudel",
+      expected: original,
+      content: "import voice from './voice.strudel'; voice",
+    });
+    await project.saveControlPreferences({
+      pinned: "voice.strudel",
+      roots: {},
+    });
+    project.saveControlPreferences = async () => {
+      throw new Error("Settings are read-only");
+    };
+    await assert.rejects(
+      project.move("voice.strudel", "bass.strudel"),
+      /read-only/,
+    );
+    assert.match(await project.read("master.strudel"), /'\.\/voice.strudel'/);
+    await project.read("voice.strudel");
+    await assert.rejects(project.read("bass.strudel"));
+    assert.equal(
+      (await project.readControlPreferences())?.pinned,
+      "voice.strudel",
+    );
+  } finally {
+    await cleanup();
+  }
+});

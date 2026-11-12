@@ -870,3 +870,96 @@ test("moving whole comma declarations does not duplicate siblings", () => {
     );
   }
 });
+
+test("shorthand objects compose local controls without losing their source edits", () => {
+  const code = `let amount = 0.3, enabled = true;
+const cutoff = 600 // @slider 100..2000
+export const voice = {enabled, amount, cutoff};
+voice.enabled ? note("c3").gain(voice.amount) : silence`;
+  const result = readControls(code);
+  assert.equal(result.valid, true);
+  assert.deepEqual(
+    result.compositions?.map(({ name, members }) => ({ name, members })),
+    [{ name: "voice", members: ["enabled", "amount", "cutoff"] }],
+  );
+  assert.equal(result.controls.length, 3);
+  assert.equal(
+    code.slice(result.compositions[0].start, result.compositions[0].end),
+    "{enabled, amount, cutoff}",
+  );
+  const change = changeControl(code, "amount", { type: "set", value: 0.7 });
+  assert(change);
+  const edited = editSource(code, [change]);
+  assert.match(edited, /amount = 0.7/);
+  assert.deepEqual(readControls(edited).compositions?.[0].members, [
+    "enabled",
+    "amount",
+    "cutoff",
+  ]);
+});
+
+test("group conflicts are isolated; nesting is rejected irrespective of declaration order", () => {
+  const result = readControls(`const a=1,b=2,c=3;
+let nested={first,c}; let first={a,b}; let overlap={b,c}; let repeated={c,c}; let healthy={c};`);
+  assert.deepEqual(
+    result.compositions?.map((group) => group.name),
+    ["first", "healthy"],
+  );
+  assert.deepEqual(
+    result.issues?.map((issue) => issue.name),
+    ["nested", "overlap", "repeated"],
+  );
+  assert.deepEqual(
+    result.controls.map((control) => control.name),
+    ["a", "b", "c"],
+  );
+  const self = readControls("const a=1; let self={self,a}");
+  assert.match(self.issues?.[0].message ?? "", /cannot contain/);
+});
+
+test("ordinary objects, aliases, spreads, computed fields, ignored groups and foreign bindings stay ordinary code", () => {
+  const code = `import {remote} from './other.strudel';
+const a=1,b=true;
+const ordinary={a,missing}; const alias={value:a}; const spread={...ordinary};
+const computed={['a']:a}; const foreign={a,remote}; const empty={};
+// @ignore
+const hidden={a,b};
+function local(){const inner=1; const group={inner};}
+const Wave=Object.freeze({Sine:'sine',Saw:'sawtooth'});
+const waveform=Wave.Sine;
+const valid={a,b,waveform};`;
+  const result = readControls(code);
+  assert.deepEqual(
+    result.compositions?.map((group) => group.name),
+    ["valid"],
+  );
+  assert.equal(result.issues, undefined);
+  assert.equal(result.errors, undefined);
+});
+
+test("reordering group members edits object references, preserves comments and rejects cross-group moves", () => {
+  const code =
+    "const a=0.1,b=0.2,c=true,d=4;\r\nlet voice={a, /* keep */ b,c};";
+  const edit = moveControl(code, "c", "a", "before");
+  assert(edit);
+  const next = editSource(code, [edit]);
+  assert.equal(
+    next,
+    "const a=0.1,b=0.2,c=true,d=4;\r\nlet voice={c, /* keep */ a,b};",
+  );
+  assert.deepEqual(readControls(next).compositions?.[0].members, [
+    "c",
+    "a",
+    "b",
+  ]);
+  assert.equal(moveControl(code, "a", "d", "after"), undefined);
+  assert.equal(moveControl(code, "d", "a", "before"), undefined);
+  const ignore = ignoreControl(code, "a");
+  assert(ignore);
+  const hidden = editSource(code, [ignore]);
+  assert.equal(readControls(hidden).compositions, undefined);
+  assert.deepEqual(
+    readControls(hidden).controls.map((control) => control.name),
+    ["b", "c", "d"],
+  );
+});
