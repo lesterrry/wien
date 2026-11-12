@@ -153,6 +153,11 @@ docker compose exec skill strudel-rag remote health
 
 ## Ручной релиз бэкенда
 
+Обычный CI запускается для pull request, push в `main` и вручную. Push в рабочую
+ветку без PR не запускает проверки. Rust-зависимости и `httpgenerator` кешируются;
+release-бинарники собираются в релизном workflow. Названия обязательных проверок
+остаются прежними.
+
 GitHub Actions → **Release production** → **Run workflow**. Сборка выполняется
 на GitHub, готовые образы передаются на VPS по отдельному SSH-ключу.
 Пуши сами по себе деплой не запускают. Подробности — в [deploy/README.md](deploy/README.md).

@@ -2,6 +2,7 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -59,6 +60,8 @@ jobs:
     name: Rust workspace checks and build
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      WIEN_HTTPGENERATOR_ROOT: ${{ github.workspace }}/.cache/httpgenerator
     services:
       postgres:
         image: postgres:18-alpine
@@ -78,6 +81,17 @@ jobs:
       - name: Install pinned Rust with rustfmt and Clippy
         run: rustup show
 
+      - name: Cache Rust dependencies and build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: false
+
+      - name: Cache HTTP generator
+        uses: actions/cache@v5
+        with:
+          path: .cache/httpgenerator
+          key: httpgenerator-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('rust-toolchain.toml', 'server/scripts/generate-http.sh') }}
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 
@@ -94,6 +108,3 @@ jobs:
 
       - name: Check generated HTTP contract
         run: bash server/scripts/generate-http.sh --check
-
-      - name: Build production binaries
-        run: cargo build --locked --release -p wien-server -p strudel-rag-cli
