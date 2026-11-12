@@ -1,19 +1,23 @@
 import { setTimeout as delay } from "node:timers/promises";
 import type { AssistRequest, AssistResponse } from "../shared/assistant";
+import { backendConfig } from "./config";
 
 const errors: Record<string, string> = {
   assistant_busy: "The assistant is still busy. Try again shortly.",
   rag_not_ready:
     "The music reference index is not ready. Build the RAG index and restart skill.",
   rag_unavailable:
-    "The music reference service is unavailable. Check just run-server.",
+    "The music reference service is unavailable. Check the backend RAG service.",
   rag_unauthorized:
     "The music reference service rejected authentication. Check the server configuration.",
   rag_timeout: "The music reference search took too long. Try again.",
   assistant_limit:
     "The assistant reached its search limit. Try a narrower request.",
-  provider_auth_required: "Sign in with codex login, then try again.",
-  provider_rate_limited: "Model usage limit reached. Try again later.",
+  provider_auth_required:
+    "The server model credentials are missing or invalid.",
+  provider_not_configured: "Generation is disabled on this server.",
+  provider_rate_limited:
+    "The model provider balance or usage limit was reached.",
   provider_timeout: "The model took too long. Try again.",
   provider_unavailable:
     "The server cannot reach the model provider. Check its network, VPN and certificates.",
@@ -33,9 +37,7 @@ export async function askAssistant(
   request: AssistRequest,
   signal: AbortSignal,
 ): Promise<AssistResponse> {
-  const port = process.env.WIEN_SERVER_PORT ?? "3001";
-  if (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535)
-    throw new Error("Invalid WIEN_SERVER_PORT.");
+  const backend = backendConfig();
   // Reuse the same snapshot on retries; only explicit pre-admission rejection is safe.
   const payload = JSON.stringify(request);
   for (let attempt = 0; ; attempt++) {
@@ -43,7 +45,7 @@ export async function askAssistant(
     let response: Response;
     let body: unknown;
     try {
-      response = await fetch(`http://127.0.0.1:${port}/v1/assist`, {
+      response = await fetch(`${backend.url}/v1/assist`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: payload,
@@ -55,14 +57,18 @@ export async function askAssistant(
     } catch {
       if (signal.aborted) throw new Error("Request cancelled.");
       throw new Error(
-        "Cannot reach the assistant. Start just run-server and try again.",
+        backend.local
+          ? "Cannot reach the assistant. Start just run-server and try again."
+          : `Cannot reach the assistant at ${backend.url}. Check the backend address and connection.`,
       );
     }
     if (signal.aborted) throw new Error("Request cancelled.");
     if (!response.ok) {
       if (response.status === 404)
         throw new Error(
-          `The server on port ${port} has no assistant endpoint. Stop the old server and restart just run-server.`,
+          backend.local
+            ? `The server at ${backend.url} has no assistant endpoint. Stop the old server and restart just run-server.`
+            : `The server at ${backend.url} has no assistant endpoint. Check the backend address and server version.`,
         );
       const code =
         body && typeof body === "object" && "code" in body ? body.code : null;

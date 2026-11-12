@@ -1,4 +1,6 @@
+pub mod aitunnel;
 pub mod codex;
+mod responses;
 pub mod turn;
 
 use std::sync::Arc;
@@ -8,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 /// Explicitly supported model settings. Unknown settings are rejected, not ignored.
-#[derive(Clone, Deserialize, Serialize, ToSchema)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ModelOptions {
     /// Model slug available to your account; no implicit model substitution.
@@ -19,7 +21,7 @@ pub struct ModelOptions {
     pub instructions: Option<String>,
 }
 
-#[derive(Clone, Deserialize, Serialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ReasoningEffort {
     None,
@@ -69,12 +71,14 @@ pub trait Provider: Send + Sync {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProviderKind {
+    Aitunnel,
     Codex,
 }
 
 impl ProviderKind {
     pub fn build(self) -> Result<Arc<dyn Provider>, ProviderError> {
         match self {
+            Self::Aitunnel => Ok(Arc::new(aitunnel::Aitunnel::from_env()?)),
             Self::Codex => Ok(Arc::new(codex::Codex::local()?)),
         }
     }
@@ -110,9 +114,11 @@ impl ProviderError {
     pub fn message(self) -> &'static str {
         match self {
             Self::AuthRequired => {
-                "Codex ChatGPT login is missing or expired. Run codex login, then retry. A file-based Codex login is required."
+                "Provider credentials are missing, invalid or expired. Check the server configuration."
             }
-            Self::RateLimited => "The provider's usage or rate limit was reached. Retry later.",
+            Self::RateLimited => {
+                "The provider's balance, usage or rate limit was reached. Check the account before retrying."
+            }
             Self::Rejected => {
                 "The provider rejected the request. Check model access and supported options."
             }

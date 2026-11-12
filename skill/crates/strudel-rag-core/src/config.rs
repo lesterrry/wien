@@ -21,10 +21,8 @@ pub struct Config {
 #[serde(default, deny_unknown_fields)]
 pub struct EmbeddingConfig {
     pub provider: String,
-    pub base_url: String,
     pub model: String,
     pub dimensions: Option<usize>,
-    pub api_key_env: String,
     pub batch_size: usize,
     pub timeout_secs: u64,
     pub max_retries: u32,
@@ -79,11 +77,9 @@ impl Default for Config {
 impl Default for EmbeddingConfig {
     fn default() -> Self {
         Self {
-            provider: "http".into(),
-            base_url: "https://api.openai.com/v1".into(),
+            provider: "aitunnel".into(),
             model: "text-embedding-3-small".into(),
             dimensions: None,
-            api_key_env: "OPENAI_API_KEY".into(),
             batch_size: 32,
             timeout_secs: 30,
             max_retries: 3,
@@ -129,11 +125,6 @@ impl Default for ClientConfig {
             timeout_secs: 30,
             connect_timeout_secs: 5,
         }
-    }
-}
-impl EmbeddingConfig {
-    pub fn api_key(&self) -> Option<String> {
-        secret("STRUDEL_RAG_EMBEDDING_API_KEY").or_else(|| secret(&self.api_key_env))
     }
 }
 impl ServerConfig {
@@ -194,7 +185,6 @@ impl Config {
             c.sources_manifest = v.into()
         }
         text!("EMBEDDING_PROVIDER", c.embedding.provider);
-        text!("EMBEDDING_BASE_URL", c.embedding.base_url);
         text!("EMBEDDING_MODEL", c.embedding.model);
         if let Ok(v) = std::env::var("STRUDEL_RAG_EMBEDDING_DIMENSIONS") {
             c.embedding.dimensions = Some(
@@ -221,9 +211,9 @@ impl Config {
         let e = &self.embedding;
         let r = &self.retrieval;
         let s = &self.server;
-        if !matches!(e.provider.as_str(), "http" | "mock") {
+        if !matches!(e.provider.as_str(), "aitunnel" | "mock") {
             return Err(Error::Config(
-                "embedding provider must be http or mock".into(),
+                "embedding provider must be aitunnel or mock".into(),
             ));
         }
         if e.model.trim().is_empty()
@@ -235,19 +225,6 @@ impl Config {
                 "embedding model, batch size, dimensions and timeout must be positive/nonempty"
                     .into(),
             ));
-        }
-        if e.provider == "http" {
-            let u = url::Url::parse(&e.base_url)
-                .map_err(|_| Error::Config("invalid embedding base URL".into()))?;
-            if !matches!(u.scheme(), "https" | "http")
-                || u.host_str().is_none()
-                || !u.username().is_empty()
-                || u.password().is_some()
-            {
-                return Err(Error::Config(
-                    "embedding URL must be HTTP(S) without credentials".into(),
-                ));
-            }
         }
         let u = url::Url::parse(&self.client.endpoint)
             .map_err(|_| Error::Config("invalid client endpoint".into()))?;
@@ -302,6 +279,8 @@ mod tests {
         for source in [
             "secret = 'test-only-secret'",
             "[embedding]\nsecret = 'test-only-secret'",
+            "[embedding]\nbase_url = 'https://example.org'",
+            "[embedding]\napi_key_env = 'OPENAI_API_KEY'",
             "[server]\nsecret = 'test-only-secret'",
             "[client]\nsecret = 'test-only-secret'",
             "[chunking]\nsecret = 'test-only-secret'",

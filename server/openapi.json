@@ -1,12 +1,12 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Wien local AI server",
+    "title": "Wien AI server",
     "version": "0.1.0"
   },
   "servers": [
     {
-      "url": "http://127.0.0.1:3001"
+      "url": "/"
     }
   ],
   "paths": {
@@ -176,10 +176,6 @@
                 "$ref": "#/components/schemas/GenerateRequest"
               },
               "example": {
-                "options": {
-                  "model": "gpt-6.1-sol",
-                  "reasoning_effort": "low"
-                },
                 "text": "Hello!"
               }
             }
@@ -198,7 +194,7 @@
             }
           },
           "400": {
-            "description": "Invalid JSON, text, model, or options",
+            "description": "Invalid JSON or text",
             "content": {
               "application/json": {
                 "schema": {
@@ -248,7 +244,7 @@
             }
           },
           "503": {
-            "description": "Local Codex login required",
+            "description": "Provider credentials required",
             "content": {
               "application/json": {
                 "schema": {
@@ -367,45 +363,11 @@
       "GenerateRequest": {
         "type": "object",
         "required": [
-          "text",
-          "options"
+          "text"
         ],
         "properties": {
-          "options": {
-            "$ref": "#/components/schemas/ModelOptions"
-          },
           "text": {
             "type": "string"
-          }
-        },
-        "additionalProperties": false
-      },
-      "ModelOptions": {
-        "type": "object",
-        "description": "Explicitly supported model settings. Unknown settings are rejected, not ignored.",
-        "required": [
-          "model"
-        ],
-        "properties": {
-          "instructions": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "model": {
-            "type": "string",
-            "description": "Model slug available to your account; no implicit model substitution."
-          },
-          "reasoning_effort": {
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/ReasoningEffort"
-              },
-              {
-                "type": "null"
-              }
-            ]
           }
         },
         "additionalProperties": false
@@ -449,19 +411,6 @@
             "type": "boolean"
           }
         }
-      },
-      "ReasoningEffort": {
-        "type": "string",
-        "enum": [
-          "none",
-          "minimal",
-          "low",
-          "medium",
-          "high",
-          "xhigh",
-          "max",
-          "ultra"
-        ]
       },
       "Usage": {
         "type": "object",

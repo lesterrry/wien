@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# Keep this version equal to rust-toolchain.toml (checked by scripts/check-workspace.py).
+# Keep this version equal to rust-toolchain.toml.
 FROM rust:1.98.1-bookworm AS build
 WORKDIR /build
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./

@@ -22,10 +22,12 @@ credentials.json
 # Skill ignore
 /skill/target/
 /skill/data/
-/skill/data-fixture/
 /skill/strudel-rag.toml
 /skill/.env
 /skill/.env.*
 !/skill/.env.example
 /skill/.DS_Store
 /skill/*.log
+
+# Local deployment keys and operator files.
+/.local/

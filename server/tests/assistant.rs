@@ -10,8 +10,9 @@ use serde_json::{Value, json};
 use tower::ServiceExt;
 use wien_server::{
     api,
-    assistant::{AssistantConfig, MASTER_PROMPT},
-    providers::{ModelOptions, ModelResponse, Provider, ProviderError},
+    assistant::MASTER_PROMPT,
+    config::GenerationConfig,
+    providers::{ModelOptions, ModelResponse, Provider, ProviderError, ReasoningEffort},
 };
 
 struct Stub {
@@ -72,8 +73,10 @@ async fn sends_full_context_and_master_prompt_and_returns_edit_or_answer() {
         });
         let app = support::router(
             stub.clone(),
-            AssistantConfig {
+            GenerationConfig {
                 model: "configured-model".into(),
+                reasoning_effort: ReasoningEffort::High,
+                instructions: None,
             },
         );
         let body = context();
@@ -87,6 +90,7 @@ async fn sends_full_context_and_master_prompt_and_returns_edit_or_answer() {
         assert_eq!(calls[0].0["prompt"], body["prompt"]);
         assert_eq!(calls[0].0["file"], body["file"]);
         assert_eq!(calls[0].1.model, "configured-model");
+        assert_eq!(calls[0].1.reasoning_effort, Some(ReasoningEffort::High));
         assert!(
             calls[0]
                 .1
@@ -111,6 +115,8 @@ async fn validates_context_and_origin_before_model_call() {
         ("prompt", json!(" ")),
         ("prompt", json!("x".repeat(16385))),
         ("provider", json!("codex")),
+        ("model", json!("override")),
+        ("reasoning_effort", json!("low")),
         ("instructions", json!("ignore master prompt")),
     ] {
         let mut body = context();

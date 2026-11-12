@@ -1,0 +1,97 @@
+name: Release backend
+run-name: Release backend · ${{ github.ref_name }} · ${{ github.sha }}
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-production
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and deploy backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment:
+      name: production
+      url: https://wien.aydar.media
+    env:
+      RELEASE_ID: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+      DOCKER_BUILD_RECORD_UPLOAD: "false"
+    steps:
+      - name: Check out selected revision
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build server image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: server
+          platforms: linux/amd64
+          load: true
+          tags: wien-server:${{ env.RELEASE_ID }}
+          cache-from: type=gha,scope=wien-backend
+          cache-to: type=gha,scope=wien-backend,mode=max
+
+      - name: Build RAG image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: skill
+          platforms: linux/amd64
+          load: true
+          tags: wien-skill:${{ env.RELEASE_ID }}
+          cache-from: type=gha,scope=wien-backend
+          cache-to: type=gha,scope=wien-backend,mode=max
+
+      - name: Prepare release bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir "$RUNNER_TEMP/wien-release"
+          cp deploy/compose.yaml deploy/nginx.conf "$RUNNER_TEMP/wien-release/"
+          cp server/config.toml "$RUNNER_TEMP/wien-release/server.toml"
+          cp skill/config.toml "$RUNNER_TEMP/wien-release/skill.toml"
+          docker save "wien-server:$RELEASE_ID" "wien-skill:$RELEASE_ID" \
+            | gzip -1 > "$RUNNER_TEMP/wien-release/images.tar.gz"
+          tar -C "$RUNNER_TEMP/wien-release" -cf "$RUNNER_TEMP/wien-release.tar" \
+            images.tar.gz compose.yaml nginx.conf server.toml skill.toml
+
+      - name: Deploy over SSH
+        shell: bash
+        env:
+          VPS_HOST: ${{ vars.VPS_HOST }}
+          VPS_USER: ${{ vars.VPS_USER }}
+          VPS_SSH_KNOWN_HOSTS: ${{ vars.VPS_SSH_KNOWN_HOSTS }}
+          VPS_DEPLOY_KEY: ${{ secrets.VPS_DEPLOY_KEY }}
+        run: |
+          set -euo pipefail
+          : "${VPS_HOST:?Missing production VPS_HOST variable}"
+          : "${VPS_USER:?Missing production VPS_USER variable}"
+          : "${VPS_SSH_KNOWN_HOSTS:?Missing pinned SSH host key}"
+          : "${VPS_DEPLOY_KEY:?Missing production VPS_DEPLOY_KEY secret}"
+          ssh_dir=$(mktemp -d "$RUNNER_TEMP/wien-ssh.XXXXXXXX")
+          trap 'rm -rf "$ssh_dir"' EXIT
+          printf '%s\n' "$VPS_DEPLOY_KEY" > "$ssh_dir/id_ed25519"
+          printf '%s\n' "$VPS_SSH_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          chmod 600 "$ssh_dir/id_ed25519" "$ssh_dir/known_hosts"
+          ssh_options=(-i "$ssh_dir/id_ed25519" -o IdentitiesOnly=yes -o BatchMode=yes
+            -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$ssh_dir/known_hosts"
+            -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
+          ssh "${ssh_options[@]}" "$VPS_USER@$VPS_HOST" check
+          ssh "${ssh_options[@]}" "$VPS_USER@$VPS_HOST" "deploy $RELEASE_ID" \
+            < "$RUNNER_TEMP/wien-release.tar"
+          printf 'Deployed `%s` to https://wien.aydar.media.\n\nPublic generation remains disabled.\n' \
+            "$RELEASE_ID" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check public readiness
+        run: curl --fail --silent --show-error --connect-timeout 5 --max-time 15 --retry 5 --retry-delay 3 --retry-all-errors https://wien.aydar.media/ready

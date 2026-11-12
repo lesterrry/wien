@@ -13,9 +13,5 @@ POST {{baseUrl}}/v1/generate
 Content-Type: {{contentType}}
 
 {
-  "options": {
-    "model": "gpt-6.1-sol",
-    "reasoning_effort": "low"
-  },
   "text": "Hello!"
 }

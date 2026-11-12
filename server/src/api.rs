@@ -14,9 +14,10 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::assistant::{
-    self, AssistRequest, AssistResponse, AssistantConfig, error::AssistError, tools::AssistantTools,
+    self, AssistRequest, AssistResponse, error::AssistError, tools::AssistantTools,
 };
-use crate::providers::{ModelOptions, ModelResponse, Provider, ProviderError};
+use crate::config::GenerationConfig;
+use crate::providers::{ModelResponse, Provider, ProviderError};
 
 const MAX_TEXT_BYTES: usize = 128 * 1024;
 const MAX_ACTIVE_ASSISTS: usize = 4;
@@ -25,7 +26,6 @@ const MAX_ACTIVE_ASSISTS: usize = 4;
 #[serde(deny_unknown_fields)]
 pub struct GenerateRequest {
     pub text: String,
-    pub options: ModelOptions,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -93,7 +93,7 @@ impl IntoResponse for ApiError {
 #[derive(Clone)]
 struct AppState {
     provider: Arc<dyn Provider>,
-    assistant: Arc<AssistantConfig>,
+    generation: Arc<GenerationConfig>,
     tools: Arc<dyn AssistantTools>,
     assist_slots: Arc<Semaphore>,
 }
@@ -105,8 +105,8 @@ fn documented_routes() -> (Router<AppState>, OpenApi) {
         .routes(routes!(health))
         .routes(routes!(ready))
         .split_for_parts();
-    spec.info = Info::new("Wien local AI server", env!("CARGO_PKG_VERSION"));
-    spec.servers = Some(vec![Server::new("http://127.0.0.1:3001")]);
+    spec.info = Info::new("Wien AI server", env!("CARGO_PKG_VERSION"));
+    spec.servers = Some(vec![Server::new("/")]);
     (router, spec)
 }
 
@@ -117,7 +117,7 @@ pub fn openapi() -> OpenApi {
 
 pub fn router(
     provider: Arc<dyn Provider>,
-    assistant: AssistantConfig,
+    generation: GenerationConfig,
     tools: Arc<dyn AssistantTools>,
 ) -> Router {
     let (router, spec) = documented_routes();
@@ -127,7 +127,7 @@ pub fn router(
         .with_state(AppState {
             provider,
             tools,
-            assistant: Arc::new(assistant),
+            generation: Arc::new(generation),
             assist_slots: Arc::new(Semaphore::new(MAX_ACTIVE_ASSISTS)),
         })
 }
@@ -164,17 +164,16 @@ async fn ready(State(state): State<AppState>) -> Result<Json<Readiness>, ApiErro
 #[utoipa::path(
     post, path = "/v1/generate",
     request_body(content = GenerateRequest, example = json!({
-        "text": "Hello!",
-        "options": {"model": "gpt-6.1-sol", "reasoning_effort": "low"}
+        "text": "Hello!"
     })),
     responses(
         (status = 200, description = "Completed model response", body = ModelResponse),
-        (status = 400, description = "Invalid JSON, text, model, or options", body = ApiError),
+        (status = 400, description = "Invalid JSON or text", body = ApiError),
         (status = 403, description = "Non-local browser origin", body = ApiError),
         (status = 413, description = "Request body too large", body = ApiError),
         (status = 429, description = "Provider usage limit", body = ApiError),
         (status = 502, description = "Upstream error or incomplete response", body = ApiError),
-        (status = 503, description = "Local Codex login required", body = ApiError),
+        (status = 503, description = "Provider credentials required", body = ApiError),
         (status = 504, description = "Provider timeout", body = ApiError)
     )
 )]
@@ -185,23 +184,17 @@ async fn generate(
 ) -> Result<Json<ModelResponse>, ApiError> {
     check_local(&headers)?;
     let request = parse_body(body)?;
-    if request.text.trim().is_empty()
-        || request.text.len() > MAX_TEXT_BYTES
-        || request.options.model.trim().is_empty()
-        || request.options.model.len() > 200
-        || request
-            .options
-            .instructions
-            .as_ref()
-            .is_some_and(|value| value.len() > MAX_TEXT_BYTES)
-    {
+    if request.text.trim().is_empty() || request.text.len() > MAX_TEXT_BYTES {
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
             "invalid_request",
-            "Text must be nonempty and at most 128 KiB; model must be 1–200 bytes; instructions at most 128 KiB.",
+            "Text must be nonempty and at most 128 KiB.",
         ));
     }
-    let response = state.provider.send(&request.text, &request.options).await?;
+    let response = state
+        .provider
+        .send(&request.text, &state.generation.options())
+        .await?;
     Ok(Json(response))
 }
 
@@ -290,7 +283,7 @@ async fn assist(
     Ok(Json(
         assistant::send(
             state.provider.as_ref(),
-            &state.assistant,
+            &state.generation,
             state.tools.as_ref(),
             &request,
         )
