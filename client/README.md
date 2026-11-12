@@ -101,6 +101,10 @@ CDN base URL каждого банка. Сами аудиофайлы не вх�
 указаны в исходных библиотеках (Salamander piano — CC BY 3.0, Alexander Holm;
 VCSL — CC0, Versilian Studios).
 
+Проверка банков с реальной загрузкой сэмплов и измерением аудиосигнала:
+`pnpm --dir client test:banks` (нужен доступ к CDN). Проверяются `tr909`,
+`RolandTR909` и `tr808`, включая kick, closed hat и open hat.
+
 ## Контролы
 
 Правая панель **Controls** показывает крутилки для числовых `var`, `let` и `const`

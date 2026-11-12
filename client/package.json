@@ -17,6 +17,7 @@
     "build": "pnpm typecheck && electron-vite build",
     "preview": "electron-vite preview",
     "package": "pnpm build && electron-builder --dir",
+    "test:banks": "pnpm build && node scripts/banks-smoke.mjs",
     "test:modules": "esbuild src/renderer/src/module-compiler.test.ts --bundle --platform=node --main-fields=module,main --format=cjs --outfile=out/tests/modules.cjs && node --test out/tests/modules.cjs"
   },
   "dependencies": {
