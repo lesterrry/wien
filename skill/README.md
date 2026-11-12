@@ -1,6 +1,6 @@
 # Strudel RAG
 
-Local hybrid retrieval for a harness that writes Strudel. Rust stable workspace:
+Local hybrid retrieval for a harness that writes Strudel. Packages in the root Rust workspace:
 `strudel-rag-core` owns ingestion, chunking, embeddings, immutable indexes and
 retrieval; `strudel-rag-grpc` exposes tonic RPCs; `strudel-rag-cli` provides the
 `strudel-rag` JSON CLI and a **real gRPC client**. Music generation belongs to the
@@ -9,16 +9,17 @@ have listened to examples.
 
 ## Build and fixture demonstration
 
-Install Rust stable with Cargo. Protobuf compilation uses a vendored `protoc`;
+Run all commands below from the repository root. Rust is pinned in
+`rust-toolchain.toml`; run `rustup show` to install it. Protobuf compilation uses a vendored `protoc`;
 you do not need a system `protoc` or `grpcurl`.
 
 ```sh
-cargo build -p strudel-rag-cli --features fixture-provider
-./target/debug/strudel-rag --config config.fixture.toml --allow-fixture ingest
-./target/debug/strudel-rag --config config.fixture.toml --allow-fixture index
-./target/debug/strudel-rag --config config.fixture.toml --allow-fixture search \
+cargo build --locked -p strudel-rag-cli --features fixture-provider
+./target/debug/strudel-rag --config skill/config.fixture.toml --allow-fixture ingest
+./target/debug/strudel-rag --config skill/config.fixture.toml --allow-fixture index
+./target/debug/strudel-rag --config skill/config.fixture.toml --allow-fixture search \
   --query 'slow pattern cycles' --intent api --top-k 3
-./target/debug/strudel-rag --config config.fixture.toml --allow-fixture info
+./target/debug/strudel-rag --config skill/config.fixture.toml --allow-fixture info
 ```
 
 The source is explicitly fixture-labelled, locally authored documentation, not
@@ -30,7 +31,7 @@ quality**. There is no automatic mock fallback. A regular build disables it.
 Start the server in one terminal:
 
 ```sh
-./target/debug/strudel-rag --config config.fixture.toml --allow-fixture serve
+./target/debug/strudel-rag --config skill/config.fixture.toml --allow-fixture serve
 ```
 
 In another terminal (a separate process, no local index opened by the client):
@@ -60,7 +61,7 @@ start both with attached logs; Ctrl-C stops both. Wien `/v1/assist` calls RAG
 through the shared protobuf contract and provides the bundled skill and genre
 guides to the model. It requires a ready index. The commands below operate on
 `skill` alone.
-Its [Dockerfile](Dockerfile) builds the production CLI with
+Its [Dockerfile](../Dockerfile) builds the production CLI with
 `--locked` and no fixture feature, then runs it as UID/GID 10001 in a slim
 runtime with CA certificates. Rust and protobuf build tooling stay out of the
 runtime image.
@@ -115,28 +116,27 @@ docker compose exec skill strudel-rag remote health
 
 Compose forwards `OPENAI_API_KEY`, `STRUDEL_RAG_EMBEDDING_API_KEY` (takes
 precedence), `STRUDEL_RAG_EMBEDDING_BASE_URL`, and `STRUDEL_RAG_EMBEDDING_MODEL`.
-Defaults match `config.example.toml`. `index` and live searches require access
+Defaults match `skill/config.toml`. `index` and live searches require access
 to the configured embedding endpoint; starting the empty server does not.
 For an embedding service on the host under Docker Desktop, use
 `http://host.docker.internal:PORT/v1`, not container-local `127.0.0.1`.
 Changing embedding identity requires `index --rebuild`; recreate the service
 with `docker compose up -d --force-recreate skill` to apply changed environment.
 For additional TOML settings, mount your configuration read-only at
-`/app/strudel-rag.toml`; keep data paths under `/var/lib/strudel-rag`.
+`/app/config.toml`; keep data paths under `/var/lib/strudel-rag`.
 
 `docker compose down` stops the service and preserves the named volume.
 `docker compose down --volumes` **deletes the corpus, index, and cache**.
 The image's entrypoint is `strudel-rag`, so one-off commands use
 `docker compose run --rm skill doctor` without repeating the binary name.
-To build just the image: `docker build -t wien-skill ./skill`. Direct
+To build just the image: `docker build --target skill -t wien-skill .`. Direct
 `docker run` deployments must likewise supply a bearer token, writable data
 storage, and the saved-HTML mount if importing the theory source.
 
 ## Real sources and embeddings
 
 ```sh
-cargo build -p strudel-rag-cli
-cp config.example.toml strudel-rag.toml
+cargo build --locked -p strudel-rag-cli
 ./target/debug/strudel-rag ingest
 ./target/debug/strudel-rag doctor
 ```
@@ -249,7 +249,7 @@ embedding endpoint. An empty/missing index is reported not-ready; `serve` still
 starts so `remote info` and health can explain readiness.
 
 Precedence: defaults → TOML → environment → CLI. An explicitly missing config
-file errors; absence of default `strudel-rag.toml` is allowed. TOML-relative
+file errors. The default `skill/config.toml` must exist; unknown TOML fields are rejected. TOML-relative
 paths resolve from the config's directory; CLI paths resolve from the current
 working directory. Environment overrides:
 
@@ -295,12 +295,12 @@ Scores are **not probabilities**. A cosine cutoff is a configurable heuristic.
 Mixed search only diversifies among already relevant candidates.
 
 ```sh
-./target/debug/strudel-rag --config config.fixture.toml --allow-fixture \
-  eval --dataset eval/fixture.jsonl --k 5
-./target/debug/strudel-rag eval --dataset eval/real.jsonl --k 5
+./target/debug/strudel-rag --config skill/config.fixture.toml --allow-fixture \
+  eval --dataset skill/eval/fixture.jsonl --k 5
+./target/debug/strudel-rag eval --dataset skill/eval/real.jsonl --k 5
 cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --workspace --all-features
+cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+cargo test --locked --workspace --all-features
 ```
 
 Eval labels use `{source_id,source_path,extraction_key}` selectors; missing or
@@ -375,3 +375,16 @@ contributions. Respect source policy and your intended use.
 `source_only` means extracted source, **not** statically verified or executed
 Strudel. Parsing, retrieval and embedding do not upgrade verification status.
 
+
+## Shared infrastructure
+
+Both services use the root `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`,
+`Dockerfile`, and `just check-rust` / CI pipeline. Generated gRPC types are in
+`crates/rag-protocol`; `crates/service-runtime` provides JSON logging to stderr
+(`RUST_LOG`, default `info`) and SIGINT/SIGTERM shutdown. CLI result JSON stays on stdout.
+Compose mounts `skill/config.toml` read-only at `/app/config.toml`; override the host
+path with `STRUDEL_RAG_CONFIG`. Config precedence is file, environment, explicit CLI
+overrides. Both HTTP clients use the same reqwest/rustls platform verifier; HTTPS
+gRPC clients use native roots. Private CAs must be trusted in the execution environment.
+Healthchecks test liveness; `remote health` reports corpus readiness without probing
+the external embedding API. Restart is still required after publishing an index.

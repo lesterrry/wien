@@ -58,6 +58,8 @@ impl HttpEmbeddingProvider {
         Ok(Self {
             config: config.clone(),
             client: reqwest::Client::builder()
+                .redirect(reqwest::redirect::Policy::none())
+                .connect_timeout(Duration::from_secs(10))
                 .timeout(Duration::from_secs(config.timeout_secs))
                 .build()
                 .map_err(|_| Error::Config("could not construct HTTP embedding client".into()))?,

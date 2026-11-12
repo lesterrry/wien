@@ -103,6 +103,7 @@ fn documented_routes() -> (Router<AppState>, OpenApi) {
         .routes(routes!(generate))
         .routes(routes!(assist))
         .routes(routes!(health))
+        .routes(routes!(ready))
         .split_for_parts();
     spec.info = Info::new("Wien local AI server", env!("CARGO_PKG_VERSION"));
     spec.servers = Some(vec![Server::new("http://127.0.0.1:3001")]);
@@ -135,6 +136,28 @@ pub fn router(
 #[utoipa::path(get, path = "/health", responses((status = 200, description = "Server is running; does not probe model authentication", body = String, content_type = "text/plain")))]
 async fn health() -> &'static str {
     "ok"
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct Readiness {
+    ready: bool,
+}
+
+/// Dependency readiness without a paid model or embedding request.
+#[utoipa::path(get, path = "/ready", responses(
+    (status = 200, description = "RAG corpus ready; external APIs are not probed", body = Readiness),
+    (status = 503, description = "RAG unavailable or corpus not ready", body = ApiError)
+))]
+async fn ready(State(state): State<AppState>) -> Result<Json<Readiness>, ApiError> {
+    let corpus = state
+        .tools
+        .call("strudel_rag_get_corpus_info", serde_json::json!({}))
+        .await
+        .map_err(AssistError::from)?;
+    if corpus["ready"] != true {
+        return Err(AssistError::from(assistant::tools::ToolError::NotReady).into());
+    }
+    Ok(Json(Readiness { ready: true }))
 }
 
 /// Generate a completed text response using the server's configured provider.

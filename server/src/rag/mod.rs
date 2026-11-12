@@ -12,9 +12,7 @@ use tonic::{
 
 use crate::assistant::tools::ToolError;
 
-pub mod pb {
-    tonic::include_proto!("strudel.rag.v1");
-}
+pub use rag_protocol as pb;
 
 /// Clone the channel per call: concurrent assistant requests do not share a mutex.
 #[derive(Clone)]

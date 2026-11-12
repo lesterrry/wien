@@ -24,9 +24,19 @@ run-server:
 generate:
     bash server/scripts/generate-http.sh
 
-# Check lint, formatting, types, and run tests
+# Check both Rust services with the same pipeline as CI
+check-rust:
+    bash scripts/check-rust.sh
+
+# Build both production Rust binaries
+build-server:
+    cargo build --locked --release -p wien-server -p strudel-rag-cli
+
+# Exercise fixture retrieval without credentials or external APIs
+smoke-rag:
+    bash scripts/smoke-rag.sh
+
+# Check lint, formatting, types, and run tests for all components
 test:
     pnpm --dir client test
-    cargo fmt --manifest-path server/Cargo.toml --all -- --check
-    cargo clippy --manifest-path server/Cargo.toml --locked --all-targets -- -D warnings
-    cargo test --manifest-path server/Cargo.toml --locked
+    just check-rust

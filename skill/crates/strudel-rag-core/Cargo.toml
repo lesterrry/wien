@@ -2,14 +2,16 @@
 name = "strudel-rag-core"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license = "MIT"
 
 [features]
 default = []
 test-support = []
 
 [dependencies]
-tokio.workspace = true
+tokio = { workspace = true, features = ["rt", "time", "sync"] }
 serde.workspace = true
 serde_json.workspace = true
 reqwest.workspace = true
@@ -18,17 +20,17 @@ sha2.workspace = true
 thiserror.workspace = true
 toml.workspace = true
 tracing.workspace = true
-tantivy = "0.25"
-pulldown-cmark = "0.13"
-fs2 = "0.4"
-tempfile = "3"
-httpdate = "1"
-time = { version = "0.3", features = ["formatting", "serde"] }
-scraper = "0.24"
-url = "2"
-walkdir = "2"
-tree-sitter = "0.25"
-tree-sitter-javascript = "0.25"
+tantivy.workspace = true
+pulldown-cmark.workspace = true
+fs2.workspace = true
+tempfile.workspace = true
+httpdate.workspace = true
+time = { workspace = true, features = ["formatting", "serde"] }
+scraper.workspace = true
+url.workspace = true
+walkdir.workspace = true
+tree-sitter.workspace = true
+tree-sitter-javascript.workspace = true
 
 [dev-dependencies]
-wiremock = "0.6"
+wiremock.workspace = true

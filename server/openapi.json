@@ -28,6 +28,34 @@
         }
       }
     },
+    "/ready": {
+      "get": {
+        "summary": "Dependency readiness without a paid model or embedding request.",
+        "operationId": "ready",
+        "responses": {
+          "200": {
+            "description": "RAG corpus ready; external APIs are not probed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Readiness"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "RAG unavailable or corpus not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/assist": {
       "post": {
         "summary": "Ask the editor assistant; selection is context, edits replace the entire current file.",
@@ -408,6 +436,17 @@
                 "type": "null"
               }
             ]
+          }
+        }
+      },
+      "Readiness": {
+        "type": "object",
+        "required": [
+          "ready"
+        ],
+        "properties": {
+          "ready": {
+            "type": "boolean"
           }
         }
       },

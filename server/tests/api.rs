@@ -262,3 +262,54 @@ async fn generated_http_body_matches_openapi_example_and_is_accepted() {
     );
     assert_eq!(calls.load(Ordering::SeqCst), 1);
 }
+
+#[tokio::test]
+async fn readiness_checks_corpus_without_calling_model_and_keeps_liveness_separate() {
+    use wien_server::assistant::tools::{AssistantTools, ToolError};
+    struct Corpus(bool);
+    #[async_trait]
+    impl AssistantTools for Corpus {
+        async fn call(&self, name: &str, _: Value) -> Result<Value, ToolError> {
+            assert_eq!(name, "strudel_rag_get_corpus_info");
+            Ok(json!({"ready":self.0}))
+        }
+    }
+    for ready in [false, true] {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let app = api::router(
+            Arc::new(TestProvider {
+                calls: calls.clone(),
+                error: None,
+            }),
+            Default::default(),
+            Arc::new(Corpus(ready)),
+        );
+        let response = app
+            .clone()
+            .oneshot(Request::get("/ready").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(
+            response.status(),
+            if ready {
+                StatusCode::OK
+            } else {
+                StatusCode::SERVICE_UNAVAILABLE
+            }
+        );
+        let body = json_body(response).await;
+        if ready {
+            assert_eq!(body, json!({"ready":true}));
+        } else {
+            assert_eq!(body["code"], "rag_not_ready");
+        }
+        assert_eq!(
+            app.oneshot(Request::get("/health").body(Body::empty()).unwrap())
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::OK
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+    }
+}

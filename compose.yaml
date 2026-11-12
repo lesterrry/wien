@@ -2,10 +2,12 @@ services:
   server:
     build:
       context: .
-      dockerfile: server/Dockerfile
+      dockerfile: Dockerfile
+      target: server
     init: true
     restart: unless-stopped
     environment:
+      RUST_LOG: ${RUST_LOG:-info}
       WIEN_SERVER_HOST: 0.0.0.0
       WIEN_SERVER_PORT: "3001"
       WIEN_SERVER_CONFIG: /app/config.toml
@@ -33,11 +35,13 @@ services:
 
   skill:
     build:
-      context: ./skill
+      context: .
       dockerfile: Dockerfile
+      target: skill
     init: true
     restart: unless-stopped
     environment:
+      RUST_LOG: ${RUST_LOG:-info}
       STRUDEL_RAG_BEARER_TOKEN: ${STRUDEL_RAG_BEARER_TOKEN:?Set STRUDEL_RAG_BEARER_TOKEN in the environment or root .env}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       STRUDEL_RAG_EMBEDDING_API_KEY: ${STRUDEL_RAG_EMBEDDING_API_KEY:-}
@@ -46,6 +50,12 @@ services:
     ports:
       - "127.0.0.1:${STRUDEL_RAG_PORT:-50051}:50051"
     volumes:
+      - type: bind
+        source: ${STRUDEL_RAG_CONFIG:-./skill/config.toml}
+        target: /app/config.toml
+        read_only: true
+        bind:
+          create_host_path: false
       - skill-data:/var/lib/strudel-rag
       - ./skill/saved_html:/app/saved_html:ro
 

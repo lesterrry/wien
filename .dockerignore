@@ -1,16 +1,33 @@
-# Server build includes the shared proto and bundled skill, never credentials/data.
 **
+!Cargo.toml
+!Cargo.lock
+!rust-toolchain.toml
 !server/
+server/**
 !server/Cargo.toml
-!server/Cargo.lock
-!server/build.rs
 !server/config.toml
 !server/src/
 !server/src/**
 !server/prompts/
 !server/prompts/**
 !skill/
+skill/**
+!skill/config.toml
+!skill/crates/
+!skill/crates/**
 !skill/proto/
 !skill/proto/**
 !skill/skills/
 !skill/skills/**
+!skill/corpus/
+!skill/corpus/sources.toml
+!crates/
+!crates/**
+
+# Exclude local artifacts and secrets even inside source directories.
+**/target/**
+**/.env
+**/.env.*
+**/auth*.json
+**/*.pem
+**/*.key

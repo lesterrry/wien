@@ -1,9 +1,20 @@
-use std::{net::IpAddr, path::PathBuf};
+use std::{net::IpAddr, path::PathBuf, process::ExitCode};
 
 use wien_server::{api, config::Config};
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> ExitCode {
+    service_runtime::init_logging();
+    match run().await {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            tracing::error!(error = %error, "HTTP server failed");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let host = std::env::var("WIEN_SERVER_HOST")
         .unwrap_or_else(|_| "127.0.0.1".into())
         .parse::<IpAddr>()?;
@@ -19,7 +30,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         wien_server::rag::RagClient::from_env()?,
     ));
     let address = std::net::SocketAddr::new(host, port);
-    println!("Starting Wien server on http://{address}");
+    tracing::info!(%address, "starting HTTP server");
     let listener = tokio::net::TcpListener::bind(address)
         .await
         .map_err(|error| {
@@ -29,28 +40,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 format!("Cannot bind Wien server to {address}: {error}")
             }
         })?;
-    println!("Wien server: http://{}", listener.local_addr()?);
-    println!("API docs: http://{}/docs/", listener.local_addr()?);
+    tracing::info!(address = %listener.local_addr()?, "HTTP server listening");
     axum::serve(listener, api::router(provider, config.assistant, tools))
-        .with_graceful_shutdown(shutdown())
+        .with_graceful_shutdown(service_runtime::shutdown_signal())
         .await?;
     Ok(())
-}
-
-async fn shutdown() {
-    let interrupt = async {
-        tokio::signal::ctrl_c().await.ok();
-    };
-
-    let terminate = async {
-        if let Ok(mut signal) =
-            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-        {
-            signal.recv().await;
-        } else {
-            std::future::pending::<()>().await;
-        }
-    };
-
-    tokio::select! { _ = interrupt => {}, _ = terminate => {} }
 }

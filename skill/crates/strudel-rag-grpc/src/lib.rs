@@ -1,10 +1,7 @@
 //! Typed gRPC transport for the local Strudel retrieval engine.
 //! Source records remain untrusted data; this transport never executes their content.
 
-pub mod pb {
-    tonic::include_proto!("strudel.rag.v1");
-    pub const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("rag_descriptor");
-}
+pub use rag_protocol as pb;
 
 mod auth;
 pub mod client;

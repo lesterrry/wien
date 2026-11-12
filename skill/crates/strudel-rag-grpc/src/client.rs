@@ -1,3 +1,4 @@
+use crate::conversions::{ConvertFrom, TryConvertFrom, TryConvertInto};
 use crate::{pb, status::from_status};
 use std::time::Duration;
 use strudel_rag_core::{
@@ -75,26 +76,29 @@ impl RemoteClient {
         request
     }
     pub async fn search(&mut self, request: SearchRequest) -> Result<SearchResponse> {
-        let request = self.request(pb::SearchRequest::try_from(request)?);
+        let request = self.request(pb::SearchRequest::try_convert_from(request)?);
         self.rag
             .search(request)
             .await
             .map_err(from_status)?
             .into_inner()
-            .try_into()
+            .try_convert_into()
     }
     pub async fn get_document(
         &mut self,
         reference: DocumentReference,
         parent_context: bool,
     ) -> Result<DocumentResponse> {
-        let request = self.request(pb::GetDocumentRequest::from((reference, parent_context)));
+        let request = self.request(pb::GetDocumentRequest::convert_from((
+            reference,
+            parent_context,
+        )));
         self.rag
             .get_document(request)
             .await
             .map_err(from_status)?
             .into_inner()
-            .try_into()
+            .try_convert_into()
     }
     pub async fn corpus_info(&mut self) -> Result<CorpusInfo> {
         let request = self.request(pb::GetCorpusInfoRequest {});
@@ -103,7 +107,7 @@ impl RemoteClient {
             .await
             .map_err(from_status)?
             .into_inner()
-            .try_into()
+            .try_convert_into()
     }
     pub async fn health(&mut self) -> Result<bool> {
         let request = self.request(tonic_health::pb::HealthCheckRequest {

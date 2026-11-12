@@ -1,0 +1,58 @@
+[workspace]
+members = ["server", "skill/crates/*", "crates/*"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98.1"
+publish = false
+
+[workspace.dependencies]
+strudel-rag-core = { path = "skill/crates/strudel-rag-core" }
+strudel-rag-grpc = { path = "skill/crates/strudel-rag-grpc" }
+rag-protocol = { path = "crates/rag-protocol" }
+service-runtime = { path = "crates/service-runtime" }
+async-trait = "0.1"
+axum = "0.8"
+clap = "4"
+eventsource-stream = "0.2"
+fs2 = "0.4"
+futures-util = "0.3"
+http = "1"
+http-body = "1"
+http-body-util = "0.1"
+httpdate = "1"
+prost = "0.14"
+prost-build = "0.14"
+protoc-bin-vendored = "3.3"
+pulldown-cmark = "0.13"
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json"] }
+scraper = "0.24"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+subtle = "2"
+tantivy = "0.25"
+tempfile = "3"
+thiserror = "2"
+time = "0.3"
+tokio = "1"
+tokio-stream = "0.1"
+toml = { version = "1.2", default-features = false, features = ["parse", "serde"] }
+tonic = { version = "0.14", features = ["transport", "tls-native-roots", "tls-ring"] }
+tonic-health = "0.14"
+tonic-prost = "0.14"
+tonic-prost-build = "0.14"
+tonic-reflection = "0.14"
+tower = "0.5"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tree-sitter = "0.25"
+tree-sitter-javascript = "0.25"
+url = "2"
+utoipa = "6"
+utoipa-axum = "0.3"
+utoipa-swagger-ui = "10"
+walkdir = "2"
+wiremock = "0.6"

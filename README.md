@@ -33,7 +33,8 @@ just run-server
 а форматирование при сохранении использует Biome из `client/` и rust-analyzer для Rust.
 Default task **Wien: Run** (`⌘⇧B`) запускает обе части в соседних терминалах.
 Для запуска сервера нужен работающий Docker с Compose и файл авторизации Codex.
-Для локальных Rust-проверок нужен stable Rust с компонентами rustfmt и clippy.
+Rust закреплён в `rust-toolchain.toml`; `rustup show` устанавливает нужную версию,
+rustfmt и clippy. Все команды выполняются из корня репозитория.
 
 В редакторе `⌘,` (Windows/Linux: `Ctrl+,`) открывает ассистента у курсора:
 введи запрос и нажми Enter. Shift+Enter добавляет строку, Esc закрывает поповер.
@@ -100,9 +101,28 @@ endpoint. Подробности — в
 
 ## Проверки и CI
 
-GitHub Actions проверяет и собирает клиент, сервер и Rust workspace `skill/`
-отдельными jobs на каждый push и pull request. Используются lockfile каждого
-компонента. Для `skill/` запускаются rustfmt, Clippy и тесты со всеми features,
-production release-сборка CLI и fixture-сборка с проверкой ingest/index/search/eval.
-Тесты сервера и fixture-проверки skill не требуют личных токенов или запросов
-к внешней модели. Workflow также можно запустить вручную из вкладки Actions.
+Все Rust-пакеты объединены корневым `Cargo.toml`: `server`, три пакета RAG,
+`crates/rag-protocol` (общие protobuf-типы) и `crates/service-runtime`
+(логирование и завершение процесса). Версии задаются в `workspace.dependencies`,
+используется один `Cargo.lock` и каталог `target/`.
+
+- `just test` проверяет клиент и весь Rust workspace.
+- `just check-rust` запускает тот же pipeline, что CI: проверку инфраструктуры,
+  fmt, Clippy, тесты, контракт OpenAPI, production release-сборку обоих сервисов
+  и fixture ingest/index/search/eval без ключей и внешних API.
+- `just build-server` собирает оба production-бинарника без fixture features.
+- `just smoke-rag` проверяет retrieval на временном fixture-корпусе.
+
+Корневой Dockerfile имеет targets `server` и `skill`, общий закреплённый компилятор
+и runtime. Оба процесса работают под UID/GID 10001. Конфиги `server/config.toml`
+и `skill/config.toml` монтируются read-only как `/app/config.toml`. Для своего
+конфига задайте `WIEN_SERVER_CONFIG` или `STRUDEL_RAG_CONFIG`. Файлы обязательны;
+неизвестные поля и ошибки TOML останавливают запуск. Секреты передаются через
+окружение или read-only файл Codex, а не через TOML.
+
+Оба сервиса пишут JSON-логи в stderr; уровень задаёт `RUST_LOG` (по умолчанию `info`).
+Результаты CLI RAG остаются JSON в stdout. Docker healthchecks проверяют liveness:
+`GET /health` для HTTP и `remote info` для gRPC. Для readiness используйте
+`GET /ready` и `strudel-rag remote health`: проверяется готовность корпуса,
+без вызовов модели или embeddings. Зелёный healthcheck не гарантирует доступность
+внешних API.

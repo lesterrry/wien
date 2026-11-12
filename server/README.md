@@ -102,6 +102,11 @@ HTTP-запрос ждёт завершения и возвращает один
 
 ## Ассистент редактора
 
+Инфраструктура обоих сервисов описана в [корневом README](../README.md#проверки-и-ci).
+Общий пакет `rag-protocol` содержит gRPC-типы, `service-runtime` — JSON-логи в stderr
+(`RUST_LOG`) и graceful shutdown. `/health` проверяет liveness; `/ready` проверяет
+готовность корпуса RAG без вызова модели или embeddings.
+
 `POST /v1/assist` принимает один запрос без истории:
 
 ```json
@@ -235,13 +240,13 @@ HTTP-слой получает готовый `Arc<dyn Provider>`. Новый п
 just generate       # OpenAPI + запросы server/http/*.http, без запуска сервера
 just test           # клиент + rustfmt --check + Clippy + Rust-тесты
 docker compose build server
-# Альтернативный запуск без Docker (нужен stable Rust):
-cargo run --manifest-path server/Cargo.toml --locked
-cargo fmt --manifest-path server/Cargo.toml --all
-cargo test --manifest-path server/Cargo.toml --locked
+# Альтернативный запуск из корня без Docker (Rust из rust-toolchain.toml):
+cargo run -p wien-server --locked
+cargo fmt --all
+cargo test -p wien-server --locked
 ```
 
-Cargo.lock хранится здесь и используется в CI. Тесты используют только временные
+Cargo.lock хранится в корне общего workspace и используется в CI. Тесты используют только временные
 файлы с искусственными credentials и локальный wiremock; настоящие токены и подписка
 для `just test`/CI не нужны. HTTP-тесты проверяют маршрутизацию, контракт, ошибки,
 лимиты и доступ к Swagger; тесты провайдера — протокол, завершение SSE, таймауты,
@@ -257,7 +262,7 @@ Cargo.lock хранится здесь и используется в CI. Тес
 Генерация экспортирует тот же контракт, что `/openapi.json`, в `server/openapi.json`,
 затем запускает [httpgenerator](https://github.com/christianhelle/httpgenerator)
 **1.1.0**. При первом запуске Cargo устанавливает эту версию с `--locked` в
-игнорируемый `server/target/tools`; для установки нужен интернет. Последующие запуски
+игнорируемый `target/tools`; для установки нужен интернет. Последующие запуски
 используют локальный бинарник. Сам Wien, его конфиг и авторизация Codex для генерации
 не нужны. Генератор запускается с отключённой телеметрией (`--no-logging`).
 
