@@ -143,7 +143,8 @@ jobs:
         working-directory: installers
         run: |
           shopt -s nullglob
-          for pattern in '*-mac-arm64.dmg' '*-mac-x64.dmg' '*-win-x64.exe' '*-linux-x64.AppImage' '*-linux-x64.deb'; do
+          # electron-builder uses target-specific architecture names on Linux.
+          for pattern in '*-mac-arm64.dmg' '*-mac-x64.dmg' '*-win-x64.exe' '*-linux-x86_64.AppImage' '*-linux-amd64.deb'; do
             matches=()
             while IFS= read -r file; do
               matches+=("$file")
