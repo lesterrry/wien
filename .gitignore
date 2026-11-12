@@ -1,4 +1,5 @@
 /target/
+/.cache/httpgenerator/
 node_modules/
 client/out/
 client/out-web/

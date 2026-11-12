@@ -9,7 +9,7 @@ if [[ "$mode" != write && "$mode" != --check ]]; then
 fi
 
 version=1.1.0
-tool_root="target/tools/httpgenerator-$version"
+tool_root="${WIEN_HTTPGENERATOR_ROOT:-target/tools}/httpgenerator-$version"
 generator="$tool_root/bin/httpgenerator"
 if [[ ! -x "$generator" ]]; then
     cargo install httpgenerator --version "=$version" --locked --root "$tool_root"
