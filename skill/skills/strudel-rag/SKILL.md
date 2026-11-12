@@ -93,6 +93,15 @@ For an unlisted genre, use retrieved musical evidence where available; otherwise
 4. Make transitions and section scheduling using **verified** Strudel features. If long-form scheduling cannot be verified, return an explicit A/B pattern design and describe the limitation rather than inventing an API.
 5. Avoid unbounded recursion, excessive event density, unsafe feedback, missing samples, unsupported imports, and expensive effects on every voice. Do not embed environment secrets, machine paths, or network calls.
 6. For requested changes, patch the smallest relevant layer, then reason about the interaction with the master composition and other modules.
+7. Hydra visuals are optional and separate from the audio composition. When the user
+   requests visuals, use the verified Strudel integration: top-level `await initHydra()`,
+   `shape(H("3 4 5 6")).out(o0)`, and a final Strudel audio pattern. Hydra DSL names
+   such as `osc(...)` use Hydra meanings only in that snippet after initialization;
+   use Strudel sources such as `.s("sine")` for audio. The preview is tab-owned and
+   hidden when inactive; stopping/closing the tab or switching projects disposes its
+   rendering, and updating without Hydra clears its visuals. Wien does not support
+   `detectAudio` or `feedStrudel`; do not use these options or external script imports.
+   See https://strudel.cc/learn/hydra/ for the upstream API.
 
 ## 7. Quality gates and revision loop
 

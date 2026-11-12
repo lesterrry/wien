@@ -28,6 +28,8 @@ just run-server
 Все pnpm-скрипты определены в [client/package.json](client/package.json).
 Дополнительные команды, упаковка `.app` и работа с проектами описаны
 в [инструкции клиента](client/README.md).
+В редакторе Strudel доступен Hydra для визуального лайв-кодинга. См. [пример Hydra](examples/hydra.strudel)
+и [инструкцию клиента](client/README.md#hydra).
 
 В VS Code открывайте корень репозитория: задачи запускаются оттуда,
 а форматирование при сохранении использует Biome из `client/` и rust-analyzer для Rust.

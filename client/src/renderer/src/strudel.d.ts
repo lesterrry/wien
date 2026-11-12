@@ -39,6 +39,9 @@ declare module "@strudel/codemirror" {
 
 declare module "@strudel/core" {
   export function evalScope(...modules: unknown[]): Promise<unknown>;
+  export function reify(value: unknown): {
+    queryArc(begin: number, end: number): { value: unknown }[];
+  };
 }
 declare module "@strudel/mini";
 declare module "@strudel/tonal";
@@ -70,4 +73,26 @@ declare module "@strudel/webaudio" {
 
 declare module "@strudel/soundfonts" {
   export function registerSoundfonts(): void;
+}
+
+declare module "hydra-synth" {
+  export default class Hydra {
+    constructor(options: {
+      canvas: HTMLCanvasElement;
+      makeGlobal: boolean;
+      autoLoop: boolean;
+      detectAudio: boolean;
+      enableStreamCapture: boolean;
+      width?: number;
+      height?: number;
+      numSources?: number;
+      numOutputs?: number;
+      precision?: string;
+      extendTransforms?: Record<string, unknown>;
+    });
+    synth: Record<string, unknown>;
+    s: { clear(): void }[];
+    regl: { destroy(): void };
+    tick(delta: number): void;
+  }
 }

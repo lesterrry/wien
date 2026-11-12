@@ -8,7 +8,7 @@ revision = "0cb6341299229f739b5090be93528bb4f170d855"
 language = "en"
 fixture = false
 base_url = "https://codeberg.org/uzu/strudel/raw/commit/{revision}/{path}"
-paths = ["website/src/pages/learn/mini-notation.mdx", "website/src/pages/learn/time-modifiers.mdx", "website/src/pages/learn/tonal.mdx", "website/src/pages/learn/samples.mdx", "website/src/pages/learn/synths.mdx", "website/src/pages/learn/effects.mdx", "website/src/pages/workshop/first-sounds.mdx"]
+paths = ["website/src/pages/learn/mini-notation.mdx", "website/src/pages/learn/time-modifiers.mdx", "website/src/pages/learn/tonal.mdx", "website/src/pages/learn/samples.mdx", "website/src/pages/learn/synths.mdx", "website/src/pages/learn/effects.mdx", "website/src/pages/learn/hydra.mdx", "website/src/pages/workshop/first-sounds.mdx"]
 evidence_paths = ["LICENSE", "README.md", "POLICY.md"]
 [sources.license]
 name = "AGPL-3.0 (repository-level notice; no separate docs license asserted)"

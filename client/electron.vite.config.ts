@@ -5,6 +5,12 @@ export default defineConfig({
   main: {},
   preload: {},
   renderer: {
+    optimizeDeps: {
+      esbuildOptions: {
+        // Hydra's raf-loop dependency uses Node's global in its browser entry.
+        define: { global: "globalThis" },
+      },
+    },
     plugins: [
       react(),
       {

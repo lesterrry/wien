@@ -18,6 +18,7 @@ import {
   readControls,
 } from "../../../../shared/controls";
 import type { Entry } from "../../../../shared/types";
+import { createHydraRuntime, evaluateHydra } from "../../hydra";
 import { compileGraph } from "../../module-compiler";
 import { registerStandardSounds } from "../../standard-sounds";
 import {
@@ -57,7 +58,9 @@ function withEvaluationLock(evaluate: () => Promise<void>) {
 
 function prepareScope() {
   scope ??= Promise.all([
-    core.evalScope(core, mini, tonal, webaudio),
+    core.evalScope(core, mini, tonal, webaudio, {
+      __wienEvaluateHydra: evaluateHydra,
+    }),
     registerStandardSounds(),
   ]);
   return scope;
@@ -89,6 +92,7 @@ export function StrudelEditor({
   const [assistantPlacement, setAssistantPlacement] =
     useState<AssistantPlacement>("cursor");
   const root = useRef<HTMLDivElement>(null);
+  const visuals = useRef<HTMLDivElement>(null);
   const editor = useRef<EditorView | null>(null);
   const readOnly = useRef(new Compartment());
   const [{ isOver, canDrop }, drop] = useDrop(
@@ -114,7 +118,7 @@ export function StrudelEditor({
   pathRef.current = path;
 
   useEffect(() => {
-    if (!root.current) return;
+    if (!root.current || !visuals.current) return;
     let alive = true;
     let generation = 0;
     let evaluationGeneration = 0;
@@ -123,6 +127,10 @@ export function StrudelEditor({
     let evaluationCode: string | undefined;
     let compiled: ReturnType<typeof compileGraph> | undefined;
     let dependencies = new Set<string>();
+    let wasStarted = false;
+    const hydra = createHydraRuntime(visuals.current, () =>
+      mirror.repl.scheduler.now(),
+    );
     const mirror = new StrudelMirror({
       root: root.current,
       initialCode: code.current,
@@ -144,6 +152,7 @@ export function StrudelEditor({
           if (!alive || evaluationGeneration !== generation)
             throw new Error("Evaluation cancelled.");
           compiled = compileGraph(graph, transpiler);
+          compiled = { ...compiled, output: hydra.wrap(compiled.output) };
           dependencies = new Set(Object.keys(graph.sources));
         } catch (error) {
           throw new Error(
@@ -166,6 +175,8 @@ export function StrudelEditor({
           throw new Error("Playback cancelled.");
       },
       onUpdateState: (state) => {
+        if (wasStarted && !state.started) hydra.clear();
+        wasStarted = state.started;
         if (alive) callbacks.current.onState({ ...state });
       },
     });
@@ -207,15 +218,29 @@ export function StrudelEditor({
             if (!alive || token !== generation) return;
             evaluationGeneration = token;
             evaluationCode = mirror.code;
-            await evaluateMirror(false);
-            if (
-              alive &&
-              token === generation &&
-              start &&
-              !mirror.repl.state.error &&
-              !mirror.repl.state.started
-            )
-              await mirror.repl.start();
+            hydra.begin();
+            try {
+              await evaluateMirror(false);
+              if (
+                alive &&
+                token === generation &&
+                start &&
+                !mirror.repl.state.error &&
+                !mirror.repl.state.started
+              )
+                await mirror.repl.start();
+              if (
+                alive &&
+                token === generation &&
+                !mirror.repl.state.error &&
+                mirror.repl.state.started
+              )
+                hydra.start();
+              else hydra.clear();
+            } catch (error) {
+              hydra.clear();
+              throw error;
+            }
           });
         }
       };
@@ -228,6 +253,7 @@ export function StrudelEditor({
     const cancelLive = () => {
       generation++;
       requested = null;
+      hydra.clear();
     };
     // Route Strudel's own editor shortcuts through the same queue and cancellation.
     mirror.evaluate = (autostart = true) => evaluate(autostart);
@@ -334,6 +360,7 @@ export function StrudelEditor({
         }}
         data-drop-hint="Release to import snippet"
       />
+      <div className={styles.visuals} ref={visuals} hidden />
       {view && (
         <AssistantPopover
           view={view}

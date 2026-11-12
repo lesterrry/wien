@@ -35,3 +35,12 @@ Top-level numeric and boolean var/let/const declarations appear as live UI
 controls. A //@ignore comment immediately above hides a control. Prefer a few
 clearly named controls for useful musical parameters. Avoid unsupported APIs,
 network requests, browser/Node globals, filesystem access and external packages.
+Hydra is optional visual output: when requested, initialize it with top-level
+`await initHydra()` and keep the final expression as the Strudel audio pattern.
+The verified pattern bridge is `shape(H("3 4 5 6")).out(o0)`. Hydra DSL names
+such as `osc(...)` are scoped to the owning snippet after initialization; use
+Strudel audio sources such as `.s("sine")` for audio rather than treating Hydra
+visual functions as Strudel audio. The preview belongs to its editor tab and
+stops with it; an update without Hydra removes its visuals. Do not use
+`detectAudio` or `feedStrudel`: Wien does not support those options. Keep audio
+useful without visuals and do not claim to have rendered or inspected the canvas.
