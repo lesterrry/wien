@@ -96,22 +96,26 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "browser_session": []
           }
         ]
       }
     },
     "/auth/register": {
       "post": {
-        "summary": "Create an account; username is exact and is never silently normalized.",
+        "summary": "Register on the website with a verified Turnstile token; creates a cookie session.",
         "operationId": "register",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Credentials"
+                "$ref": "#/components/schemas/Registration"
               },
               "example": {
                 "password": "choose a long password",
+                "turnstile_token": "token from the Turnstile widget",
                 "username": "music_maker"
               }
             }
@@ -137,6 +141,15 @@
               }
             }
           },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "409": {
             "content": {
               "application/json": {
@@ -151,6 +164,31 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/registration": {
+      "get": {
+        "operationId": "registration_config",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistrationConfig"
                 }
               }
             }
@@ -248,6 +286,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "browser_session": []
           }
         ]
       }
@@ -320,6 +361,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "browser_session": []
           }
         ]
       }
@@ -444,6 +488,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "browser_session": []
           }
         ]
       }
@@ -628,15 +675,49 @@
           }
         }
       },
+      "Registration": {
+        "type": "object",
+        "required": [
+          "username",
+          "password",
+          "turnstile_token"
+        ],
+        "properties": {
+          "password": {
+            "type": "string"
+          },
+          "turnstile_token": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RegistrationConfig": {
+        "type": "object",
+        "required": [
+          "sitekey"
+        ],
+        "properties": {
+          "sitekey": {
+            "type": "string"
+          }
+        }
+      },
       "SignedIn": {
         "type": "object",
         "required": [
-          "user",
-          "token"
+          "user"
         ],
         "properties": {
           "token": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Present for desktop bearer sessions; browser sessions use an HttpOnly cookie."
           },
           "user": {
             "$ref": "#/components/schemas/Profile"
@@ -654,6 +735,12 @@
       }
     },
     "securitySchemes": {
+      "browser_session": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "__Host-wien_session",
+        "description": "HttpOnly browser session. Send X-Wien-Session: cookie on same-origin requests. Local HTTP development uses wien_session."
+      },
       "session": {
         "type": "http",
         "scheme": "bearer"

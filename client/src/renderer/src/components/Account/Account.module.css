@@ -3,6 +3,10 @@
   margin: 0;
   padding: 0;
 }
+.verification {
+  margin-top: 18px;
+  min-height: 65px;
+}
 .content label {
   margin-top: 16px;
 }

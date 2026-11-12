@@ -13,6 +13,9 @@ services:
       WIEN_SERVER_CONFIG: /app/config.toml
       DATABASE_URL: postgresql://wien:${POSTGRES_PASSWORD:-wien-local-only}@database:5432/wien
       AITUNNEL_KEY: ${AITUNNEL_KEY:?Set AITUNNEL_KEY in the environment or root .env}
+      TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
+      TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
+      TURNSTILE_HOSTNAMES: ${TURNSTILE_HOSTNAMES:-}
       STRUDEL_RAG_ENDPOINT: http://skill:50051
       STRUDEL_RAG_BEARER_TOKEN: ${STRUDEL_RAG_BEARER_TOKEN:?Set STRUDEL_RAG_BEARER_TOKEN in the environment or root .env}
     ports:

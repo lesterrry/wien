@@ -1,6 +1,8 @@
+mod cookie;
 mod limits;
 mod password;
 mod session;
+pub mod turnstile;
 
 use crate::users::{self, Profile, User};
 use axum::{
@@ -23,6 +25,7 @@ pub struct Auth {
     pool: PgPool,
     slots: Arc<Semaphore>,
     dummy_hash: Arc<String>,
+    registration: Option<Arc<dyn turnstile::RegistrationChallenge>>,
 }
 
 impl Auth {
@@ -35,7 +38,16 @@ impl Auth {
             pool,
             slots: Arc::new(Semaphore::new(2)),
             dummy_hash: Arc::new(dummy_hash),
+            registration: None,
         })
+    }
+
+    pub fn with_registration(
+        mut self,
+        challenge: Arc<dyn turnstile::RegistrationChallenge>,
+    ) -> Self {
+        self.registration = Some(challenge);
+        self
     }
 
     async fn admit(&self) -> Result<tokio::sync::OwnedSemaphorePermit, Error> {
@@ -132,6 +144,18 @@ pub struct Credentials {
 }
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
+pub struct Registration {
+    pub username: String,
+    pub password: String,
+    pub turnstile_token: String,
+}
+
+#[derive(Serialize, ToSchema)]
+struct RegistrationConfig {
+    sitekey: String,
+}
+#[derive(Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct ChangePassword {
     pub current_password: String,
     pub new_password: String,
@@ -139,10 +163,15 @@ pub struct ChangePassword {
 #[derive(Serialize, ToSchema)]
 pub struct SignedIn {
     pub user: Profile,
-    pub token: String,
+    /// Present for desktop bearer sessions; browser sessions use an HttpOnly cookie.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
 }
 
 fn token(headers: &HeaderMap) -> Result<&str, Error> {
+    if cookie::mode(headers)? {
+        return cookie::token(headers).ok_or_else(Error::unauthorized);
+    }
     headers
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
@@ -171,6 +200,7 @@ fn body<T>(value: Result<Json<T>, JsonRejection>) -> Result<T, Error> {
 fn routes() -> (Router<Auth>, utoipa::openapi::OpenApi) {
     OpenApiRouter::new()
         .routes(routes!(register))
+        .routes(routes!(registration_config))
         .routes(routes!(login))
         .routes(routes!(logout))
         .routes(routes!(profile))
@@ -187,6 +217,17 @@ pub fn openapi() -> utoipa::openapi::OpenApi {
                 utoipa::openapi::security::HttpAuthScheme::Bearer,
             )),
         );
+    spec.components.as_mut().unwrap().add_security_scheme(
+        "browser_session",
+        utoipa::openapi::security::SecurityScheme::ApiKey(
+            utoipa::openapi::security::ApiKey::Cookie(
+                utoipa::openapi::security::ApiKeyValue::with_description(
+                    "__Host-wien_session",
+                    "HttpOnly browser session. Send X-Wien-Session: cookie on same-origin requests. Local HTTP development uses wien_session.",
+                ),
+            ),
+        ),
+    );
     spec
 }
 pub fn router(auth: Auth) -> Router {
@@ -204,18 +245,42 @@ async fn no_store(request: Request, next: Next) -> Response {
     response
 }
 
-/// Create an account; username is exact and is never silently normalized.
-#[utoipa::path(post, path="/auth/register", request_body(content=Credentials, example=json!({"username":"music_maker","password":"choose a long password"})), responses((status=201,body=SignedIn),(status=400,body=Error),(status=409,body=Error),(status=429,body=Error),(status=503,body=Error)))]
+#[utoipa::path(get, path="/auth/registration", responses((status=200,body=RegistrationConfig),(status=503,body=Error)))]
+async fn registration_config(State(auth): State<Auth>) -> Result<Json<RegistrationConfig>, Error> {
+    let challenge = auth
+        .registration
+        .as_ref()
+        .ok_or_else(turnstile::unavailable)?;
+    Ok(Json(RegistrationConfig {
+        sitekey: challenge.sitekey().to_owned(),
+    }))
+}
+
+/// Register on the website with a verified Turnstile token; creates a cookie session.
+#[utoipa::path(post, path="/auth/register", request_body(content=Registration, example=json!({"username":"music_maker","password":"choose a long password","turnstile_token":"token from the Turnstile widget"})), responses((status=201,body=SignedIn),(status=400,body=Error),(status=403,body=Error),(status=409,body=Error),(status=429,body=Error),(status=503,body=Error)))]
 async fn register(
     State(auth): State<Auth>,
-    request: Result<Json<Credentials>, JsonRejection>,
-) -> Result<(StatusCode, Json<SignedIn>), Error> {
+    headers: HeaderMap,
+    request: Result<Json<Registration>, JsonRejection>,
+) -> Result<Response, Error> {
+    if !cookie::mode(&headers)? {
+        return Err(Error::new(
+            StatusCode::FORBIDDEN,
+            "web_registration_required",
+            "Create your account on the Wien website.",
+        ));
+    }
     let request = body(request)?;
     if !users::valid_username(&request.username) || !password::valid(&request.password) {
         return Err(Error::invalid());
     }
     let permit = auth.admit().await?;
     limits::check(&auth.pool, "register", "global", 20).await?;
+    auth.registration
+        .as_ref()
+        .ok_or_else(turnstile::unavailable)?
+        .verify(&request.turnstile_token)
+        .await?;
     let hash = tokio::task::spawn_blocking(move || {
         let _permit = permit;
         password::hash(&request.password)
@@ -230,20 +295,21 @@ async fn register(
         })?;
     let token = session::create(&mut tx, &user.id).await?;
     tx.commit().await?;
-    Ok((
+    signed_in(
+        &headers,
         StatusCode::CREATED,
-        Json(SignedIn {
-            user: user.profile(&auth.pool).await?,
-            token,
-        }),
-    ))
+        user.profile(&auth.pool).await?,
+        token,
+    )
 }
 
 #[utoipa::path(post, path="/auth/login", request_body(content=Credentials, example=json!({"username":"music_maker","password":"choose a long password"})), responses((status=200,body=SignedIn),(status=401,body=Error),(status=429,body=Error),(status=503,body=Error)))]
 async fn login(
     State(auth): State<Auth>,
+    headers: HeaderMap,
     request: Result<Json<Credentials>, JsonRejection>,
-) -> Result<Json<SignedIn>, Error> {
+) -> Result<Response, Error> {
+    cookie::mode(&headers)?;
     let request = body(request)?;
     if !users::valid_username(&request.username) || !password::valid(&request.password) {
         return Err(Error::invalid_login());
@@ -276,13 +342,15 @@ async fn login(
     }
     let token = session::create(&mut tx, &user.id).await?;
     tx.commit().await?;
-    Ok(Json(SignedIn {
-        user: user.profile(&auth.pool).await?,
+    signed_in(
+        &headers,
+        StatusCode::OK,
+        user.profile(&auth.pool).await?,
         token,
-    }))
+    )
 }
 
-#[utoipa::path(get, path="/users/me", security(("session"=[])), responses((status=200,body=Profile),(status=401,body=Error),(status=503,body=Error)))]
+#[utoipa::path(get, path="/users/me", security(("session"=[]), ("browser_session"=[])), responses((status=200,body=Profile),(status=401,body=Error),(status=503,body=Error)))]
 async fn profile(State(auth): State<Auth>, headers: HeaderMap) -> Result<Json<Profile>, Error> {
     Ok(Json(
         session::user(&auth.pool, token(&headers)?)
@@ -292,22 +360,28 @@ async fn profile(State(auth): State<Auth>, headers: HeaderMap) -> Result<Json<Pr
     ))
 }
 
-#[utoipa::path(post, path="/auth/logout", security(("session"=[])), responses((status=204,description="Session revoked"),(status=401,body=Error),(status=503,body=Error)))]
-async fn logout(State(auth): State<Auth>, headers: HeaderMap) -> Result<StatusCode, Error> {
+#[utoipa::path(post, path="/auth/logout", security(("session"=[]), ("browser_session"=[])), responses((status=204,description="Session revoked"),(status=401,body=Error),(status=503,body=Error)))]
+async fn logout(State(auth): State<Auth>, headers: HeaderMap) -> Result<Response, Error> {
     sqlx::query("DELETE FROM sessions WHERE token_hash=$1")
         .bind(session::digest(token(&headers)?))
         .execute(&auth.pool)
         .await?;
-    Ok(StatusCode::NO_CONTENT)
+    let mut response = StatusCode::NO_CONTENT.into_response();
+    if cookie::mode(&headers)? {
+        response
+            .headers_mut()
+            .insert(header::SET_COOKIE, cookie::header(&headers, "", 0));
+    }
+    Ok(response)
 }
 
 /// Revoke all previous sessions and return a replacement for the current device.
-#[utoipa::path(post, path="/users/me/password", security(("session"=[])), request_body(content=ChangePassword, example=json!({"current_password":"choose a long password","new_password":"choose another long password"})), responses((status=200,body=SignedIn),(status=400,body=Error),(status=401,body=Error),(status=429,body=Error),(status=503,body=Error)))]
+#[utoipa::path(post, path="/users/me/password", security(("session"=[]), ("browser_session"=[])), request_body(content=ChangePassword, example=json!({"current_password":"choose a long password","new_password":"choose another long password"})), responses((status=200,body=SignedIn),(status=400,body=Error),(status=401,body=Error),(status=429,body=Error),(status=503,body=Error)))]
 async fn change_password(
     State(auth): State<Auth>,
     headers: HeaderMap,
     request: Result<Json<ChangePassword>, JsonRejection>,
-) -> Result<Json<SignedIn>, Error> {
+) -> Result<Response, Error> {
     let request = body(request)?;
     if !password::valid(&request.current_password) || !password::valid(&request.new_password) {
         return Err(Error::invalid());
@@ -356,10 +430,34 @@ async fn change_password(
         .await?;
     let token = session::create(&mut tx, &user.id).await?;
     tx.commit().await?;
-    Ok(Json(SignedIn {
-        user: user.profile(&auth.pool).await?,
+    signed_in(
+        &headers,
+        StatusCode::OK,
+        user.profile(&auth.pool).await?,
         token,
-    }))
+    )
+}
+
+fn signed_in(
+    headers: &HeaderMap,
+    status: StatusCode,
+    user: Profile,
+    token: String,
+) -> Result<Response, Error> {
+    let browser = cookie::mode(headers)?;
+    let cookie = browser.then(|| cookie::header(headers, &token, 30 * 24 * 60 * 60));
+    let mut response = (
+        status,
+        Json(SignedIn {
+            user,
+            token: (!browser).then_some(token),
+        }),
+    )
+        .into_response();
+    if let Some(cookie) = cookie {
+        response.headers_mut().insert(header::SET_COOKIE, cookie);
+    }
+    Ok(response)
 }
 
 pub fn start_cleanup(pool: PgPool) -> tokio::task::JoinHandle<()> {

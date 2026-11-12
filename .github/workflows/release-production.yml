@@ -1,5 +1,5 @@
-name: Release backend
-run-name: Release backend · ${{ github.ref_name }} · ${{ github.sha }}
+name: Release Production
+run-name: Release Production · ${{ github.ref_name }} · ${{ github.sha }}
 
 on:
   workflow_dispatch:
@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   release:
-    name: Build and deploy backend
+    name: Build and deploy backend and web app
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment:
@@ -53,6 +53,17 @@ jobs:
           cache-from: type=gha,scope=wien-backend
           cache-to: type=gha,scope=wien-backend,mode=max
 
+      - name: Build web app image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: web
+          platforms: linux/amd64
+          load: true
+          tags: wien-web:${{ env.RELEASE_ID }}
+          cache-from: type=gha,scope=wien-web
+          cache-to: type=gha,scope=wien-web,mode=max
+
       - name: Prepare release bundle
         shell: bash
         run: |
@@ -61,7 +72,7 @@ jobs:
           cp deploy/compose.yaml deploy/nginx.conf "$RUNNER_TEMP/wien-release/"
           cp server/config.toml "$RUNNER_TEMP/wien-release/server.toml"
           cp skill/config.toml "$RUNNER_TEMP/wien-release/skill.toml"
-          docker save "wien-server:$RELEASE_ID" "wien-skill:$RELEASE_ID" \
+          docker save "wien-server:$RELEASE_ID" "wien-skill:$RELEASE_ID" "wien-web:$RELEASE_ID" \
             | gzip -1 > "$RUNNER_TEMP/wien-release/images.tar.gz"
           tar -C "$RUNNER_TEMP/wien-release" -cf "$RUNNER_TEMP/wien-release.tar" \
             images.tar.gz compose.yaml nginx.conf server.toml skill.toml
@@ -90,5 +101,5 @@ jobs:
           ssh "${ssh_options[@]}" "$VPS_USER@$VPS_HOST" check
           ssh "${ssh_options[@]}" "$VPS_USER@$VPS_HOST" "deploy $RELEASE_ID" \
             < "$RUNNER_TEMP/wien-release.tar"
-          printf 'Deployed `%s` to https://wien.aydar.media.\n\nBackend and nginx readiness verified on the VPS over SSH.\nAssist requires a user session and available quota.\n' \
+          printf 'Deployed backend and web app `%s` to https://wien.aydar.media.\n\nBackend and nginx readiness verified on the VPS over SSH.\nProjects stay in the browser; assist requires a user session and available quota.\n' \
             "$RELEASE_ID" >> "$GITHUB_STEP_SUMMARY"

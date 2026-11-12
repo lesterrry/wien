@@ -452,7 +452,7 @@ export function App() {
   }
 
   useEffect(() => {
-    if (!project?.root) return;
+    if (!project?.root || api.platform === "web") return;
     let cancelled = false;
     setVersions([]);
     setVersionError(null);
@@ -1222,6 +1222,7 @@ export function App() {
   return (
     <div
       className={classNames(styles.app, {
+        [styles.webApp]: api.platform === "web",
         [styles.sidebarHidden]: !sidebar,
         [styles.controlsHidden]:
           !controlsVisible || controllerOpen || graphActive,
@@ -1384,15 +1385,32 @@ export function App() {
                   Open project…
                 </button>
                 <div className={styles.menuDivider} />
-                <button
-                  type="button"
-                  onClick={() =>
-                    void api.reveal().catch((error) => setError(message(error)))
-                  }
-                >
-                  <ArrowRight size={15} />
-                  Show project folder
-                </button>
+                {api.platform === "web" ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProjectMenu(false);
+                      void run(async () => {
+                        await flush();
+                        await api.exportProject?.();
+                      });
+                    }}
+                  >
+                    Export project…
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void api
+                        .reveal()
+                        .catch((error) => setError(message(error)))
+                    }
+                  >
+                    <ArrowRight size={15} />
+                    Show project folder
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -1497,24 +1515,37 @@ export function App() {
               })
             }
           />
-          <VersionsPanel
-            versions={versions}
-            selected={selectedVersion}
-            disabled={busy}
-            recoveryBlocked={recoveryBlocked}
-            error={versionError}
-            onRetry={() => {
-              void api
-                .versions()
-                .then((entries) => {
-                  setVersions(entries);
-                  setVersionError(null);
-                })
-                .catch((error) => setVersionError(message(error)));
-            }}
-            onCreate={createVersion}
-            onSelect={(oid) => void changeVersion(oid)}
-          />
+          {api.platform !== "web" && (
+            <VersionsPanel
+              versions={versions}
+              selected={selectedVersion}
+              disabled={busy}
+              recoveryBlocked={recoveryBlocked}
+              error={versionError}
+              onRetry={() => {
+                void api
+                  .versions()
+                  .then((entries) => {
+                    setVersions(entries);
+                    setVersionError(null);
+                  })
+                  .catch((error) => setVersionError(message(error)));
+              }}
+              onCreate={createVersion}
+              onSelect={(oid) => void changeVersion(oid)}
+            />
+          )}
+          {api.platform === "web" && (
+            <a
+              className={styles.downloadApp}
+              href="https://github.com/lesterrry/wien/releases"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <ArrowDownToLine size={16} aria-hidden="true" />
+              Скачать приложение
+            </a>
+          )}
           <div className={styles.sidebarBottom}>
             <button
               type="button"
@@ -1960,7 +1991,7 @@ export function App() {
             onClick={() => showModal({ kind: "delete", entry: context.entry })}
           >
             <Trash2 size={14} />
-            Move to Trash
+            {api.platform === "web" ? "Delete" : "Move to Trash"}
           </button>
         </div>
       )}
@@ -1973,13 +2004,15 @@ export function App() {
                 ? "New folder"
                 : "New snippet"
               : modal.kind === "reload"
-                ? "Reload from disk?"
+                ? "Reload saved file?"
                 : modal.kind === "rename"
                   ? "Rename"
                   : modal.kind === "move"
                     ? "Move to folder"
                     : modal.kind === "delete"
-                      ? "Move to Trash?"
+                      ? api.platform === "web"
+                        ? "Delete?"
+                        : "Move to Trash?"
                       : "A place to play"
           }
           onClose={() => {
@@ -1989,8 +2022,10 @@ export function App() {
           {modal.kind === "help" ? (
             <div className={styles.helpContent}>
               <p>
-                Write Strudel code, play it, and follow the sound. Your snippets
-                are plain files on your computer.
+                Write Strudel code, play it, and follow the sound.{" "}
+                {api.platform === "web"
+                  ? "Your projects are saved in this browser. Export a project to keep a backup or move it to another browser."
+                  : "Your snippets are plain files on your computer."}
               </p>
               <div>
                 <span>Play / update code</span>
@@ -2037,13 +2072,15 @@ export function App() {
               {modal.kind === "reload" ? (
                 <p>
                   Unsaved edits will be discarded. Copy anything you want to
-                  keep before reloading the file from disk.
+                  keep before reloading the saved file.
                 </p>
               ) : modal.kind === "delete" ? (
                 <p>
                   <strong>{modal.entry.name}</strong>
-                  {modal.entry.children ? " and everything inside it" : ""} will
-                  move to your computer’s Trash.
+                  {modal.entry.children ? " and everything inside it" : ""}
+                  {api.platform === "web"
+                    ? " will be permanently deleted from this browser project."
+                    : " will move to your computer’s Trash."}
                 </p>
               ) : modal.kind === "move" ? (
                 <>
@@ -2125,7 +2162,9 @@ export function App() {
                   {modal.kind === "create"
                     ? "Create"
                     : modal.kind === "delete"
-                      ? "Move to Trash"
+                      ? api.platform === "web"
+                        ? "Delete"
+                        : "Move to Trash"
                       : modal.kind === "move"
                         ? "Move"
                         : modal.kind === "reload"

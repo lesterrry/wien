@@ -88,6 +88,19 @@ try {
   }
   await submit();
   const signin = page.getByRole("dialog", { name: "Sign in", exact: true });
+  await expect(
+    signin.getByRole("button", { name: "Create an account", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    signin.getByRole("button", {
+      name: "Create an account on the website",
+      exact: true,
+    }),
+  ).toBeVisible();
+  assert.equal(
+    await page.evaluate(() => typeof window.workspace.accountRegister),
+    "undefined",
+  );
   await expect(signin).toContainText("10 free requests");
   assert.equal(assists, 0);
   await signin.getByLabel("Username", { exact: true }).fill(profile.username);

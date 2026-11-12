@@ -13,8 +13,12 @@ if (!origin || !/^http:\/\/127\.0\.0\.1:\d+$/.test(origin)) {
 const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "wien-account-"));
 const environment = { ...process.env, WIEN_USER_DATA: temporary };
 delete environment.ELECTRON_RUN_AS_NODE;
-const username = `smoke_${Date.now()}`;
-const password = "a long initial smoke password";
+const username = process.env.WIEN_TEST_USERNAME;
+const password = process.env.WIEN_TEST_PASSWORD;
+if (!username || !password)
+  throw new Error(
+    "Create a disposable test account through the web first; set WIEN_TEST_USERNAME and WIEN_TEST_PASSWORD.",
+  );
 const nextPassword = "a long replacement smoke password";
 let app;
 async function launch() {
@@ -33,14 +37,24 @@ try {
     .getByRole("button", { name: "Project and account", exact: true })
     .click();
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Create an account", exact: true })
-    .click();
+  await expect(
+    page.getByRole("button", { name: "Create an account", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", {
+      name: "Create an account on the website",
+      exact: true,
+    }),
+  ).toBeVisible();
+  assert.equal(
+    await page.evaluate(() => typeof window.workspace.accountRegister),
+    "undefined",
+  );
   await page.getByLabel("Username", { exact: true }).fill(username);
   await page.getByLabel("Password", { exact: true }).fill(password);
-  await page.getByLabel("Confirm password", { exact: true }).fill(password);
   await page
-    .getByRole("button", { name: "Create account", exact: true })
+    .getByRole("dialog", { name: "Sign in", exact: true })
+    .getByRole("button", { name: "Sign in", exact: true })
     .click();
   await expect(
     page.getByRole("dialog", { name: "Your profile" }),

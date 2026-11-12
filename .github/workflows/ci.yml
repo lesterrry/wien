@@ -46,6 +46,15 @@ jobs:
       - name: Build client
         run: pnpm build
 
+      - name: Build web client
+        run: pnpm build:web
+
+      - name: Install test browser
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Test browser workspace
+        run: pnpm test:web
+
   rust:
     name: Rust workspace checks and build
     runs-on: ubuntu-latest

@@ -3,10 +3,10 @@
 @baseUrl = http://127.0.0.1:3001
 @contentType = application/json
 
-#####################################################################################
+#################################################################################################
 ### Request: POST /auth/register
-### Summary: Create an account; username is exact and is never silently normalized.
-#####################################################################################
+### Summary: Register on the website with a verified Turnstile token; creates a cookie session.
+#################################################################################################
 
 
 POST {{baseUrl}}/auth/register
@@ -14,5 +14,6 @@ Content-Type: {{contentType}}
 
 {
   "password": "choose a long password",
+  "turnstile_token": "token from the Turnstile widget",
   "username": "music_maker"
 }

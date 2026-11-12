@@ -68,6 +68,12 @@ activate() {
         http://127.0.0.1:3001/ready || return 1
     curl --fail --silent --show-error --connect-timeout 5 --max-time 10 --retry 10 --retry-delay 2 --retry-all-errors \
         -H 'Host: wien.aydar.media' http://127.0.0.1/ready || return 1
+    # Older releases have no web image and redirect / to API docs.
+    if docker image inspect "wien-web:$(basename "$directory")" >/dev/null 2>&1; then
+        curl --fail --silent --show-error --connect-timeout 5 --max-time 10 \
+            -H 'Host: wien.aydar.media' http://127.0.0.1/ \
+            | python3 -c 'import sys; html=sys.stdin.read(); sys.exit(0 if "<title>Wien</title>" in html and "/assets/" in html else 1)' || return 1
+    fi
     local status
     status=$(curl --silent --show-error --connect-timeout 5 --max-time 10 --output /dev/null --write-out '%{http_code}' \
         -X POST -H 'Host: wien.aydar.media' http://127.0.0.1/v1/assist) || return 1
@@ -94,6 +100,6 @@ printf 'Deployed %s\n' "$release_id"
 for old in "$root"/releases/*; do
     [[ -d "$old" && "$old" != "$release" && "$old" != "$previous" ]] || continue
     old_id=$(basename "$old")
-    docker image rm "wien-server:$old_id" "wien-skill:$old_id" >/dev/null 2>&1 || true
+    docker image rm "wien-server:$old_id" "wien-skill:$old_id" "wien-web:$old_id" >/dev/null 2>&1 || true
     rm -rf -- "$old"
 done
