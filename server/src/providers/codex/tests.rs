@@ -93,6 +93,23 @@ async fn accepts_codex_sse_without_content_type_header() {
 }
 
 #[tokio::test]
+async fn accepts_codex_sse_labeled_as_plain_text() {
+    let server = MockServer::start().await;
+    let (_dir, provider) = fixture(&server, TIMEOUT).await;
+    Mock::given(method("POST"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            format!("data: {}\n\n", completed_event()),
+            "text/plain; charset=utf-8",
+        ))
+        .mount(&server)
+        .await;
+    assert_eq!(
+        provider.send("hello", &options()).await.unwrap().text,
+        "Привет 🎶"
+    );
+}
+
+#[tokio::test]
 async fn reads_rotated_credentials_without_restart_and_never_writes_them() {
     let server = MockServer::start().await;
     let (_dir, provider) = fixture(&server, TIMEOUT).await;
@@ -204,8 +221,12 @@ async fn fails_on_incomplete_failed_malformed_or_non_stream_responses() {
             ProviderError::InvalidResponse,
         ),
         (
-            ResponseTemplate::new(200).set_body_string(FAKE_TOKEN),
+            ResponseTemplate::new(200).set_body_raw(FAKE_TOKEN, "text/html"),
             ProviderError::InvalidResponse,
+        ),
+        (
+            ResponseTemplate::new(200).set_body_raw(FAKE_TOKEN, "text/plain"),
+            ProviderError::Incomplete,
         ),
     ];
     for (response, expected) in cases {

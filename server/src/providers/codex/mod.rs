@@ -85,19 +85,16 @@ impl Codex {
                 _ => ProviderError::Unavailable,
             });
         }
-        // Codex can omit Content-Type even when the body is SSE. Still reject an
-        // explicitly different format; the SSE parser and terminal event validate the body.
+        // Codex can omit Content-Type or label SSE as text/plain. The SSE parser
+        // and successful terminal event still validate the body in all cases.
         if response
             .headers()
             .get(header::CONTENT_TYPE)
             .is_some_and(|value| {
                 !value.to_str().ok().is_some_and(|value| {
-                    value
-                        .split(';')
-                        .next()
-                        .unwrap_or_default()
-                        .trim()
-                        .eq_ignore_ascii_case("text/event-stream")
+                    let media_type = value.split(';').next().unwrap_or_default().trim();
+                    media_type.eq_ignore_ascii_case("text/event-stream")
+                        || media_type.eq_ignore_ascii_case("text/plain")
                 })
             })
         {
