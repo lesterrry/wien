@@ -223,19 +223,16 @@ note("c3*8").s("sine").gain(gain).lpf(cutoff).fast(speed)`);
   assert.equal(
     await page
       .getByRole("complementary", { name: "Snippet controls" })
-      .locator("input")
+      .locator('input:not([aria-label="Search controls"])')
       .count(),
     0,
   );
   await page
     .getByRole("button", { name: "Hide speed control", exact: true })
     .click();
-  assert.equal(
-    await page
-      .getByRole("spinbutton", { name: "speed knob", exact: true })
-      .count(),
-    0,
-  );
+  await expect(
+    page.getByRole("spinbutton", { name: "speed knob", exact: true }),
+  ).toHaveCount(0);
   assert.match(await code.textContent(), /\/\/@ignoreconst speed/);
   await code.click();
   await code.press(process.platform === "darwin" ? "Meta+z" : "Control+z");
@@ -248,11 +245,11 @@ note("c3*8").s("sine").gain(gain).lpf(cutoff).fast(speed)`);
   await replaceCode(`var gain = 0.123456789;
 let cutoff = -123456.75;
 note("c3*8").s("sine").gain(gain)`);
-  assert.equal(await gainValue.textContent(), "0.12346");
+  await expect(gainValue).toHaveText("0.12346");
   await gainKnob.press("Shift+ArrowUp");
   assert.match(await code.textContent(), /gain = 0.12446/);
   const cutoffValue = page.getByLabel("cutoff value", { exact: true });
-  assert.equal(await cutoffValue.textContent(), "-123456.75");
+  await expect(cutoffValue).toHaveText("-123456.75");
   await page.getByRole("button", { name: "Toggle controls" }).click();
   assert.equal(
     await page.getByRole("complementary", { name: "Snippet controls" }).count(),
@@ -262,7 +259,7 @@ note("c3*8").s("sine").gain(gain)`);
   await cutoffValue.waitFor();
   assert.equal(await page.evaluate(() => window.getIsStarted()), false);
   await replaceCode('note("c3 e3 g3").s("triangle").gain(0.2)');
-  assert.equal(await page.getByRole("spinbutton").count(), 0);
+  await expect(page.getByRole("spinbutton")).toHaveCount(0);
 
   console.log("Checking file tabs");
   const rootTab = page.getByRole("tab", {

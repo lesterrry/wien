@@ -28,7 +28,7 @@
 
 .app {
   --sidebar-width: 258px;
-  --controls-width: 230px;
+  --controls-width: 280px;
   display: grid;
   height: 100%;
   grid-template: 52px minmax(0, 1fr) / var(--sidebar-width) minmax(0, 1fr) var(
@@ -250,7 +250,9 @@
 }
 
 .workspace {
-  grid-column: 2;
+  grid-column: 2 / -1;
+  position: relative;
+  padding-right: var(--controls-width);
   min-width: 0;
   min-height: 0;
   display: flex;
@@ -545,6 +547,24 @@
   .playButton kbd {
     display: none;
   }
+}
+
+.editorSession {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.controllerWorkspace {
+  padding-right: 0;
+}
+.playingTarget {
+  font-size: 10px;
+  color: var(--color-muted);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .graphPane {

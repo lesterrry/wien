@@ -24,7 +24,7 @@ export function EnumSwitch({
       ?.querySelectorAll<HTMLInputElement>('input[type="radio"]')
       [index]?.focus();
   };
-  const selectAt = (x: number) => {
+  const selectAt = (y: number) => {
     const buttons = rail.current?.querySelectorAll<HTMLInputElement>(
       'input[type="radio"]',
     );
@@ -35,7 +35,7 @@ export function EnumSwitch({
       const rect =
         button.parentElement?.getBoundingClientRect() ??
         button.getBoundingClientRect();
-      const next = Math.abs(x - rect.x - rect.width / 2);
+      const next = Math.abs(y - rect.y - rect.height / 2);
       if (next < distance) {
         closest = index;
         distance = next;
@@ -67,16 +67,17 @@ export function EnumSwitch({
           ref={rail}
           className={styles.rail}
           role="radiogroup"
+          aria-orientation="vertical"
           aria-label={`${control.name} options`}
           onPointerDown={(event) => {
             if (disabled || event.button !== 0) return;
             event.preventDefault();
             dragging.current = true;
             event.currentTarget.setPointerCapture(event.pointerId);
-            selectAt(event.clientX);
+            selectAt(event.clientY);
           }}
           onPointerMove={(event) => {
-            if (dragging.current && !disabled) selectAt(event.clientX);
+            if (dragging.current && !disabled) selectAt(event.clientY);
           }}
           onPointerUp={(event) => {
             dragging.current = false;
