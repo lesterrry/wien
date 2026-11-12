@@ -271,3 +271,147 @@ async fn concurrent_registration_has_one_owner(pool: PgPool) {
         .unwrap();
     assert_eq!(count, 1);
 }
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL in DATABASE_URL; CI runs this explicitly"]
+async fn browser_cookie_lifecycle_and_cross_origin_rejection(pool: PgPool) {
+    let app = auth::router(Auth::new(pool.clone()).await.unwrap());
+    async fn web(
+        app: &Router,
+        method: &str,
+        path: &str,
+        body: Value,
+        cookie: &str,
+        origin: &str,
+    ) -> (StatusCode, String, Value) {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(method)
+                    .uri(path)
+                    .header("host", "wien.aydar.media")
+                    .header("origin", origin)
+                    .header("x-wien-session", "cookie")
+                    .header("content-type", "application/json")
+                    .header("cookie", cookie)
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let status = response.status();
+        let cookie = response
+            .headers()
+            .get("set-cookie")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("")
+            .to_owned();
+        let bytes = to_bytes(response.into_body(), 8192).await.unwrap();
+        (
+            status,
+            cookie,
+            serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+        )
+    }
+    let origin = "https://wien.aydar.media";
+    let credentials = json!({"username":"browser_user","password":"initial secure password"});
+    let (status, _, _) = web(
+        &app,
+        "POST",
+        "/auth/register",
+        credentials.clone(),
+        "",
+        "https://other.aydar.media",
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    let (status, cookie, body) = web(
+        &app,
+        "POST",
+        "/auth/register",
+        credentials.clone(),
+        "",
+        origin,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    assert!(body.get("token").is_none());
+    for attr in [
+        "__Host-wien_session=",
+        "HttpOnly",
+        "Secure",
+        "SameSite=Strict",
+        "Path=/",
+        "Max-Age=2592000",
+    ] {
+        assert!(cookie.contains(attr), "{cookie}");
+    }
+    let cookie = cookie.split(';').next().unwrap();
+    assert_eq!(
+        web(&app, "GET", "/users/me", Value::Null, cookie, origin)
+            .await
+            .0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        web(
+            &app,
+            "GET",
+            "/users/me",
+            Value::Null,
+            cookie,
+            "https://other.aydar.media"
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    let (status, rotated, _) = web(&app,"POST","/users/me/password",json!({"current_password":"initial secure password","new_password":"another secure password"}),cookie,origin).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        web(&app, "GET", "/users/me", Value::Null, cookie, origin)
+            .await
+            .0,
+        StatusCode::UNAUTHORIZED
+    );
+    let rotated = rotated.split(';').next().unwrap();
+    assert_eq!(
+        web(&app, "GET", "/users/me", Value::Null, rotated, origin)
+            .await
+            .0,
+        StatusCode::OK
+    );
+    let (status, cleared, _) =
+        web(&app, "POST", "/auth/logout", Value::Null, rotated, origin).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert!(cleared.contains("Max-Age=0"));
+    assert_eq!(
+        web(&app, "GET", "/users/me", Value::Null, rotated, origin)
+            .await
+            .0,
+        StatusCode::UNAUTHORIZED
+    );
+    let (_, cookie, body) = web(
+        &app,
+        "POST",
+        "/auth/login",
+        json!({"username":"browser_user","password":"another secure password"}),
+        "",
+        origin,
+    )
+    .await;
+    assert!(body.get("token").is_none());
+    let cookie = cookie.split(';').next().unwrap();
+    // Expired cookies cannot restore a browser session.
+    sqlx::query("UPDATE sessions SET expires_at=now()-interval '1 second'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        web(&app, "GET", "/users/me", Value::Null, cookie, origin)
+            .await
+            .0,
+        StatusCode::UNAUTHORIZED
+    );
+}

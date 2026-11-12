@@ -29,7 +29,11 @@ just run-server
 Дополнительные команды, упаковка `.app` и работа с проектами описаны
 в [инструкции клиента](client/README.md).
 
-Адрес бэкенда для клиента задаётся в `client/config.yaml` (`backendUrl`).
+Веб-версия: `just run-web` (http://127.0.0.1:5174), сборка — `just build-web`.
+Проекты хранятся в браузере, Versions в вебе отключены; аккаунт использует HttpOnly cookie.
+Подробнее — [client/README.md](client/README.md#веб-версия).
+
+Адрес бэкенда для Electron-клиента задаётся в `client/config.yaml` (`backendUrl`).
 По умолчанию это `http://127.0.0.1:3001`. Запуск с VPS без локального сервера:
 `WIEN_BACKEND_URL=https://wien.aydar.media just run-client`.
 Assist требует входа в аккаунт и доступных запросов; новый аккаунт получает 10 бесплатно.
@@ -149,7 +153,7 @@ docker compose exec skill strudel-rag remote health
 
 ## Ручной релиз бэкенда
 
-GitHub Actions → **Release backend** → **Run workflow**. Сборка выполняется
+GitHub Actions → **Release production** → **Run workflow**. Сборка выполняется
 на GitHub, готовые образы передаются на VPS по отдельному SSH-ключу.
 Пуши сами по себе деплой не запускают. Подробности — в [deploy/README.md](deploy/README.md).
 

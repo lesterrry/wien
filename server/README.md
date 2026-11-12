@@ -322,3 +322,15 @@ WIEN_BACKEND_URL=http://127.0.0.1:3009 node scripts/account-smoke.mjs
 ```
 
 Этот сценарий создаёт тестовый аккаунт; он запрещает удалённый backend URL.
+
+## Browser sessions
+
+The existing account endpoints also accept `X-Wien-Session: cookie` on same-origin
+browser requests. Registration, login and password change then set an HttpOnly
+`__Host-wien_session` cookie (Secure; SameSite=Strict; Path=/; 30 days) and omit
+`token` from JSON. `/users/me`, `/v1/assist`, logout and password change accept
+this cookie only with the same custom header and valid Origin/Fetch Metadata.
+Cross-origin requests, including sibling subdomains, are rejected; no CORS is enabled.
+Logout clears the cookie, password changes revoke other sessions, and the database
+checks expiry as for bearer sessions. Localhost uses `wien_session` without Secure
+for HTTP development. Electron's bearer-token contract is unchanged.

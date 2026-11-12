@@ -1,6 +1,7 @@
 /target/
 node_modules/
 client/out/
+client/out-web/
 client/release/
 .DS_Store
 *.log

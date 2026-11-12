@@ -253,7 +253,7 @@ fn parse_body<T>(body: Result<Json<T>, JsonRejection>) -> Result<T, ApiError> {
 /// Ask the editor assistant; selection is context, edits replace the entire current file.
 #[utoipa::path(
     post, path = "/v1/assist",
-    security(("session"=[])),
+    security(("session"=[]), ("browser_session"=[])),
     request_body(content = AssistRequest, example = json!({
         "prompt": "Make the bass softer. Reply briefly.",
         "file": {"path": "first-light.strudel", "content": "note(\"a1\").s(\"sawtooth\").gain(0.2)", "cursor": {"anchor": 0, "head": 10}}

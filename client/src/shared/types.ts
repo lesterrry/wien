@@ -29,6 +29,8 @@ export interface VersionEntry {
 }
 
 export interface WorkspaceApi {
+  platform: "desktop" | "web";
+  exportProject?(): Promise<void>;
   accountCurrent(): Promise<UserProfile | null>;
   accountRegister(credentials: Credentials): Promise<UserProfile>;
   accountLogin(credentials: Credentials): Promise<UserProfile>;

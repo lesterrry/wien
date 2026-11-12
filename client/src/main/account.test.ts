@@ -101,3 +101,34 @@ test("Cloudflare rejection is explained without exposing its response", async ()
     /Cloudflare blocked/,
   );
 });
+
+test("browser sessions use cookies without exposing or storing a bearer token", async () => {
+  let signedIn = false;
+  const client = new AccountClient("", null, async (url, init) => {
+    const headers = new Headers(init?.headers);
+    assert.equal(headers.get("X-Wien-Session"), "cookie");
+    assert.equal(headers.has("Authorization"), false);
+    assert.equal(init?.credentials, "same-origin");
+    if (url === "/users/me")
+      return signedIn
+        ? Response.json(user)
+        : Response.json({ code: "authentication_required" }, { status: 401 });
+    if (url === "/auth/logout") {
+      signedIn = false;
+      return new Response(null, { status: 204 });
+    }
+    signedIn = true;
+    return Response.json({ user });
+  });
+  assert.equal(await client.current(), null);
+  assert.deepEqual(
+    await client.register({
+      username: user.username,
+      password: "a secure test password",
+    }),
+    user,
+  );
+  assert.deepEqual(await client.current(), user);
+  await client.logout();
+  assert.equal(await client.current(), null);
+});

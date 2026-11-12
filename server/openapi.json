@@ -96,6 +96,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "browser_session": []
           }
         ]
       }
@@ -248,6 +251,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "browser_session": []
           }
         ]
       }
@@ -320,6 +326,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "browser_session": []
           }
         ]
       }
@@ -444,6 +453,9 @@
         "security": [
           {
             "session": []
+          },
+          {
+            "browser_session": []
           }
         ]
       }
@@ -631,12 +643,15 @@
       "SignedIn": {
         "type": "object",
         "required": [
-          "user",
-          "token"
+          "user"
         ],
         "properties": {
           "token": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Present for desktop bearer sessions; browser sessions use an HttpOnly cookie."
           },
           "user": {
             "$ref": "#/components/schemas/Profile"
@@ -654,6 +669,12 @@
       }
     },
     "securitySchemes": {
+      "browser_session": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "__Host-wien_session",
+        "description": "HttpOnly browser session. Send X-Wien-Session: cookie on same-origin requests. Local HTTP development uses wien_session."
+      },
       "session": {
         "type": "http",
         "scheme": "bearer"

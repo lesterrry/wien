@@ -1,11 +1,11 @@
 # Backend releases
 
-GitHub → Actions → **Release backend** → **Run workflow** → choose a branch → Run.
+GitHub → Actions → **Release production** → **Run workflow** → choose a branch → Run.
 Only `workflow_dispatch` deploys; pushes and pull requests do not deploy.
 The workflow must first be merged into the repository's default branch for the
 button to appear. The chosen branch supplies both source and server configs.
 
-The runner builds `linux/amd64` server and RAG images, tags them with
+The runner builds `linux/amd64` server, RAG and web/nginx images, tags them with
 `commit-run-attempt`, and transfers a release archive over SSH to `89.169.155.195`.
 No registry login is needed. The VPS loads the ready images without compiling Rust.
 Releases live in `/opt/wien/releases`; `current` and `previous` identify deployments.
@@ -23,7 +23,12 @@ override. `/opt/wien/.env` and external volume `wien_skill-data` remain on the V
 AI Tunnel credentials, PostgreSQL credentials and the RAG corpus are never uploaded to GitHub Actions.
 Nginx serves HTTP behind Cloudflare; no certificates are created.
 Public `/v1/assist` requires a session and a remaining assist allowance.
-Nginx forwards all paths to the backend; authentication and quotas are enforced there.
+Nginx serves the browser app at `/`, caches hashed `/assets/`, and forwards
+`/auth`, `/users`, `/v1`, `/docs`, `/health`, `/ready` and `/openapi.json` to the backend.
+Authentication and quotas are enforced by the backend. Browser sessions use HttpOnly,
+Secure, SameSite=Strict cookies; Electron continues using bearer tokens.
+The web app stores projects only in browser IndexedDB; accounts do not sync files.
+The same manual release deploys compatible server and web images together.
 The legacy raw generation endpoint has been removed.
 Bot Fight Mode is unchanged; if it challenges desktop requests, the client reports
 the block explicitly instead of treating the HTML challenge as an API response.
@@ -54,6 +59,9 @@ compatible with the previous release.
 ssh spacespace01 'sudo install -m 0755 /dev/stdin /usr/local/sbin/wien-deploy' < deploy/receive.sh
 ```
 Ordinary releases only update images and release configs.
+The web image uses the existing archive format, so the previous receiver can deploy
+it. Reinstall the current receiver to also verify the web HTML after deployment
+and clean up old `wien-web` images.
 
 ## Operator commands
 

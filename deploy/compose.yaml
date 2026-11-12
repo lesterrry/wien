@@ -64,7 +64,8 @@ services:
       - /opt/wien/skill/saved_html:/app/saved_html:ro
     logging: *logging
   proxy:
-    image: nginx:stable-alpine
+    image: wien-web:${WIEN_RELEASE_ID:?Release ID is required}
+    pull_policy: never
     restart: unless-stopped
     ports:
       - "80:80"

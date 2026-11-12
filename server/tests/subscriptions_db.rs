@@ -327,3 +327,38 @@ async fn existing_accounts_receive_allowance_once(pool: PgPool) {
     .unwrap();
     assert_eq!(grants, 2);
 }
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL in DATABASE_URL; CI runs this explicitly"]
+async fn cookie_assist_enforces_origin_and_consumes_one_credit(pool: PgPool) {
+    let model = Model::new();
+    let app = app(&pool, model.clone()).await;
+    let user = register(&app).await;
+    let token = user["token"].as_str().unwrap();
+    for (origin, expected) in [
+        ("https://other.aydar.media", StatusCode::FORBIDDEN),
+        ("https://wien.aydar.media", StatusCode::OK),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/assist")
+                    .header("host", "wien.aydar.media")
+                    .header("origin", origin)
+                    .header("x-wien-session", "cookie")
+                    .header("cookie", format!("__Host-wien_session={token}"))
+                    .header("content-type", "application/json")
+                    .body(Body::from(context().to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), expected);
+        // Consume the body so completion accounting is exercised.
+        to_bytes(response.into_body(), 8192).await.unwrap();
+    }
+    assert_eq!(model.calls.load(Ordering::SeqCst), 1);
+    assert_eq!(remaining(&pool).await, 9);
+}

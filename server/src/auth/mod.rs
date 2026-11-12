@@ -1,3 +1,4 @@
+mod cookie;
 mod limits;
 mod password;
 mod session;
@@ -139,10 +140,15 @@ pub struct ChangePassword {
 #[derive(Serialize, ToSchema)]
 pub struct SignedIn {
     pub user: Profile,
-    pub token: String,
+    /// Present for desktop bearer sessions; browser sessions use an HttpOnly cookie.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
 }
 
 fn token(headers: &HeaderMap) -> Result<&str, Error> {
+    if cookie::mode(headers)? {
+        return cookie::token(headers).ok_or_else(Error::unauthorized);
+    }
     headers
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
@@ -187,6 +193,17 @@ pub fn openapi() -> utoipa::openapi::OpenApi {
                 utoipa::openapi::security::HttpAuthScheme::Bearer,
             )),
         );
+    spec.components.as_mut().unwrap().add_security_scheme(
+        "browser_session",
+        utoipa::openapi::security::SecurityScheme::ApiKey(
+            utoipa::openapi::security::ApiKey::Cookie(
+                utoipa::openapi::security::ApiKeyValue::with_description(
+                    "__Host-wien_session",
+                    "HttpOnly browser session. Send X-Wien-Session: cookie on same-origin requests. Local HTTP development uses wien_session.",
+                ),
+            ),
+        ),
+    );
     spec
 }
 pub fn router(auth: Auth) -> Router {
@@ -208,8 +225,10 @@ async fn no_store(request: Request, next: Next) -> Response {
 #[utoipa::path(post, path="/auth/register", request_body(content=Credentials, example=json!({"username":"music_maker","password":"choose a long password"})), responses((status=201,body=SignedIn),(status=400,body=Error),(status=409,body=Error),(status=429,body=Error),(status=503,body=Error)))]
 async fn register(
     State(auth): State<Auth>,
+    headers: HeaderMap,
     request: Result<Json<Credentials>, JsonRejection>,
-) -> Result<(StatusCode, Json<SignedIn>), Error> {
+) -> Result<Response, Error> {
+    cookie::mode(&headers)?;
     let request = body(request)?;
     if !users::valid_username(&request.username) || !password::valid(&request.password) {
         return Err(Error::invalid());
@@ -230,20 +249,21 @@ async fn register(
         })?;
     let token = session::create(&mut tx, &user.id).await?;
     tx.commit().await?;
-    Ok((
+    signed_in(
+        &headers,
         StatusCode::CREATED,
-        Json(SignedIn {
-            user: user.profile(&auth.pool).await?,
-            token,
-        }),
-    ))
+        user.profile(&auth.pool).await?,
+        token,
+    )
 }
 
 #[utoipa::path(post, path="/auth/login", request_body(content=Credentials, example=json!({"username":"music_maker","password":"choose a long password"})), responses((status=200,body=SignedIn),(status=401,body=Error),(status=429,body=Error),(status=503,body=Error)))]
 async fn login(
     State(auth): State<Auth>,
+    headers: HeaderMap,
     request: Result<Json<Credentials>, JsonRejection>,
-) -> Result<Json<SignedIn>, Error> {
+) -> Result<Response, Error> {
+    cookie::mode(&headers)?;
     let request = body(request)?;
     if !users::valid_username(&request.username) || !password::valid(&request.password) {
         return Err(Error::invalid_login());
@@ -276,13 +296,15 @@ async fn login(
     }
     let token = session::create(&mut tx, &user.id).await?;
     tx.commit().await?;
-    Ok(Json(SignedIn {
-        user: user.profile(&auth.pool).await?,
+    signed_in(
+        &headers,
+        StatusCode::OK,
+        user.profile(&auth.pool).await?,
         token,
-    }))
+    )
 }
 
-#[utoipa::path(get, path="/users/me", security(("session"=[])), responses((status=200,body=Profile),(status=401,body=Error),(status=503,body=Error)))]
+#[utoipa::path(get, path="/users/me", security(("session"=[]), ("browser_session"=[])), responses((status=200,body=Profile),(status=401,body=Error),(status=503,body=Error)))]
 async fn profile(State(auth): State<Auth>, headers: HeaderMap) -> Result<Json<Profile>, Error> {
     Ok(Json(
         session::user(&auth.pool, token(&headers)?)
@@ -292,22 +314,28 @@ async fn profile(State(auth): State<Auth>, headers: HeaderMap) -> Result<Json<Pr
     ))
 }
 
-#[utoipa::path(post, path="/auth/logout", security(("session"=[])), responses((status=204,description="Session revoked"),(status=401,body=Error),(status=503,body=Error)))]
-async fn logout(State(auth): State<Auth>, headers: HeaderMap) -> Result<StatusCode, Error> {
+#[utoipa::path(post, path="/auth/logout", security(("session"=[]), ("browser_session"=[])), responses((status=204,description="Session revoked"),(status=401,body=Error),(status=503,body=Error)))]
+async fn logout(State(auth): State<Auth>, headers: HeaderMap) -> Result<Response, Error> {
     sqlx::query("DELETE FROM sessions WHERE token_hash=$1")
         .bind(session::digest(token(&headers)?))
         .execute(&auth.pool)
         .await?;
-    Ok(StatusCode::NO_CONTENT)
+    let mut response = StatusCode::NO_CONTENT.into_response();
+    if cookie::mode(&headers)? {
+        response
+            .headers_mut()
+            .insert(header::SET_COOKIE, cookie::header(&headers, "", 0));
+    }
+    Ok(response)
 }
 
 /// Revoke all previous sessions and return a replacement for the current device.
-#[utoipa::path(post, path="/users/me/password", security(("session"=[])), request_body(content=ChangePassword, example=json!({"current_password":"choose a long password","new_password":"choose another long password"})), responses((status=200,body=SignedIn),(status=400,body=Error),(status=401,body=Error),(status=429,body=Error),(status=503,body=Error)))]
+#[utoipa::path(post, path="/users/me/password", security(("session"=[]), ("browser_session"=[])), request_body(content=ChangePassword, example=json!({"current_password":"choose a long password","new_password":"choose another long password"})), responses((status=200,body=SignedIn),(status=400,body=Error),(status=401,body=Error),(status=429,body=Error),(status=503,body=Error)))]
 async fn change_password(
     State(auth): State<Auth>,
     headers: HeaderMap,
     request: Result<Json<ChangePassword>, JsonRejection>,
-) -> Result<Json<SignedIn>, Error> {
+) -> Result<Response, Error> {
     let request = body(request)?;
     if !password::valid(&request.current_password) || !password::valid(&request.new_password) {
         return Err(Error::invalid());
@@ -356,10 +384,34 @@ async fn change_password(
         .await?;
     let token = session::create(&mut tx, &user.id).await?;
     tx.commit().await?;
-    Ok(Json(SignedIn {
-        user: user.profile(&auth.pool).await?,
+    signed_in(
+        &headers,
+        StatusCode::OK,
+        user.profile(&auth.pool).await?,
         token,
-    }))
+    )
+}
+
+fn signed_in(
+    headers: &HeaderMap,
+    status: StatusCode,
+    user: Profile,
+    token: String,
+) -> Result<Response, Error> {
+    let browser = cookie::mode(headers)?;
+    let cookie = browser.then(|| cookie::header(headers, &token, 30 * 24 * 60 * 60));
+    let mut response = (
+        status,
+        Json(SignedIn {
+            user,
+            token: (!browser).then_some(token),
+        }),
+    )
+        .into_response();
+    if let Some(cookie) = cookie {
+        response.headers_mut().insert(header::SET_COOKIE, cookie);
+    }
+    Ok(response)
 }
 
 pub fn start_cleanup(pool: PgPool) -> tokio::task::JoinHandle<()> {
