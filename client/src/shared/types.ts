@@ -34,6 +34,7 @@ export interface WorkspaceApi {
   versionActive(): Promise<boolean>;
   versionChanged(): Promise<boolean>;
   restoreVersion(): Promise<void>;
+  restoreLatestVersion(oid: string): Promise<void>;
   assist(id: string, request: AssistRequest): Promise<AssistResponse>;
   cancelAssist(id: string): void;
   readControlPreferences(projectRoot: string): Promise<PanelPreferences | null>;

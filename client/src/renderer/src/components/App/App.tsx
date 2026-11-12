@@ -866,6 +866,46 @@ export function App() {
     return saved;
   }
 
+  async function restoreLatestVersion(oid: string) {
+    await run(async () => {
+      if (
+        !window.confirm(
+          "Restore the latest version? Current changes to .strudel and .js files will be lost, including files created since this version. This cannot be undone.",
+        )
+      )
+        return;
+      await controlQueue.current;
+      await preferencesSave.current;
+      await flush();
+      if (liveUpdateTimer.current !== null) {
+        clearTimeout(liveUpdateTimer.current);
+        liveUpdateTimer.current = null;
+      }
+      pendingControlPaths.current.clear();
+      await removeSessions(tabsRef.current);
+      updateTabs([]);
+      updateDocument(null);
+      setGraphOpen(false);
+      setControllerOpen(false);
+      setControllerRoot(null);
+      setDefinitionContext(null);
+      navigationBack.current.clear();
+      setSelection(null);
+      try {
+        await api.restoreLatestVersion(oid);
+      } finally {
+        const next = await api.current();
+        setProject(next);
+        setTreeVersion((version) => version + 1);
+        const first = next.entries.find((entry) => !entry.children);
+        if (first) {
+          const code = await api.read(first.id);
+          updateDocument({ path: first.id, code, saved: code });
+        }
+      }
+    });
+  }
+
   async function submitModal() {
     if (!modal || busyRef.current) return;
     busyRef.current = true;
@@ -1460,6 +1500,7 @@ export function App() {
             }}
             onCreate={createVersion}
             onSelect={(oid) => void changeVersion(oid)}
+            onRestoreLatest={(oid) => void restoreLatestVersion(oid)}
           />
           <div className={styles.sidebarBottom}>
             <button

@@ -1,3 +1,4 @@
+import { RotateCcw } from "lucide-react";
 import { useState } from "react";
 import type { VersionEntry } from "../../../../shared/types";
 import styles from "./VersionsPanel.module.css";
@@ -10,6 +11,7 @@ interface Props {
   error: string | null;
   onCreate: (message: string) => Promise<boolean>;
   onSelect: (oid: string | null) => void;
+  onRestoreLatest: (oid: string) => void;
   onRetry: () => void;
 }
 
@@ -21,6 +23,7 @@ export function VersionsPanel({
   error,
   onCreate,
   onSelect,
+  onRestoreLatest,
   onRetry,
 }: Props) {
   const [message, setMessage] = useState("");
@@ -72,10 +75,11 @@ export function VersionsPanel({
         <p>No versions yet</p>
       ) : (
         <ul>
-          {versions.map((version) => (
-            <li key={version.oid}>
+          {versions.map((version, index) => (
+            <li key={version.oid} className={styles.versionRow}>
               <button
                 type="button"
+                className={styles.versionButton}
                 aria-pressed={selected === version.oid}
                 disabled={
                   disabled || recoveryBlocked || selected === version.oid
@@ -88,6 +92,18 @@ export function VersionsPanel({
                   {new Date(version.timestamp * 1000).toLocaleString()}
                 </small>
               </button>
+              {index === 0 && !selected && (
+                <button
+                  type="button"
+                  className={styles.restoreButton}
+                  aria-label="Restore latest version"
+                  title="Restore latest version"
+                  disabled={disabled || recoveryBlocked || Boolean(error)}
+                  onClick={() => onRestoreLatest(version.oid)}
+                >
+                  <RotateCcw size={14} />
+                </button>
+              )}
             </li>
           ))}
         </ul>

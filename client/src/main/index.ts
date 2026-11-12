@@ -164,6 +164,9 @@ function registerIpc() {
   handle("versions:active", () => versions.active());
   handle("versions:changed", () => versions.changed());
   handle("versions:restore", () => versions.recover());
+  handle("versions:restore-latest", (oid: string) =>
+    availableVersions().restoreLatest(oid),
+  );
   handle("project:read", (relative: string) => project.read(relative));
   handle("project:save", (request: SaveRequest) => project.save(request));
   handle("project:graph", (path: string, code: string) =>

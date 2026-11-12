@@ -324,6 +324,17 @@ export class ProjectVersions {
     return (await this.manifest()) !== null;
   }
 
+  async restoreLatest(oid: string): Promise<void> {
+    if (await this.manifest())
+      throw new Error(
+        "Return to the working state before restoring a version.",
+      );
+    const latest = (await this.list())[0];
+    if (!latest || latest.oid !== oid)
+      throw new Error("The latest version changed. Refresh the version list.");
+    await this.replace(await this.readTree(latest.oid));
+  }
+
   async changed(): Promise<boolean> {
     const manifest = await this.manifest();
     if (!manifest) return false;

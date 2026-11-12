@@ -84,6 +84,61 @@ test("visible project snippets are versioned even when ignored by Git", async ()
   }
 });
 
+test("restoring the latest version discards working snippets without creating a snapshot", async () => {
+  const base = await fs.mkdtemp(path.join(os.tmpdir(), "wien-reset-"));
+  const root = path.join(base, "project");
+  const recovery = path.join(base, "data");
+  await fs.mkdir(root);
+  try {
+    const versions = new ProjectVersions(root, recovery);
+    await fs.writeFile(path.join(root, "song.strudel"), "first");
+    await fs.writeFile(path.join(root, "deleted.js"), "saved file");
+    await versions.create("first");
+    const old = (await versions.list())[0].oid;
+    await fs.writeFile(path.join(root, "song.strudel"), "latest");
+    await versions.create("latest");
+    const latest = (await versions.list())[0].oid;
+    await fs.writeFile(path.join(root, "song.strudel"), "working");
+    await fs.unlink(path.join(root, "deleted.js"));
+    await fs.writeFile(path.join(root, "new.js"), "new");
+    await fs.writeFile(path.join(root, "notes.txt"), "keep");
+    const index = await fs.readFile(path.join(root, ".git", "index"));
+    await assert.rejects(versions.restoreLatest(old), /latest/i);
+    await versions.restoreLatest(latest);
+    assert.equal(
+      await fs.readFile(path.join(root, "song.strudel"), "utf8"),
+      "latest",
+    );
+    assert.equal(
+      await fs.readFile(path.join(root, "deleted.js"), "utf8"),
+      "saved file",
+    );
+    await assert.rejects(fs.access(path.join(root, "new.js")));
+    assert.equal(
+      await fs.readFile(path.join(root, "notes.txt"), "utf8"),
+      "keep",
+    );
+    assert.deepEqual(
+      await fs.readFile(path.join(root, ".git", "index")),
+      index,
+    );
+    assert.equal(
+      await git.resolveRef({ fs: nativeFs, dir: root, ref: "HEAD" }),
+      latest,
+    );
+    assert.equal(await versions.active(), false);
+    await assert.rejects(fs.access(path.join(recovery, "version-recovery")));
+    await versions.select(old);
+    await assert.rejects(versions.restoreLatest(latest), /working state/);
+    assert.equal(
+      await fs.readFile(path.join(root, "song.strudel"), "utf8"),
+      "first",
+    );
+  } finally {
+    await fs.rm(base, { recursive: true, force: true });
+  }
+});
+
 test("recovering history restores working files, including untracked files", async () => {
   const base = await fs.mkdtemp(path.join(os.tmpdir(), "wien-history-"));
   const root = path.join(base, "project");

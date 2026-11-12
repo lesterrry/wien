@@ -41,10 +41,20 @@
   margin: 8px 0 0;
 }
 
-.panel li button {
+.versionRow {
+  display: flex;
+  gap: 4px;
+}
+
+.panel .versionButton {
   width: 100%;
+  min-width: 0;
   text-align: left;
   overflow-wrap: anywhere;
+}
+
+.restoreButton {
+  flex: 0 0 auto;
 }
 
 .panel small {

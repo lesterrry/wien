@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import * as fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -61,6 +62,31 @@ try {
   assert.equal(
     await fs.readFile(path.join(root, "song.js"), "utf8"),
     "working",
+  );
+  await fs.writeFile(path.join(root, "new.strudel"), "new file");
+  page.once("dialog", (dialog) => {
+    assert.match(dialog.message(), /cannot be undone/i);
+    return dialog.dismiss();
+  });
+  await page.getByRole("button", { name: "Restore latest version" }).click();
+  assert.equal(
+    await fs.readFile(path.join(root, "song.js"), "utf8"),
+    "working",
+  );
+  assert.equal(
+    await fs.readFile(path.join(root, "new.strudel"), "utf8"),
+    "new file",
+  );
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Restore latest version" }).click();
+  await page.waitForFunction(
+    () => document.querySelector(".cm-content")?.textContent === "second",
+  );
+  assert.equal(await fs.readFile(path.join(root, "song.js"), "utf8"), "second");
+  await assert.rejects(fs.access(path.join(root, "new.strudel")));
+  const hash = createHash("sha256").update(root).digest("hex");
+  await assert.rejects(
+    fs.access(path.join(base, "data", "version-recovery", hash)),
   );
   assert.deepEqual(errors, []);
   await page.screenshot({ path: path.join(base, "versions.png") });
