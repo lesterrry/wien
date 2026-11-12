@@ -10,6 +10,10 @@ const api: WorkspaceApi = {
   restoreVersion: () => ipcRenderer.invoke("versions:restore"),
   assist: (id, request) => ipcRenderer.invoke("assistant:send", id, request),
   cancelAssist: (id) => ipcRenderer.send("assistant:cancel", id),
+  readControlPreferences: (root) =>
+    ipcRenderer.invoke("project:controls:read", root),
+  saveControlPreferences: (root, preferences) =>
+    ipcRenderer.invoke("project:controls:save", root, preferences),
   current: () => ipcRenderer.invoke("project:current"),
   open: () => ipcRenderer.invoke("project:open"),
   create: () => ipcRenderer.invoke("project:create"),

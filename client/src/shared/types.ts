@@ -1,4 +1,5 @@
 import type { AssistRequest, AssistResponse } from "./assistant";
+import type { PanelPreferences } from "./control-tree";
 import type { ModuleGraph } from "./modules";
 
 export interface Entry {
@@ -35,6 +36,11 @@ export interface WorkspaceApi {
   restoreVersion(): Promise<void>;
   assist(id: string, request: AssistRequest): Promise<AssistResponse>;
   cancelAssist(id: string): void;
+  readControlPreferences(projectRoot: string): Promise<PanelPreferences | null>;
+  saveControlPreferences(
+    projectRoot: string,
+    preferences: PanelPreferences,
+  ): Promise<void>;
   current(): Promise<Project>;
   open(): Promise<Project | null>;
   create(): Promise<Project | null>;
