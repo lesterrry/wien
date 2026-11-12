@@ -66,7 +66,7 @@ jobs:
           tar -C "$RUNNER_TEMP/wien-release" -cf "$RUNNER_TEMP/wien-release.tar" \
             images.tar.gz compose.yaml nginx.conf server.toml skill.toml
 
-      - name: Deploy over SSH
+      - name: Deploy and check readiness over SSH
         shell: bash
         env:
           VPS_HOST: ${{ vars.VPS_HOST }}
@@ -90,8 +90,5 @@ jobs:
           ssh "${ssh_options[@]}" "$VPS_USER@$VPS_HOST" check
           ssh "${ssh_options[@]}" "$VPS_USER@$VPS_HOST" "deploy $RELEASE_ID" \
             < "$RUNNER_TEMP/wien-release.tar"
-          printf 'Deployed `%s` to https://wien.aydar.media.\n\nPublic generation remains disabled.\n' \
+          printf 'Deployed `%s` to https://wien.aydar.media.\n\nBackend and nginx readiness verified on the VPS over SSH.\nPublic generation remains disabled.\n' \
             "$RELEASE_ID" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Check public readiness
-        run: curl --fail --silent --show-error --connect-timeout 5 --max-time 15 --retry 5 --retry-delay 3 --retry-all-errors https://wien.aydar.media/ready

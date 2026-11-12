@@ -10,6 +10,11 @@ The runner builds `linux/amd64` server and RAG images, tags them with
 No registry login is needed. The VPS loads the ready images without compiling Rust.
 Releases live in `/opt/wien/releases`; `current` and `previous` identify deployments.
 A failed local health/readiness check triggers restoration of the previous release.
+Readiness is checked on the VPS within the SSH deployment: `/ready` must succeed
+both directly on the backend and through nginx with `Host: wien.aydar.media`;
+public inference must still return 503. Any failure makes the SSH step fail.
+The runner does not probe the public Cloudflare URL because Bot Fight Mode can
+challenge automated requests. These checks cover the origin, not Cloudflare.
 The receiver retains two successful releases and their images.
 
 Production uses `deploy/compose.yaml`, not `just run-server` or the local Codex
