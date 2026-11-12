@@ -77,6 +77,10 @@ impl Codex {
             .await
             .map_err(transport_error)?;
         if !response.status().is_success() {
+            tracing::warn!(
+                status = response.status().as_u16(),
+                "Model provider rejected HTTP request"
+            );
             // Never deserialize, log, or expose an upstream error body.
             return Err(match response.status() {
                 StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => ProviderError::AuthRequired,
@@ -178,6 +182,12 @@ impl Provider for Codex {
 }
 
 fn transport_error(error: reqwest::Error) -> ProviderError {
+    // Do not log the raw error: it can carry request URLs or sensitive context.
+    tracing::warn!(
+        timeout = error.is_timeout(),
+        connect = error.is_connect(),
+        "Model provider transport failed; check network and TLS trust"
+    );
     if error.is_timeout() {
         ProviderError::Timeout
     } else {

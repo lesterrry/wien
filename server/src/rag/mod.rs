@@ -29,7 +29,10 @@ impl RagClient {
         let token = std::env::var("STRUDEL_RAG_BEARER_TOKEN")
             .ok()
             .filter(|v| !v.is_empty());
-        Self::new(&endpoint, token.as_deref(), Duration::from_secs(15))
+        // RAG's default search/embedding deadline is 30s. Allow it to finish
+        // and return its status before the caller deadline; /assist still has
+        // its own 120s total budget.
+        Self::new(&endpoint, token.as_deref(), Duration::from_secs(35))
     }
 
     pub fn new(uri: &str, token: Option<&str>, timeout: Duration) -> Result<Self, ToolError> {

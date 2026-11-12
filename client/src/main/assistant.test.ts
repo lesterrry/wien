@@ -116,6 +116,22 @@ test("assistant identifies an old server without the assistant route", async (t)
   );
 });
 
+test("provider connectivity failures are actionable, sanitized and not retried", async (t) => {
+  const fetch = t.mock.method(globalThis, "fetch", async () =>
+    Response.json(
+      { code: "provider_unavailable", message: "test-only-secret" },
+      { status: 502 },
+    ),
+  );
+  await assert.rejects(
+    askAssistant(request, new AbortController().signal),
+    (error: Error) =>
+      error.message.includes("network, VPN and certificates") &&
+      !error.message.includes("test-only-secret"),
+  );
+  assert.equal(fetch.mock.callCount(), 1);
+});
+
 // Let response.json() and retry scheduling settle without advancing mocked time.
 const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
 const busy = (retryAfter = "2") =>

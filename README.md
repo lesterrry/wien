@@ -71,6 +71,22 @@ docker compose exec skill strudel-rag remote info
 Для запуска обоих сервисов в фоне: `docker compose up -d --build`.
 Для остановки: `docker compose down` (данные RAG сохраняются).
 
+Если `/v1/assist` возвращает `provider_unavailable`, проверьте доступ к модели
+из контейнера: `docker compose exec server curl -I https://chatgpt.com/backend-api/codex/responses`.
+HTTP 405 без авторизации означает, что соединение и TLS работают. `/ready`
+проверяет только RAG и не обнаруживает эту проблему.
+
+Если корпоративный DNS возвращает только IPv6, задайте `WIEN_DOCKER_IPV6=true`
+в `.env`. IPv6 должен работать и в Docker VM. Для добавления корпоративного CA
+задайте `COMPOSE_FILE=compose.yaml:compose.ca.yaml` и
+`WIEN_CA_BUNDLE=./.local/ca-bundle.pem`: это PEM bundle публичных доверенных CA
+(обычные корневые сертификаты плюс корпоративный CA, без приватных ключей).
+Оба сервиса подключат его read-only; проверка TLS остаётся включённой.
+Сертификат экспортируйте из уже доверенного хранилища вашей ОС, а не из
+непроверенного ответа сервера. `*.pem` исключены из Git и Docker build context.
+При изменении IPv6 нужно пересоздать сеть: `docker compose down`, затем
+`just run-server`. Не добавляйте `--volumes`: индекс должен сохраниться.
+
 gRPC доступен на `127.0.0.1:50051`; порт хоста можно изменить через
 `STRUDEL_RAG_PORT`. Данные сохраняются в named volume `skill-data`.
 Первый запуск без индекса допустим: `remote info` покажет `ready: false`.

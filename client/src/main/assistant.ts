@@ -15,6 +15,14 @@ const errors: Record<string, string> = {
   provider_auth_required: "Sign in with codex login, then try again.",
   provider_rate_limited: "Model usage limit reached. Try again later.",
   provider_timeout: "The model took too long. Try again.",
+  provider_unavailable:
+    "The server cannot reach the model provider. Check its network, VPN and certificates.",
+  provider_rejected_request:
+    "The model provider rejected the request. Check the configured model and account access.",
+  provider_incomplete_response:
+    "The model stopped before finishing. Your file is unchanged. Try again.",
+  provider_response_too_large:
+    "The model response was too large. Try a narrower request.",
   provider_invalid_response:
     "The model returned an invalid answer. Your file is unchanged.",
   invalid_request: "This prompt or file cannot be sent. Try a smaller snippet.",

@@ -1,0 +1,25 @@
+# Optional corporate CA bundle, in addition to the ordinary Compose file.
+# COMPOSE_FILE=compose.yaml:compose.ca.yaml
+services:
+  server:
+    environment:
+      SSL_CERT_FILE: /run/wien/ca-bundle.pem
+      CURL_CA_BUNDLE: /run/wien/ca-bundle.pem
+    volumes:
+      - type: bind
+        source: ${WIEN_CA_BUNDLE:?Set WIEN_CA_BUNDLE to a trusted PEM CA bundle}
+        target: /run/wien/ca-bundle.pem
+        read_only: true
+        bind:
+          create_host_path: false
+  skill:
+    environment:
+      SSL_CERT_FILE: /run/wien/ca-bundle.pem
+      CURL_CA_BUNDLE: /run/wien/ca-bundle.pem
+    volumes:
+      - type: bind
+        source: ${WIEN_CA_BUNDLE:?Set WIEN_CA_BUNDLE to a trusted PEM CA bundle}
+        target: /run/wien/ca-bundle.pem
+        read_only: true
+        bind:
+          create_host_path: false
