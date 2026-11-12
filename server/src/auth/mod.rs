@@ -54,7 +54,7 @@ pub struct Error {
     pub code: &'static str,
     pub message: &'static str,
     #[serde(skip)]
-    status: StatusCode,
+    pub(crate) status: StatusCode,
 }
 impl Error {
     fn new(status: StatusCode, code: &'static str, message: &'static str) -> Self {
@@ -150,6 +150,10 @@ fn token(headers: &HeaderMap) -> Result<&str, Error> {
         .filter(|v| !v.is_empty())
         .ok_or_else(Error::unauthorized)
 }
+pub(crate) async fn authenticate(pool: &PgPool, headers: &HeaderMap) -> Result<String, Error> {
+    Ok(session::user(pool, token(headers)?).await?.id)
+}
+
 fn body<T>(value: Result<Json<T>, JsonRejection>) -> Result<T, Error> {
     value.map(|Json(v)| v).map_err(|e| {
         if e.status() == StatusCode::PAYLOAD_TOO_LARGE {
@@ -229,7 +233,7 @@ async fn register(
     Ok((
         StatusCode::CREATED,
         Json(SignedIn {
-            user: user.profile(),
+            user: user.profile(&auth.pool).await?,
             token,
         }),
     ))
@@ -273,7 +277,7 @@ async fn login(
     let token = session::create(&mut tx, &user.id).await?;
     tx.commit().await?;
     Ok(Json(SignedIn {
-        user: user.profile(),
+        user: user.profile(&auth.pool).await?,
         token,
     }))
 }
@@ -281,7 +285,10 @@ async fn login(
 #[utoipa::path(get, path="/users/me", security(("session"=[])), responses((status=200,body=Profile),(status=401,body=Error),(status=503,body=Error)))]
 async fn profile(State(auth): State<Auth>, headers: HeaderMap) -> Result<Json<Profile>, Error> {
     Ok(Json(
-        session::user(&auth.pool, token(&headers)?).await?.profile(),
+        session::user(&auth.pool, token(&headers)?)
+            .await?
+            .profile(&auth.pool)
+            .await?,
     ))
 }
 
@@ -350,7 +357,7 @@ async fn change_password(
     let token = session::create(&mut tx, &user.id).await?;
     tx.commit().await?;
     Ok(Json(SignedIn {
-        user: user.profile(),
+        user: user.profile(&auth.pool).await?,
         token,
     }))
 }

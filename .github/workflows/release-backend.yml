@@ -90,5 +90,5 @@ jobs:
           ssh "${ssh_options[@]}" "$VPS_USER@$VPS_HOST" check
           ssh "${ssh_options[@]}" "$VPS_USER@$VPS_HOST" "deploy $RELEASE_ID" \
             < "$RUNNER_TEMP/wien-release.tar"
-          printf 'Deployed `%s` to https://wien.aydar.media.\n\nBackend and nginx readiness verified on the VPS over SSH.\nPublic generation remains disabled.\n' \
+          printf 'Deployed `%s` to https://wien.aydar.media.\n\nBackend and nginx readiness verified on the VPS over SSH.\nAssist requires a user session and available quota.\n' \
             "$RELEASE_ID" >> "$GITHUB_STEP_SUMMARY"

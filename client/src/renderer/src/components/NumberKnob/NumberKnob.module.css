@@ -8,8 +8,8 @@
   height: 176px;
   margin: 0;
   border: 1px solid var(--color-border);
-  border-radius: 9px;
-  padding: 7px 9px 10px;
+  border-radius: var(--control-radius, 6px);
+  padding: 8px;
 }
 
 .controlHeading {

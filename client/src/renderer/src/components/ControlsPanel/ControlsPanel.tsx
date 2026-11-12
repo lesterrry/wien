@@ -447,6 +447,7 @@ export function ControlsPanel({
       <div className={styles.controlsTitle}>
         <SlidersHorizontal size={14} />
         <span>Controls</span>
+        {loading && <small>Updating…</small>}
         <button
           type="button"
           className={styles.controllerButton}
@@ -457,7 +458,6 @@ export function ControlsPanel({
         >
           {fullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
         </button>
-        {loading && <small>Updating…</small>}
       </div>
       <div className={styles.rootHeading}>
         <span title={root ?? undefined}>

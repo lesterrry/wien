@@ -60,7 +60,7 @@ import {
   type Document,
   useSnippetSessions,
 } from "../../hooks/useSnippetSessions";
-import { Account } from "../Account/Account";
+import { useAccount } from "../Account/Account";
 import { ControlsPanel } from "../ControlsPanel/ControlsPanel";
 import { Dialog } from "../Dialog/Dialog";
 import { Explorer } from "../Explorer/Explorer";
@@ -108,6 +108,12 @@ const message = (error: unknown) =>
   );
 
 export function App() {
+  const {
+    user,
+    openProfile,
+    openUpgrade,
+    refresh: refreshAccount,
+  } = useAccount();
   const [preferences, setPreferences] = useState<PanelPreferences>({
     pinned: null,
     roots: {},
@@ -225,11 +231,11 @@ export function App() {
     (open: boolean) => setWorkspaceView(open ? "controls" : "editor"),
     [],
   );
-  const playingFile =
-    sessions
-      .filter((session) => session.playback.started)
-      .map((session) => session.document.path)
-      .join(", ") || null;
+  // const playingFile =
+  //   sessions
+  //     .filter((session) => session.playback.started)
+  //     .map((session) => session.document.path)
+  //     .join(", ") || null;
   const pendingControlPaths = useRef(new Set<string>());
 
   const updateTabs = useCallback((next: string[]) => {
@@ -257,7 +263,7 @@ export function App() {
   const flush = useCallback(async () => {
     if (saving.current) return saving.current;
     const work = async () => {
-      for (; ;) {
+      for (;;) {
         const session = sessionsRef.current.find(
           (s) => s.document.code !== s.document.saved,
         );
@@ -278,13 +284,13 @@ export function App() {
           setProject((currentProject) =>
             currentProject
               ? {
-                ...currentProject,
-                entries: markExports(
-                  currentProject.entries,
-                  snapshot.path,
-                  hasExports(snapshot.code),
-                ),
-              }
+                  ...currentProject,
+                  entries: markExports(
+                    currentProject.entries,
+                    snapshot.path,
+                    hasExports(snapshot.code),
+                  ),
+                }
               : currentProject,
           );
         } catch (error) {
@@ -408,7 +414,7 @@ export function App() {
       controlWrites.current -= 1;
       setTreeVersion((version) => version + 1);
     });
-    controlQueue.current = settled.catch(() => { });
+    controlQueue.current = settled.catch(() => {});
     return settled;
   }
 
@@ -868,46 +874,6 @@ export function App() {
     return saved;
   }
 
-  async function restoreLatestVersion(oid: string) {
-    await run(async () => {
-      if (
-        !window.confirm(
-          "Restore the latest version? Current changes to .strudel and .js files will be lost, including files created since this version. This cannot be undone.",
-        )
-      )
-        return;
-      await controlQueue.current;
-      await preferencesSave.current;
-      await flush();
-      if (liveUpdateTimer.current !== null) {
-        clearTimeout(liveUpdateTimer.current);
-        liveUpdateTimer.current = null;
-      }
-      pendingControlPaths.current.clear();
-      await removeSessions(tabsRef.current);
-      updateTabs([]);
-      updateDocument(null);
-      setGraphOpen(false);
-      setControllerOpen(false);
-      setControllerRoot(null);
-      setDefinitionContext(null);
-      navigationBack.current.clear();
-      setSelection(null);
-      try {
-        await api.restoreLatestVersion(oid);
-      } finally {
-        const next = await api.current();
-        setProject(next);
-        setTreeVersion((version) => version + 1);
-        const first = next.entries.find((entry) => !entry.children);
-        if (first) {
-          const code = await api.read(first.id);
-          updateDocument({ path: first.id, code, saved: code });
-        }
-      }
-    });
-  }
-
   async function submitModal() {
     if (!modal || busyRef.current) return;
     busyRef.current = true;
@@ -1022,7 +988,7 @@ export function App() {
     let cancelled = false;
     const root = projectRoot;
     const task = preferencesSave.current
-      .catch(() => { })
+      .catch(() => {})
       .then(() => api.saveControlPreferences(root, preferences))
       .then(() => {
         try {
@@ -1106,11 +1072,11 @@ export function App() {
         value: change.value,
         ...(control.kind === "enum"
           ? {
-            selectedKey:
-              control.options.find((option) =>
-                Object.is(option.value, change.value),
-              )?.key ?? control.selectedKey,
-          }
+              selectedKey:
+                control.options.find((option) =>
+                  Object.is(option.value, change.value),
+                )?.key ?? control.selectedKey,
+            }
           : {}),
       } as Control;
     if (control.kind !== "multi-enum") return control;
@@ -1140,12 +1106,12 @@ export function App() {
       controls:
         group.path === path
           ? group.controls.flatMap((control) =>
-            control.name !== name
-              ? [control]
-              : change === undefined
-                ? []
-                : [previewControl(control, change)],
-          )
+              control.name !== name
+                ? [control]
+                : change === undefined
+                  ? []
+                  : [previewControl(control, change)],
+            )
           : group.controls,
       children: group.children.map(updateTree),
     });
@@ -1313,7 +1279,7 @@ export function App() {
             controller={{
               open: controllerOpen,
               disabled: busy,
-              onSelect: () => { },
+              onSelect: () => {},
               onClose: () => setWorkspaceView("editor"),
             }}
           />
@@ -1342,75 +1308,94 @@ export function App() {
 
       {sidebar && (
         <aside className={styles.sidebar}>
-          <Account>
-            {(user, openProfile) => (
-              <div className={styles.projectPickerWrap}>
+          <div className={styles.projectPickerWrap}>
+            <button
+              className={styles.projectPicker}
+              type="button"
+              aria-label="Project and account"
+              aria-expanded={projectMenu}
+              onClick={(event) => {
+                event.stopPropagation();
+                setProjectMenu(!projectMenu);
+                if (!projectMenu) void refreshAccount().catch(() => {});
+              }}
+              disabled={busy}
+            >
+              <span className={styles.projectAvatar}>
+                <Code2 size={18} />
+              </span>
+              <span>
+                <strong>{project?.name ?? "Opening workspace…"}</strong>
+                <small className={styles.accountIdentity}>
+                  <span title={user?.username}>
+                    {user?.username ?? "Not signed in"}
+                  </span>
+                  {user && user.tier !== "free" && (
+                    <span className={styles.tierBadge} data-tier={user.tier}>
+                      {user.tier.toUpperCase()}
+                    </span>
+                  )}
+                </small>
+              </span>
+              <ChevronDown size={14} />
+            </button>
+            {projectMenu && (
+              <div className={classNames(styles.menu, styles.projectMenu)}>
                 <button
-                  className={styles.projectPicker}
                   type="button"
-                  aria-label="Project and account"
-                  aria-expanded={projectMenu}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setProjectMenu(!projectMenu);
+                  onClick={() => {
+                    setProjectMenu(false);
+                    openProfile();
                   }}
-                  disabled={busy}
                 >
-                  <span className={styles.projectAvatar}>
-                    <Code2 size={18} />
-                  </span>
-                  <span>
-                    <strong>{project?.name ?? "Opening workspace…"}</strong>
-                    <small title={user?.username}>
-                      {user?.username ?? "Not signed in"}
-                    </small>
-                  </span>
-                  <ChevronDown size={14} />
+                  <UserRound size={15} />
+                  {user ? "Your profile" : "Sign in"}
                 </button>
-                {projectMenu && (
-                  <div className={classNames(styles.menu, styles.projectMenu)}>
+                {user && (
+                  <div className={styles.subscription}>
+                    <div>
+                      <strong>
+                        {user.tier === "free"
+                          ? "Free"
+                          : user.tier.toUpperCase()}
+                      </strong>
+                      <span>
+                        {user.assist_requests_remaining} assist requests left
+                      </span>
+                    </div>
                     <button
                       type="button"
                       onClick={() => {
                         setProjectMenu(false);
-                        openProfile();
+                        openUpgrade();
                       }}
                     >
-                      <UserRound size={15} />
-                      {user ? "Your profile" : "Sign in"}
-                    </button>
-                    <div className={styles.menuDivider} />
-                    <button
-                      type="button"
-                      onClick={() => void switchProject(true)}
-                    >
-                      <Plus size={15} />
-                      New project
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void switchProject(false)}
-                    >
-                      <FolderOpen size={15} />
-                      Open project…
-                    </button>
-                    <div className={styles.menuDivider} />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void api
-                          .reveal()
-                          .catch((error) => setError(message(error)))
-                      }
-                    >
-                      <ArrowRight size={15} />
-                      Show project folder
+                      <span>Explore plans</span> <ArrowRight size={13} />
                     </button>
                   </div>
                 )}
+                <div className={styles.menuDivider} />
+                <button type="button" onClick={() => void switchProject(true)}>
+                  <Plus size={15} />
+                  New project
+                </button>
+                <button type="button" onClick={() => void switchProject(false)}>
+                  <FolderOpen size={15} />
+                  Open project…
+                </button>
+                <div className={styles.menuDivider} />
+                <button
+                  type="button"
+                  onClick={() =>
+                    void api.reveal().catch((error) => setError(message(error)))
+                  }
+                >
+                  <ArrowRight size={15} />
+                  Show project folder
+                </button>
               </div>
             )}
-          </Account>
+          </div>
           <label className={styles.searchBox}>
             <Search size={14} />
             <input
@@ -1481,10 +1466,10 @@ export function App() {
             entries={
               document
                 ? markExports(
-                  project?.entries ?? [],
-                  document.path,
-                  hasExports(document.code),
-                )
+                    project?.entries ?? [],
+                    document.path,
+                    hasExports(document.code),
+                  )
                 : (project?.entries ?? [])
             }
             selected={document?.path ?? null}
@@ -1529,7 +1514,6 @@ export function App() {
             }}
             onCreate={createVersion}
             onSelect={(oid) => void changeVersion(oid)}
-            onRestoreLatest={(oid) => void restoreLatestVersion(oid)}
           />
           <div className={styles.sidebarBottom}>
             <button
@@ -1538,11 +1522,10 @@ export function App() {
               onClick={() => openGraph()}
               disabled={!project || busy}
               aria-label="Open Graph View"
-              aria-current={graphActive ? "page" : undefined}
             >
               <Network size={16} />
               <span>
-                Graph View<small>Explore snippet dependencies</small>
+                Graph View<small>Explore project dependencies</small>
               </span>
               <ArrowRight size={13} />
             </button>
@@ -1621,18 +1604,19 @@ export function App() {
                   Back to controls
                 </button>
               )}
-              {playback.started && (
+              {/* {playback.started && (
                 <small
                   className={styles.playingTarget}
                   title={playingFile ?? undefined}
                 >
                   Playing {playingFile?.split("/").at(-1)}
                 </small>
-              )}
+              )} */}
               <button
                 type="button"
                 className={styles.iconButton}
                 aria-label="Ask Wien"
+                data-assistant-trigger
                 title={`Ask Wien (${shortcut} ,)`}
                 disabled={!document || busy || controllerOpen}
                 onClick={() => player.current?.assist("bottom")}
@@ -1654,16 +1638,16 @@ export function App() {
                   session.playback.started &&
                   session.document.path !== document?.path,
               ) && (
-                  <button
-                    type="button"
-                    className={styles.iconButton}
-                    aria-label="Stop all playback"
-                    title={`Stop all (${shortcut} ⇧ .)`}
-                    onClick={() => void stopAll()}
-                  >
-                    <SquareX size={16} />
-                  </button>
-                )}
+                <button
+                  type="button"
+                  className={styles.iconButton}
+                  aria-label="Stop all playback"
+                  title={`Stop all (${shortcut} ⇧ .)`}
+                  onClick={() => void stopAll()}
+                >
+                  <SquareX size={16} />
+                </button>
+              )}
               <button
                 type="button"
                 className={styles.playButton}
@@ -1795,7 +1779,7 @@ export function App() {
             style={{
               display:
                 session.document.path === document?.path &&
-                  workspaceView === "editor"
+                workspaceView === "editor"
                   ? "flex"
                   : "none",
             }}

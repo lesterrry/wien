@@ -6,4 +6,5 @@ pub mod database;
 pub mod genres;
 pub mod providers;
 pub mod rag;
+pub mod subscriptions;
 pub mod users;

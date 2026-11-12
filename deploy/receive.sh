@@ -71,7 +71,12 @@ activate() {
     local status
     status=$(curl --silent --show-error --connect-timeout 5 --max-time 10 --output /dev/null --write-out '%{http_code}' \
         -X POST -H 'Host: wien.aydar.media' http://127.0.0.1/v1/assist) || return 1
-    [[ "$status" == 503 ]]
+    # 503 supports rollback to releases with inference completely disabled.
+    [[ "$status" == 401 || "$status" == 503 ]] || return 1
+    status=$(curl --silent --show-error --connect-timeout 5 --max-time 10 --output /dev/null --write-out '%{http_code}' \
+        -X POST -H 'Host: wien.aydar.media' http://127.0.0.1/v1/generate) || return 1
+    # Removed endpoint returns 404; 503 supports rollback to older nginx configs.
+    [[ "$status" == 404 || "$status" == 503 ]]
 }
 if ! activate "$release"; then
     printf 'Deployment failed; restoring previous release.\n' >&2

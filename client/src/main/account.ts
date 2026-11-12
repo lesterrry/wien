@@ -3,6 +3,7 @@ import type {
   PasswordChange,
   UserProfile,
 } from "../shared/account";
+import { tiers } from "../shared/account";
 
 export interface TokenStore {
   read(): Promise<string | null>;
@@ -31,7 +32,13 @@ function profile(value: unknown): UserProfile {
     !/^[a-z0-9_]{3,32}$/.test(value.username) ||
     !("created_at" in value) ||
     typeof value.created_at !== "string" ||
-    !Number.isFinite(Date.parse(value.created_at))
+    !Number.isFinite(Date.parse(value.created_at)) ||
+    !("tier" in value) ||
+    !tiers.some((tier) => tier === value.tier) ||
+    !("assist_requests_remaining" in value) ||
+    typeof value.assist_requests_remaining !== "number" ||
+    !Number.isSafeInteger(value.assist_requests_remaining) ||
+    value.assist_requests_remaining < 0
   ) {
     throw new Error("Invalid account response.");
   }
@@ -39,6 +46,8 @@ function profile(value: unknown): UserProfile {
     id: value.id,
     username: value.username,
     created_at: value.created_at,
+    tier: value.tier as UserProfile["tier"],
+    assist_requests_remaining: value.assist_requests_remaining,
   };
 }
 

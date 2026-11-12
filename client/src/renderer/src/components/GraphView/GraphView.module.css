@@ -50,7 +50,6 @@
   --xy-controls-button-color-hover-default: var(--color-primary);
   --xy-controls-button-border-color-default: var(--color-border);
   --xy-controls-box-shadow-default: 0 2px 12px #0002;
-  --xy-attribution-background-color-default: var(--color-surface);
   --xy-edge-stroke-default: var(--color-brand);
 }
 
@@ -58,9 +57,6 @@
   outline: 2px solid var(--color-brand);
   outline-offset: 4px;
   border-radius: 12px;
-}
-.canvas :global(.react-flow__attribution a) {
-  color: var(--color-muted);
 }
 .canvas :global(.react-flow__handle) {
   width: 7px;

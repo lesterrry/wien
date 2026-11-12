@@ -81,7 +81,7 @@ jobs:
       - name: Test account lifecycle with PostgreSQL
         env:
           DATABASE_URL: postgresql://wien_test:test-only-password@127.0.0.1:5432/wien_test
-        run: cargo test --locked -p wien-server --test accounts_db -- --ignored
+        run: cargo test --locked -p wien-server --test accounts_db --test subscriptions_db -- --ignored
 
       - name: Check generated HTTP contract
         run: bash server/scripts/generate-http.sh --check

@@ -6,7 +6,7 @@ import { externalWebUrl } from "../shared/links";
 import type { SaveRequest } from "../shared/types";
 import { AccountClient } from "./account";
 import { AccountStorage } from "./account-storage";
-import { askAssistant } from "./assistant";
+import { AssistAccessError, askAssistant } from "./assistant";
 import { backendConfig } from "./config";
 import { ProjectFs } from "./project-fs";
 import { ProjectVersions } from "./project-versions";
@@ -98,10 +98,8 @@ async function initializeProject() {
 
 function registerIpc() {
   const origin = backendConfig().url;
-  const account = new AccountClient(
-    origin,
-    new AccountStorage(app.getPath("userData"), origin),
-  );
+  const accountStorage = new AccountStorage(app.getPath("userData"), origin);
+  const account = new AccountClient(origin, accountStorage);
   let accountQueue: Promise<unknown> = Promise.resolve();
   const accountHandlers = {
     "account:current": () => account.current(),
@@ -141,8 +139,20 @@ function registerIpc() {
         throw new Error("An assistant request is already running.");
       const current = { id, controller: new AbortController() };
       assistantRequest = current;
+      let token: string | null = null;
       try {
-        return await askAssistant(request, current.controller.signal);
+        token = await accountStorage.read();
+        return await askAssistant(request, current.controller.signal, token);
+      } catch (error) {
+        if (error instanceof AssistAccessError) {
+          if (
+            error.action === "sign_in" &&
+            (await accountStorage.read()) === token
+          )
+            await accountStorage.write(null);
+          return { action: error.action };
+        }
+        throw error;
       } finally {
         if (assistantRequest === current) assistantRequest = null;
       }
@@ -196,9 +206,6 @@ function registerIpc() {
   handle("versions:active", () => versions.active());
   handle("versions:changed", () => versions.changed());
   handle("versions:restore", () => versions.recover());
-  handle("versions:restore-latest", (oid: string) =>
-    availableVersions().restoreLatest(oid),
-  );
   handle("project:read", (relative: string) => project.read(relative));
   handle("project:save", (request: SaveRequest) => project.save(request));
   handle("project:graph", (path: string, code: string) =>
@@ -309,7 +316,9 @@ function createWindow() {
 void app
   .whenReady()
   .then(async () => {
-    if (process.platform === "darwin") app.dock?.setIcon(icon);
+    // Packaged macOS apps use their native Icon Composer asset and system appearance.
+    if (process.platform === "darwin" && !app.isPackaged)
+      app.dock?.setIcon(icon);
     await initializeProject();
     registerIpc();
     Menu.setApplicationMenu(

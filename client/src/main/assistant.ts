@@ -33,10 +33,22 @@ const errors: Record<string, string> = {
   request_too_large: "This prompt or file is too large.",
 };
 
+export class AssistAccessError extends Error {
+  constructor(public readonly action: "sign_in" | "upgrade") {
+    super(
+      action === "sign_in"
+        ? "Sign in to use assist."
+        : "You have used all your assist requests.",
+    );
+  }
+}
+
 export async function askAssistant(
   request: AssistRequest,
   signal: AbortSignal,
+  token: string | null,
 ): Promise<AssistResponse> {
+  if (!token) throw new AssistAccessError("sign_in");
   const backend = backendConfig();
   // Reuse the same snapshot on retries; only explicit pre-admission rejection is safe.
   const payload = JSON.stringify(request);
@@ -47,7 +59,10 @@ export async function askAssistant(
     try {
       response = await fetch(`${backend.url}/v1/assist`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: payload,
         redirect: "error",
         signal: AbortSignal.any([signal, AbortSignal.timeout(125_000)]),
@@ -72,6 +87,9 @@ export async function askAssistant(
         );
       const code =
         body && typeof body === "object" && "code" in body ? body.code : null;
+      if (response.status === 401) throw new AssistAccessError("sign_in");
+      if (response.status === 402 && code === "assist_quota_exhausted")
+        throw new AssistAccessError("upgrade");
       if (response.status === 429 && code === "assistant_busy" && attempt < 3) {
         const retryAfter = response.headers.get("Retry-After");
         const seconds =

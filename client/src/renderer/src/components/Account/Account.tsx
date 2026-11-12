@@ -1,7 +1,17 @@
 import { Loader2, UserRound } from "lucide-react";
-import { type FormEvent, type ReactNode, useEffect, useState } from "react";
+import {
+  createContext,
+  type FormEvent,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import type { UserProfile } from "../../../../shared/account";
 import { Dialog } from "../Dialog/Dialog";
+import { SubscriptionPlans } from "../SubscriptionPlans/SubscriptionPlans";
 import styles from "./Account.module.css";
 
 const api = window.workspace;
@@ -11,11 +21,22 @@ const errorMessage = (error: unknown) =>
     "",
   );
 
-export function Account({
-  children,
-}: {
-  children: (user: UserProfile | null, openProfile: () => void) => ReactNode;
-}) {
+interface AccountContextValue {
+  user: UserProfile | null;
+  refresh: () => Promise<UserProfile | null>;
+  openProfile: () => void;
+  openUpgrade: () => void;
+  ensureAssist: () => Promise<boolean>;
+  assistBlocked: (action: "sign_in" | "upgrade") => void;
+}
+const AccountContext = createContext<AccountContextValue | null>(null);
+export function useAccount() {
+  const value = useContext(AccountContext);
+  if (!value) throw new Error("AccountProvider is missing.");
+  return value;
+}
+
+export function AccountProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [mode, setMode] = useState<"login" | "register" | "password">("login");
@@ -27,18 +48,54 @@ export function Account({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
-  useEffect(() => {
-    let active = true;
-    void api
-      .accountCurrent()
-      .then((profile) => {
-        if (active) setUser(profile);
-      })
-      .catch(() => { });
-    return () => {
-      active = false;
-    };
+  const [plansOpen, setPlansOpen] = useState(false);
+  const refreshVersion = useRef(0);
+  const refresh = useCallback(async () => {
+    const version = ++refreshVersion.current;
+    const profile = await api.accountCurrent();
+    if (version === refreshVersion.current) setUser(profile);
+    return profile;
   }, []);
+  useEffect(() => {
+    void refresh().catch(() => {});
+    return () => {
+      refreshVersion.current++;
+    };
+  }, [refresh]);
+
+  function openProfile() {
+    setPlansOpen(false);
+    setOpen(true);
+  }
+  function openUpgrade() {
+    close();
+    setPlansOpen(true);
+  }
+  function assistBlocked(action: "sign_in" | "upgrade") {
+    if (action === "sign_in") {
+      refreshVersion.current++;
+      setUser(null);
+      close();
+      openProfile();
+      setNotice(
+        "Sign in to use assist. New accounts include 10 free requests.",
+      );
+    } else {
+      openUpgrade();
+    }
+  }
+  async function ensureAssist() {
+    const profile = await refresh();
+    if (!profile) {
+      assistBlocked("sign_in");
+      return false;
+    }
+    if (profile.assist_requests_remaining <= 0) {
+      assistBlocked("upgrade");
+      return false;
+    }
+    return true;
+  }
 
   function clearPasswords() {
     setPassword("");
@@ -74,12 +131,13 @@ export function Account({
       const profile =
         mode === "password"
           ? await api.accountChangePassword({
-            current_password: password,
-            new_password: nextPassword,
-          })
+              current_password: password,
+              new_password: nextPassword,
+            })
           : await (mode === "register"
-            ? api.accountRegister
-            : api.accountLogin)({ username, password });
+              ? api.accountRegister
+              : api.accountLogin)({ username, password });
+      refreshVersion.current++;
       setUser(profile);
       clearPasswords();
       setNotice(
@@ -100,6 +158,7 @@ export function Account({
     setNotice("");
     try {
       await api.accountLogout();
+      refreshVersion.current++;
       setUser(null);
       clearPasswords();
       setMode("login");
@@ -111,8 +170,23 @@ export function Account({
   }
 
   return (
-    <>
-      {children(user, () => setOpen(true))}
+    <AccountContext.Provider
+      value={{
+        user,
+        refresh,
+        openProfile,
+        openUpgrade,
+        ensureAssist,
+        assistBlocked,
+      }}
+    >
+      {children}
+      {plansOpen && (
+        <SubscriptionPlans
+          exhausted={user?.assist_requests_remaining === 0}
+          onClose={() => setPlansOpen(false)}
+        />
+      )}
       {open && (
         <Dialog
           title={
@@ -129,6 +203,7 @@ export function Account({
               <div className={styles.profile}>
                 <UserRound size={28} />
                 <strong>@{user.username}</strong>
+                <span className={styles.tier}>{user.tier.toUpperCase()}</span>
                 <span>
                   Joined {new Date(user.created_at).toLocaleDateString()}
                 </span>
@@ -208,9 +283,7 @@ export function Account({
                           required
                         />
                       </label>
-                      <p>
-                        12–128 characters.
-                      </p>
+                      <p>12–128 characters.</p>
                     </>
                   )}
                   <button className={styles.primary} type="submit">
@@ -267,6 +340,6 @@ export function Account({
           </div>
         </Dialog>
       )}
-    </>
+    </AccountContext.Provider>
   );
 }

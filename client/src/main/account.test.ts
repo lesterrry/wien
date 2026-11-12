@@ -6,6 +6,8 @@ const user = {
   id: "test-user",
   username: "music_maker",
   created_at: "2026-11-12T00:00:00Z",
+  tier: "free",
+  assist_requests_remaining: 10,
 };
 const token = "a".repeat(64);
 class MemoryStore implements TokenStore {

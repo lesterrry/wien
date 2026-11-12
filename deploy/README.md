@@ -12,7 +12,8 @@ Releases live in `/opt/wien/releases`; `current` and `previous` identify deploym
 A failed local health/readiness check triggers restoration of the previous release.
 Readiness is checked on the VPS within the SSH deployment: `/ready` must succeed
 both directly on the backend and through nginx with `Host: wien.aydar.media`;
-public inference must still return 503. Any failure makes the SSH step fail.
+unauthenticated assist must return 401 (503 is accepted for rollback to older releases),
+and the removed `/v1/generate` must return 404 (503 is accepted for older releases). Any failure makes the SSH step fail.
 The runner does not probe the public Cloudflare URL because Bot Fight Mode can
 challenge automated requests. These checks cover the origin, not Cloudflare.
 The receiver retains two successful releases and their images.
@@ -21,8 +22,9 @@ Production uses `deploy/compose.yaml`, not `just run-server` or the local Codex
 override. `/opt/wien/.env` and external volume `wien_skill-data` remain on the VPS.
 AI Tunnel credentials, PostgreSQL credentials and the RAG corpus are never uploaded to GitHub Actions.
 Nginx serves HTTP behind Cloudflare; no certificates are created.
-Public `/v1/*` remains disabled, including for signed-in users.
-Account endpoints `/auth/*` and `/users/me*` are forwarded to the server.
+Public `/v1/assist` requires a session and a remaining assist allowance.
+Nginx forwards all paths to the backend; authentication and quotas are enforced there.
+The legacy raw generation endpoint has been removed.
 Bot Fight Mode is unchanged; if it challenges desktop requests, the client reports
 the block explicitly instead of treating the HTML challenge as an API response.
 
@@ -42,7 +44,16 @@ GitHub environment and the local ignored `.local` directory.
 
 `deploy/receive.sh` is installed root-owned as `/usr/local/sbin/wien-deploy`.
 Changes to the receiver itself require an operator to reinstall it over the
-owner's SSH connection. Ordinary releases only update images and release configs.
+owner's SSH connection. **Before the first subscription release**, install the
+updated `deploy/receive.sh`: the previous receiver expects assist to return 503
+and would roll back a successful authenticated release. The updated receiver
+accepts 401 for assist and 404 for the removed generate endpoint, while remaining
+compatible with the previous release.
+
+```sh
+ssh spacespace01 'sudo install -m 0755 /dev/stdin /usr/local/sbin/wien-deploy' < deploy/receive.sh
+```
+Ordinary releases only update images and release configs.
 
 ## Operator commands
 

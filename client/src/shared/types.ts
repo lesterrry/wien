@@ -1,5 +1,5 @@
 import type { Credentials, PasswordChange, UserProfile } from "./account";
-import type { AssistRequest, AssistResponse } from "./assistant";
+import type { AssistRequest, AssistResult } from "./assistant";
 import type { PanelPreferences } from "./control-tree";
 import type { ModuleGraph } from "./modules";
 
@@ -40,8 +40,7 @@ export interface WorkspaceApi {
   versionActive(): Promise<boolean>;
   versionChanged(): Promise<boolean>;
   restoreVersion(): Promise<void>;
-  restoreLatestVersion(oid: string): Promise<void>;
-  assist(id: string, request: AssistRequest): Promise<AssistResponse>;
+  assist(id: string, request: AssistRequest): Promise<AssistResult>;
   cancelAssist(id: string): void;
   readControlPreferences(projectRoot: string): Promise<PanelPreferences | null>;
   saveControlPreferences(

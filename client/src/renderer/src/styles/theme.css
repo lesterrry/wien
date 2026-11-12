@@ -15,6 +15,11 @@
   --color-brand: #c6b8a4;
   --color-border: #3c3833;
   --color-border-strong: #58524a;
+  --color-border-focus: color-mix(
+    in srgb,
+    var(--color-brand) 65%,
+    var(--color-border-strong)
+  );
 
   /* Feedback and overlays */
   --color-danger: #e9a59a;

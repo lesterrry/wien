@@ -6,10 +6,12 @@ export function Dialog({
   title,
   children,
   onClose,
+  className,
 }: {
   title: string;
   children: ReactNode;
   onClose: () => void;
+  className?: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -18,7 +20,8 @@ export function Dialog({
   return (
     <dialog
       ref={ref}
-      className={styles.dialog}
+      closedby="any"
+      className={[styles.dialog, className].filter(Boolean).join(" ")}
       onCancel={onClose}
       aria-label={title}
     >

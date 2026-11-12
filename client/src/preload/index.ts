@@ -16,8 +16,6 @@ const api: WorkspaceApi = {
   versionActive: () => ipcRenderer.invoke("versions:active"),
   versionChanged: () => ipcRenderer.invoke("versions:changed"),
   restoreVersion: () => ipcRenderer.invoke("versions:restore"),
-  restoreLatestVersion: (oid) =>
-    ipcRenderer.invoke("versions:restore-latest", oid),
   assist: (id, request) => ipcRenderer.invoke("assistant:send", id, request),
   cancelAssist: (id) => ipcRenderer.send("assistant:cancel", id),
   readControlPreferences: (root) =>

@@ -11,6 +11,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { parseModule } from "../../../../shared/modules";
+import { useAccount } from "../Account/Account";
 import { AnimatedBorder } from "../AnimatedBorder/AnimatedBorder";
 import { MarkdownAnswer } from "../MarkdownAnswer/MarkdownAnswer";
 import styles from "./AssistantPopover.module.css";
@@ -30,6 +31,7 @@ export function AssistantPopover({
   placement: AssistantPlacement;
   disabled: boolean;
 }) {
+  const account = useAccount();
   const [open, setOpen] = useState(false);
   const [visible, setVisible] = useState(false);
   const [activePlacement, setActivePlacement] =
@@ -78,7 +80,7 @@ export function AssistantPopover({
   useEffect(() => {
     if (!invocation || invocation === lastInvocation.current) return;
     lastInvocation.current = invocation;
-    if (open && placement === "cursor") {
+    if (open) {
       close();
       return;
     }
@@ -165,6 +167,12 @@ export function AssistantPopover({
       close();
     };
     const outside = (event: PointerEvent) => {
+      // The trigger toggles on click; do not close first on its pointerdown.
+      if (
+        event.target instanceof Element &&
+        event.target.closest("[data-assistant-trigger]")
+      )
+        return;
       if (
         event.target instanceof Node &&
         !panel.current?.contains(event.target)
@@ -189,11 +197,21 @@ export function AssistantPopover({
     setError(null);
     setPending(true);
     try {
+      if (!(await account.ensureAssist())) {
+        close(false);
+        return;
+      }
+      if (request.current !== id) return;
       const result = await window.workspace.assist(id, {
         prompt: prompt.trim(),
         file: { path, content: snapshot.toString(), cursor: { anchor, head } },
       });
       if (request.current !== id || !view.dom.isConnected) return;
+      if ("action" in result) {
+        close(false);
+        account.assistBlocked(result.action);
+        return;
+      }
       if (result.code !== null && result.code !== snapshot.toString()) {
         if (view.state.doc !== snapshot || view.state.readOnly)
           throw new Error(
@@ -226,6 +244,7 @@ export function AssistantPopover({
           ),
         );
     } finally {
+      void account.refresh().catch(() => {});
       if (request.current === id) {
         request.current = null;
         setPending(false);
