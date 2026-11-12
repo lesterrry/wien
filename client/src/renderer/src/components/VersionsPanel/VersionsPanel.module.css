@@ -7,14 +7,48 @@
 
 .panel form {
   display: flex;
+  align-items: center;
   gap: 5px;
-  margin-top: 8px;
+}
+
+.heading {
+  composes: heading from "../../styles/sidebar.module.css";
+}
+
+.panel .heading {
+  width: 100%;
+  padding: 0 0 7px;
+  margin-bottom: 8px;
+  border: 0;
+  border-radius: 0;
+  color: var(--color-secondary);
+  background: transparent;
+}
+
+.panel .heading[aria-expanded="false"] {
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+
+.heading[aria-expanded="true"] > svg {
+  transform: rotate(90deg);
+}
+
+.panel .heading:hover {
+  background: transparent;
+}
+
+.heading:hover > span {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .panel input {
   width: 100%;
   min-width: 0;
-  padding: 6px;
+  height: 30px;
+  padding: 6px 8px;
+  font-size: 12px;
   color: var(--color-primary);
   background: transparent;
   border: 1px solid var(--color-border);
@@ -33,7 +67,17 @@
   background: var(--color-hover);
 }
 
+.panel form button {
+  flex-shrink: 0;
+  height: 30px;
+  padding: 6px 8px;
+  white-space: nowrap;
+}
+
 .panel ul {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   max-height: 150px;
   overflow: auto;
   list-style: none;
@@ -41,20 +85,33 @@
   margin: 8px 0 0;
 }
 
-.versionRow {
+.panel .returnButton {
   display: flex;
-  gap: 4px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  height: 30px;
+  padding: 6px 8px;
 }
 
 .panel .versionButton {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
   min-width: 0;
   text-align: left;
   overflow-wrap: anywhere;
 }
 
-.restoreButton {
-  flex: 0 0 auto;
+.versionLabel {
+  flex: 1;
+  min-width: 0;
+}
+
+.panel .versionButton[aria-pressed="true"] {
+  opacity: 1;
 }
 
 .panel small {

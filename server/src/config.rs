@@ -13,14 +13,12 @@ pub struct Config {
     pub generation: GenerationConfig,
 }
 
-/// Model settings shared by generation and the editor assistant.
+/// Model settings for the editor assistant.
 #[derive(Debug, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct GenerationConfig {
     pub model: String,
     pub reasoning_effort: ReasoningEffort,
-    /// Optional system instructions for /v1/generate; the assistant uses its master prompt.
-    pub instructions: Option<String>,
 }
 
 impl Default for GenerationConfig {
@@ -28,7 +26,6 @@ impl Default for GenerationConfig {
         Self {
             model: "gpt-6-luna".into(),
             reasoning_effort: ReasoningEffort::Low,
-            instructions: None,
         }
     }
 }
@@ -38,7 +35,7 @@ impl GenerationConfig {
         ModelOptions {
             model: self.model.clone(),
             reasoning_effort: Some(self.reasoning_effort.clone()),
-            instructions: self.instructions.clone(),
+            instructions: None,
         }
     }
 }
@@ -49,14 +46,6 @@ impl Config {
         // Do not expose TOML snippets: an accidentally pasted credential must not reach logs.
         let config: Self = toml::from_str(&source).map_err(|_| ConfigError::Invalid)?;
         if config.generation.model.trim().is_empty() || config.generation.model.len() > 200 {
-            return Err(ConfigError::Invalid);
-        }
-        if config
-            .generation
-            .instructions
-            .as_ref()
-            .is_some_and(|value| value.len() > 128 * 1024)
-        {
             return Err(ConfigError::Invalid);
         }
         Ok(config)
@@ -100,14 +89,10 @@ mod tests {
     fn loads_generation_settings_from_toml() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("config.toml");
-        std::fs::write(&path, "provider = 'aitunnel'\n[generation]\nmodel = 'configured-model'\nreasoning_effort = 'high'\ninstructions = 'Be concise'").unwrap();
+        std::fs::write(&path, "provider = 'aitunnel'\n[generation]\nmodel = 'configured-model'\nreasoning_effort = 'high'").unwrap();
         let config = Config::load(&path).unwrap();
         assert_eq!(config.generation.model, "configured-model");
         assert_eq!(config.generation.reasoning_effort, ReasoningEffort::High);
-        assert_eq!(
-            config.generation.instructions.as_deref(),
-            Some("Be concise")
-        );
     }
 
     #[test]

@@ -14,6 +14,9 @@ strudel-rag-grpc = { path = "skill/crates/strudel-rag-grpc" }
 rag-protocol = { path = "crates/rag-protocol" }
 service-runtime = { path = "crates/service-runtime" }
 async-trait = "0.1"
+argon2 = { version = "0.6", features = ["getrandom"] }
+getrandom = "0.4"
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "migrate", "macros", "time"] }
 axum = "0.8"
 clap = "4"
 eventsource-stream = "0.2"

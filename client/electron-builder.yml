@@ -7,10 +7,11 @@ files:
   - out/**/*
   - "!out/tests/**"
   - package.json
+  - config.yaml
   - resources/icon.png
 mac:
   category: public.app-category.music
-  icon: resources/icon.icns
+  icon: resources/Wien.icon
   identity: null
 win:
   icon: resources/icon.ico

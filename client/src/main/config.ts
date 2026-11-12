@@ -1,12 +1,28 @@
-import config from "../../config.json";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { parse } from "yaml";
 
-export function backendConfig(env: NodeJS.ProcessEnv = process.env) {
-  const address = env.WIEN_BACKEND_URL ?? config.backendUrl;
+export function backendConfig(
+  env: NodeJS.ProcessEnv = process.env,
+  config?: unknown,
+) {
+  if (env.WIEN_BACKEND_URL === undefined && config === undefined) {
+    // Both src/main and out/main are two levels below the config.
+    config = parse(
+      readFileSync(resolve(__dirname, "../../config.yaml"), "utf8"),
+    );
+  }
+  const address =
+    env.WIEN_BACKEND_URL ??
+    (config && typeof config === "object" && "backendUrl" in config
+      ? config.backendUrl
+      : undefined);
   const invalid = () =>
     new Error(
-      "Invalid backend URL. Set backendUrl in client/config.json or WIEN_BACKEND_URL to an HTTPS origin (HTTP is allowed for localhost), without a path, credentials, query or fragment.",
+      "Invalid backend URL. Set backendUrl in client/config.yaml or WIEN_BACKEND_URL to an HTTPS origin (HTTP is allowed for localhost), without a path, credentials, query or fragment.",
     );
   let url: URL;
+  if (typeof address !== "string") throw invalid();
   try {
     url = new URL(address);
   } catch {

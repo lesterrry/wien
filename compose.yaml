@@ -11,6 +11,7 @@ services:
       WIEN_SERVER_HOST: 0.0.0.0
       WIEN_SERVER_PORT: "3001"
       WIEN_SERVER_CONFIG: /app/config.toml
+      DATABASE_URL: postgresql://wien:${POSTGRES_PASSWORD:-wien-local-only}@database:5432/wien
       AITUNNEL_KEY: ${AITUNNEL_KEY:?Set AITUNNEL_KEY in the environment or root .env}
       STRUDEL_RAG_ENDPOINT: http://skill:50051
       STRUDEL_RAG_BEARER_TOKEN: ${STRUDEL_RAG_BEARER_TOKEN:?Set STRUDEL_RAG_BEARER_TOKEN in the environment or root .env}
@@ -24,8 +25,25 @@ services:
         bind:
           create_host_path: false
     depends_on:
+      database:
+        condition: service_healthy
       skill:
         condition: service_healthy
+
+  database:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: wien
+      POSTGRES_DB: wien
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wien-local-only}
+    volumes:
+      - users-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wien -d wien"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
 
   skill:
     build:
@@ -52,6 +70,7 @@ services:
       - ./skill/saved_html:/app/saved_html:ro
 
 volumes:
+  users-data:
   skill-data:
 
 networks:

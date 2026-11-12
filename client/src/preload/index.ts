@@ -2,14 +2,20 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { WorkspaceApi } from "../shared/types";
 
 const api: WorkspaceApi = {
+  accountCurrent: () => ipcRenderer.invoke("account:current"),
+  accountRegister: (credentials) =>
+    ipcRenderer.invoke("account:register", credentials),
+  accountLogin: (credentials) =>
+    ipcRenderer.invoke("account:login", credentials),
+  accountLogout: () => ipcRenderer.invoke("account:logout"),
+  accountChangePassword: (request) =>
+    ipcRenderer.invoke("account:password", request),
   versions: () => ipcRenderer.invoke("versions:list"),
   createVersion: (message) => ipcRenderer.invoke("versions:create", message),
   selectVersion: (oid) => ipcRenderer.invoke("versions:select", oid),
   versionActive: () => ipcRenderer.invoke("versions:active"),
   versionChanged: () => ipcRenderer.invoke("versions:changed"),
   restoreVersion: () => ipcRenderer.invoke("versions:restore"),
-  restoreLatestVersion: (oid) =>
-    ipcRenderer.invoke("versions:restore-latest", oid),
   assist: (id, request) => ipcRenderer.invoke("assistant:send", id, request),
   cancelAssist: (id) => ipcRenderer.send("assistant:cancel", id),
   readControlPreferences: (root) =>

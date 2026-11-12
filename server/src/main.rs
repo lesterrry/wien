@@ -26,6 +26,9 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|| PathBuf::from("server/config.toml"));
     let config = Config::load(&config_path).map_err(|error| error.to_string())?;
     let provider = config.provider.build()?;
+    let database = wien_server::database::connect().await?;
+    let auth = wien_server::auth::Auth::new(database.clone()).await?;
+    let _cleanup = wien_server::auth::start_cleanup(database.clone());
     let tools = std::sync::Arc::new(wien_server::assistant::tools::Tools(
         wien_server::rag::RagClient::from_env()?,
     ));
@@ -41,8 +44,12 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         })?;
     tracing::info!(address = %listener.local_addr()?, "HTTP server listening");
-    axum::serve(listener, api::router(provider, config.generation, tools))
-        .with_graceful_shutdown(service_runtime::shutdown_signal())
-        .await?;
+    axum::serve(
+        listener,
+        api::router_with_database(provider, config.generation, tools, Some(database))
+            .merge(wien_server::auth::router(auth)),
+    )
+    .with_graceful_shutdown(service_runtime::shutdown_signal())
+    .await?;
     Ok(())
 }

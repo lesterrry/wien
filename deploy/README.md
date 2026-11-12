@@ -10,13 +10,23 @@ The runner builds `linux/amd64` server and RAG images, tags them with
 No registry login is needed. The VPS loads the ready images without compiling Rust.
 Releases live in `/opt/wien/releases`; `current` and `previous` identify deployments.
 A failed local health/readiness check triggers restoration of the previous release.
+Readiness is checked on the VPS within the SSH deployment: `/ready` must succeed
+both directly on the backend and through nginx with `Host: wien.aydar.media`;
+unauthenticated assist must return 401 (503 is accepted for rollback to older releases),
+and the removed `/v1/generate` must return 404 (503 is accepted for older releases). Any failure makes the SSH step fail.
+The runner does not probe the public Cloudflare URL because Bot Fight Mode can
+challenge automated requests. These checks cover the origin, not Cloudflare.
 The receiver retains two successful releases and their images.
 
 Production uses `deploy/compose.yaml`, not `just run-server` or the local Codex
 override. `/opt/wien/.env` and external volume `wien_skill-data` remain on the VPS.
-AI Tunnel credentials and the RAG corpus are never uploaded to GitHub Actions.
+AI Tunnel credentials, PostgreSQL credentials and the RAG corpus are never uploaded to GitHub Actions.
 Nginx serves HTTP behind Cloudflare; no certificates are created.
-Public `/v1/*` remains disabled until accounts and authentication are implemented.
+Public `/v1/assist` requires a session and a remaining assist allowance.
+Nginx forwards all paths to the backend; authentication and quotas are enforced there.
+The legacy raw generation endpoint has been removed.
+Bot Fight Mode is unchanged; if it challenges desktop requests, the client reports
+the block explicitly instead of treating the HTML challenge as an API response.
 
 ## GitHub production environment
 
@@ -34,7 +44,16 @@ GitHub environment and the local ignored `.local` directory.
 
 `deploy/receive.sh` is installed root-owned as `/usr/local/sbin/wien-deploy`.
 Changes to the receiver itself require an operator to reinstall it over the
-owner's SSH connection. Ordinary releases only update images and release configs.
+owner's SSH connection. **Before the first subscription release**, install the
+updated `deploy/receive.sh`: the previous receiver expects assist to return 503
+and would roll back a successful authenticated release. The updated receiver
+accepts 401 for assist and 404 for the removed generate endpoint, while remaining
+compatible with the previous release.
+
+```sh
+ssh spacespace01 'sudo install -m 0755 /dev/stdin /usr/local/sbin/wien-deploy' < deploy/receive.sh
+```
+Ordinary releases only update images and release configs.
 
 ## Operator commands
 
@@ -53,3 +72,30 @@ sudo env WIEN_RELEASE_ID="$(basename "$(pwd -P)")" docker compose \
 ```
 
 Do not run `docker compose down --volumes`: the RAG corpus must survive releases.
+
+## PostgreSQL and accounts
+
+Before the first release with accounts, run this once as the VPS operator:
+
+```sh
+ssh spacespace01 'sudo bash -s' < deploy/init-database.sh
+```
+
+This creates the external `wien_users-data` Docker volume and adds a random
+URL-safe hex `POSTGRES_PASSWORD` to `/opt/wien/.env` (0600), saving a private backup.
+It preserves an existing password and does not restart services.
+Keep the password persistent: changing the environment does not rotate an existing
+PostgreSQL user's password. PostgreSQL 18 stores its files under `/var/lib/postgresql`
+in this volume and has no published host port. The same DB survives image releases
+and rollback. Back it up independently of release archives.
+
+The server applies embedded SQLx migrations before accepting requests and fails
+startup if the database or migration is unavailable. `/ready` checks PostgreSQL
+as well as the RAG corpus. Migrations must remain compatible with the previous
+server version because image rollback does not reverse database migrations.
+
+Registration currently has no CAPTCHA. Limits shared through PostgreSQL allow
+20 registration attempts globally per 15 minutes and 10 login attempts per username
+per 15 minutes, plus 240 expensive auth attempts globally per 15 minutes and two
+concurrent password hashing operations per server. These initial limits are for
+small-scale use; they do not replace per-client abuse controls for public growth.

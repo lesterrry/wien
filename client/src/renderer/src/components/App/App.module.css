@@ -135,6 +135,9 @@
 
 .projectPicker small {
   display: block;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
   margin-top: 4px;
   font-size: 11px;
   color: var(--color-muted);
@@ -170,7 +173,7 @@
 }
 
 .searchBox:focus-within {
-  border-color: var(--color-brand);
+  border-color: var(--color-border-focus);
 }
 
 .searchBox input:focus-visible {
@@ -178,12 +181,9 @@
 }
 
 .sectionHeading {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 8px 7px;
-  color: var(--color-secondary);
-  font-size: 11px;
+  composes: heading from "../../styles/sidebar.module.css";
+  padding-left: 8px;
+  padding-right: 8px;
 }
 
 .sectionHeading > div {
@@ -577,7 +577,59 @@
   display: none;
 }
 
-.graphLink[aria-current="page"] {
-  background: var(--color-active);
-  color: var(--color-primary);
+.projectPicker .accountIdentity {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.accountIdentity > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.tierBadge {
+  flex-shrink: 0;
+  font-size: 8px;
+  font-weight: 650;
+  letter-spacing: 0.5px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-brand);
+}
+.subscription {
+  margin: 10px 4px 6px;
+  padding: 10px 10px 6px;
+  border-radius: 6px;
+  background: var(--color-background);
+}
+.subscription > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 11px;
+}
+.subscription strong {
+  font-weight: 550;
+}
+.subscription span {
+  color: var(--color-secondary);
+}
+.subscription button {
+  margin-top: 10px;
+  padding: 4px 0;
+  font-size: 11px;
+  justify-content: space-between;
+  color: var(--color-brand);
+}
+.subscription button > span {
+  color: inherit;
+}
+.subscription button:hover {
+  background: transparent;
+}
+.subscription button:hover > span {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }

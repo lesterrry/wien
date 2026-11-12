@@ -5,6 +5,9 @@
 !server/
 server/**
 !server/Cargo.toml
+!server/build.rs
+!server/migrations/
+!server/migrations/**
 !server/config.toml
 !server/src/
 !server/src/**

@@ -76,7 +76,6 @@ async fn sends_full_context_and_master_prompt_and_returns_edit_or_answer() {
             GenerationConfig {
                 model: "configured-model".into(),
                 reasoning_effort: ReasoningEffort::High,
-                instructions: None,
             },
         );
         let body = context();

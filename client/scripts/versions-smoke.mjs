@@ -27,15 +27,16 @@ try {
   page.on("pageerror", (error) => errors.push(error.message));
   const editor = page.getByLabel("Strudel code editor");
   await editor.waitFor();
+  await page.getByRole("button", { name: "Versions", exact: true }).click();
   const message = page.getByLabel("Version message");
   await message.fill("First");
-  await page.getByRole("button", { name: "Save version" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await page.getByRole("button", { name: /First/ }).waitFor();
   await editor.click();
   await editor.press(process.platform === "darwin" ? "Meta+a" : "Control+a");
   await page.keyboard.insertText("second");
   await message.fill("Second");
-  await page.getByRole("button", { name: "Save version" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await page.getByRole("button", { name: /Second/ }).waitFor();
   await editor.click();
   await editor.press(process.platform === "darwin" ? "Meta+a" : "Control+a");
@@ -63,27 +64,6 @@ try {
     await fs.readFile(path.join(root, "song.js"), "utf8"),
     "working",
   );
-  await fs.writeFile(path.join(root, "new.strudel"), "new file");
-  page.once("dialog", (dialog) => {
-    assert.match(dialog.message(), /cannot be undone/i);
-    return dialog.dismiss();
-  });
-  await page.getByRole("button", { name: "Restore latest version" }).click();
-  assert.equal(
-    await fs.readFile(path.join(root, "song.js"), "utf8"),
-    "working",
-  );
-  assert.equal(
-    await fs.readFile(path.join(root, "new.strudel"), "utf8"),
-    "new file",
-  );
-  page.once("dialog", (dialog) => dialog.accept());
-  await page.getByRole("button", { name: "Restore latest version" }).click();
-  await page.waitForFunction(
-    () => document.querySelector(".cm-content")?.textContent === "second",
-  );
-  assert.equal(await fs.readFile(path.join(root, "song.js"), "utf8"), "second");
-  await assert.rejects(fs.access(path.join(root, "new.strudel")));
   const hash = createHash("sha256").update(root).digest("hex");
   await assert.rejects(
     fs.access(path.join(base, "data", "version-recovery", hash)),

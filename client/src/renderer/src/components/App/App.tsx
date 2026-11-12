@@ -28,6 +28,7 @@ import {
   Square,
   SquareX,
   Trash2,
+  UserRound,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -59,6 +60,7 @@ import {
   type Document,
   useSnippetSessions,
 } from "../../hooks/useSnippetSessions";
+import { useAccount } from "../Account/Account";
 import { ControlsPanel } from "../ControlsPanel/ControlsPanel";
 import { Dialog } from "../Dialog/Dialog";
 import { Explorer } from "../Explorer/Explorer";
@@ -106,6 +108,12 @@ const message = (error: unknown) =>
   );
 
 export function App() {
+  const {
+    user,
+    openProfile,
+    openUpgrade,
+    refresh: refreshAccount,
+  } = useAccount();
   const [preferences, setPreferences] = useState<PanelPreferences>({
     pinned: null,
     roots: {},
@@ -223,11 +231,11 @@ export function App() {
     (open: boolean) => setWorkspaceView(open ? "controls" : "editor"),
     [],
   );
-  const playingFile =
-    sessions
-      .filter((session) => session.playback.started)
-      .map((session) => session.document.path)
-      .join(", ") || null;
+  // const playingFile =
+  //   sessions
+  //     .filter((session) => session.playback.started)
+  //     .map((session) => session.document.path)
+  //     .join(", ") || null;
   const pendingControlPaths = useRef(new Set<string>());
 
   const updateTabs = useCallback((next: string[]) => {
@@ -866,46 +874,6 @@ export function App() {
     return saved;
   }
 
-  async function restoreLatestVersion(oid: string) {
-    await run(async () => {
-      if (
-        !window.confirm(
-          "Restore the latest version? Current changes to .strudel and .js files will be lost, including files created since this version. This cannot be undone.",
-        )
-      )
-        return;
-      await controlQueue.current;
-      await preferencesSave.current;
-      await flush();
-      if (liveUpdateTimer.current !== null) {
-        clearTimeout(liveUpdateTimer.current);
-        liveUpdateTimer.current = null;
-      }
-      pendingControlPaths.current.clear();
-      await removeSessions(tabsRef.current);
-      updateTabs([]);
-      updateDocument(null);
-      setGraphOpen(false);
-      setControllerOpen(false);
-      setControllerRoot(null);
-      setDefinitionContext(null);
-      navigationBack.current.clear();
-      setSelection(null);
-      try {
-        await api.restoreLatestVersion(oid);
-      } finally {
-        const next = await api.current();
-        setProject(next);
-        setTreeVersion((version) => version + 1);
-        const first = next.entries.find((entry) => !entry.children);
-        if (first) {
-          const code = await api.read(first.id);
-          updateDocument({ path: first.id, code, saved: code });
-        }
-      }
-    });
-  }
-
   async function submitModal() {
     if (!modal || busyRef.current) return;
     busyRef.current = true;
@@ -1344,9 +1312,12 @@ export function App() {
             <button
               className={styles.projectPicker}
               type="button"
+              aria-label="Project and account"
+              aria-expanded={projectMenu}
               onClick={(event) => {
                 event.stopPropagation();
                 setProjectMenu(!projectMenu);
+                if (!projectMenu) void refreshAccount().catch(() => {});
               }}
               disabled={busy}
             >
@@ -1355,12 +1326,55 @@ export function App() {
               </span>
               <span>
                 <strong>{project?.name ?? "Opening workspace…"}</strong>
-                <small>Personal project</small>
+                <small className={styles.accountIdentity}>
+                  <span title={user?.username}>
+                    {user?.username ?? "Not signed in"}
+                  </span>
+                  {user && user.tier !== "free" && (
+                    <span className={styles.tierBadge} data-tier={user.tier}>
+                      {user.tier.toUpperCase()}
+                    </span>
+                  )}
+                </small>
               </span>
               <ChevronDown size={14} />
             </button>
             {projectMenu && (
               <div className={classNames(styles.menu, styles.projectMenu)}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProjectMenu(false);
+                    openProfile();
+                  }}
+                >
+                  <UserRound size={15} />
+                  {user ? "Your profile" : "Sign in"}
+                </button>
+                {user && (
+                  <div className={styles.subscription}>
+                    <div>
+                      <strong>
+                        {user.tier === "free"
+                          ? "Free"
+                          : user.tier.toUpperCase()}
+                      </strong>
+                      <span>
+                        {user.assist_requests_remaining} assist requests left
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProjectMenu(false);
+                        openUpgrade();
+                      }}
+                    >
+                      <span>Explore plans</span> <ArrowRight size={13} />
+                    </button>
+                  </div>
+                )}
+                <div className={styles.menuDivider} />
                 <button type="button" onClick={() => void switchProject(true)}>
                   <Plus size={15} />
                   New project
@@ -1500,7 +1514,6 @@ export function App() {
             }}
             onCreate={createVersion}
             onSelect={(oid) => void changeVersion(oid)}
-            onRestoreLatest={(oid) => void restoreLatestVersion(oid)}
           />
           <div className={styles.sidebarBottom}>
             <button
@@ -1509,11 +1522,10 @@ export function App() {
               onClick={() => openGraph()}
               disabled={!project || busy}
               aria-label="Open Graph View"
-              aria-current={graphActive ? "page" : undefined}
             >
               <Network size={16} />
               <span>
-                Graph View<small>Explore snippet dependencies</small>
+                Graph View<small>Explore project dependencies</small>
               </span>
               <ArrowRight size={13} />
             </button>
@@ -1592,18 +1604,19 @@ export function App() {
                   Back to controls
                 </button>
               )}
-              {playback.started && (
+              {/* {playback.started && (
                 <small
                   className={styles.playingTarget}
                   title={playingFile ?? undefined}
                 >
                   Playing {playingFile?.split("/").at(-1)}
                 </small>
-              )}
+              )} */}
               <button
                 type="button"
                 className={styles.iconButton}
                 aria-label="Ask Wien"
+                data-assistant-trigger
                 title={`Ask Wien (${shortcut} ,)`}
                 disabled={!document || busy || controllerOpen}
                 onClick={() => player.current?.assist("bottom")}

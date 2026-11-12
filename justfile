@@ -12,9 +12,9 @@ init:
 run-client:
     pnpm --dir client dev
 
-# Build the desktop client
+# Package the desktop client and print its location
 build-client:
-    pnpm --dir client build
+    pnpm --dir client package
 
 # Launch local AI server and RAG with Codex credentials mounted; Ctrl+C stops both
 run-server:

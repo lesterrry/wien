@@ -285,6 +285,7 @@ export function GraphView({
       </header>
       <div className={styles.canvas}>
         <ReactFlow<SnippetNode, Edge>
+          proOptions={{ hideAttribution: true }}
           nodes={renderedNodes}
           edges={edges}
           nodeTypes={nodeTypes}
@@ -307,9 +308,9 @@ export function GraphView({
             showInteractive={false}
             fitViewOptions={{ padding: 0.22, maxZoom: 1 }}
           />
-          <Panel position="top-left" className={styles.legend}>
-            Snippet <span>→</span> Used by · Double-click to open
-          </Panel>
+          {/* <Panel position="top-left" className={styles.legend}>
+            Double-click to open
+          </Panel> */}
           {selectedNode && (
             <Panel position="bottom-right" className={styles.details}>
               <strong>{selectedNode.path}</strong>
@@ -340,15 +341,15 @@ export function GraphView({
           </div>
         )}
       </div>
-      <footer className={styles.footer}>
-        <span>{loading ? "Updating…" : "Dependencies from your code"}</span>
-        {issueCount > 0 && (
+      {issueCount > 0 && (
+        <footer className={styles.footer}>
+          <span>Updating…</span>
           <span className={styles.warning}>
             {issueCount} {issueCount === 1 ? "snippet" : "snippets"} with
             dependency issues · Select to inspect
           </span>
-        )}
-      </footer>
+        </footer>
+      )}
     </section>
   );
 }
