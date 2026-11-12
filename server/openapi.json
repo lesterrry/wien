@@ -95,7 +95,7 @@
             }
           },
           "429": {
-            "description": "Provider usage limit",
+            "description": "Assistant busy (assistant_busy, Retry-After: 2) or provider usage limit",
             "content": {
               "application/json": {
                 "schema": {

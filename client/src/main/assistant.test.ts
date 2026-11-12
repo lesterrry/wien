@@ -115,3 +115,108 @@ test("assistant identifies an old server without the assistant route", async (t)
     /has no assistant endpoint.*restart just run-server/,
   );
 });
+
+// Let response.json() and retry scheduling settle without advancing mocked time.
+const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
+const busy = (retryAfter = "2") =>
+  Response.json(
+    { code: "assistant_busy", message: "test-only-secret" },
+    { status: 429, headers: { "Retry-After": retryAfter } },
+  );
+
+test("busy retries use Retry-After, exponential backoff, jitter and a stable snapshot", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  t.mock.method(Math, "random", () => 0.5);
+  const bodies: string[] = [];
+  t.mock.method(
+    globalThis,
+    "fetch",
+    async (_url: string, init: RequestInit) => {
+      bodies.push(String(init.body));
+      return bodies.length < 4
+        ? busy("3")
+        : Response.json({ message: "Done.", code: null });
+    },
+  );
+  const input = structuredClone(request);
+  const result = askAssistant(input, new AbortController().signal);
+  await settle();
+  input.prompt = "changed during backoff";
+  for (const [index, ms] of [3250, 4250, 8250].entries()) {
+    t.mock.timers.tick(ms - 1);
+    await settle();
+    assert.equal(bodies.length, index + 1);
+    t.mock.timers.tick(1);
+    await settle();
+    assert.equal(bodies.length, index + 2);
+  }
+  assert.deepEqual(await result, { message: "Done.", code: null });
+  assert(bodies.every((body) => body === JSON.stringify(request)));
+});
+
+test("busy retries stop after three retries and hide server text", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  t.mock.method(Math, "random", () => 0);
+  const fetch = t.mock.method(globalThis, "fetch", async () => busy());
+  const rejected = assert.rejects(
+    askAssistant(request, new AbortController().signal),
+    (error: Error) =>
+      /still busy/.test(error.message) &&
+      !error.message.includes("test-only-secret"),
+  );
+  await settle();
+  for (const ms of [2000, 4000, 8000]) {
+    t.mock.timers.tick(ms);
+    await settle();
+  }
+  await rejected;
+  assert.equal(fetch.mock.callCount(), 4);
+});
+
+test("cancellation during backoff stops further attempts", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const fetch = t.mock.method(globalThis, "fetch", async () => busy());
+  const controller = new AbortController();
+  const rejected = assert.rejects(
+    askAssistant(request, controller.signal),
+    /Request cancelled/,
+  );
+  await settle();
+  controller.abort();
+  await rejected;
+  t.mock.timers.tick(60_000);
+  await settle();
+  assert.equal(fetch.mock.callCount(), 1);
+});
+
+test("only explicit 429 assistant_busy is retried", async (t) => {
+  for (const [status, code] of [
+    [429, "provider_rate_limited"],
+    [503, "rag_unavailable"],
+    [504, "provider_timeout"],
+    [502, "provider_invalid_response"],
+    [503, "assistant_busy"],
+    [429, "unknown"],
+  ] as const) {
+    const fetch = t.mock.method(globalThis, "fetch", async () =>
+      Response.json({ code }, { status }),
+    );
+    await assert.rejects(askAssistant(request, new AbortController().signal));
+    assert.equal(fetch.mock.callCount(), 1);
+    t.mock.restoreAll();
+  }
+  const fetch = t.mock.method(globalThis, "fetch", async () => {
+    throw new Error("network failure");
+  });
+  await assert.rejects(askAssistant(request, new AbortController().signal));
+  assert.equal(fetch.mock.callCount(), 1);
+});
+
+test("excessive Retry-After does not trigger an early retry", async (t) => {
+  const fetch = t.mock.method(globalThis, "fetch", async () => busy("3600"));
+  await assert.rejects(
+    askAssistant(request, new AbortController().signal),
+    /still busy/,
+  );
+  assert.equal(fetch.mock.callCount(), 1);
+});
