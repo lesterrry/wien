@@ -20,6 +20,11 @@ let signedIn = false;
 const server = http.createServer(async (req, res) => {
   try {
     if (/^\/(auth|users|v1)\//.test(req.url)) {
+      if (req.url === "/auth/registration") {
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ sitekey: "test-sitekey" }));
+        return;
+      }
       assert.equal(req.headers["x-wien-session"], "cookie");
       assert.equal(req.headers.authorization, undefined);
       assert.equal(req.headers["sec-fetch-site"], "same-origin");
@@ -29,6 +34,8 @@ const server = http.createServer(async (req, res) => {
         let body = "";
         for await (const chunk of req) body += chunk;
         assert.equal(JSON.parse(body).username, user.username);
+        if (req.url === "/auth/register")
+          assert.equal(JSON.parse(body).turnstile_token, "test-captcha-token");
         signedIn = true;
         res.setHeader(
           "Set-Cookie",
@@ -95,6 +102,21 @@ try {
   const context = await browser.newContext({
     viewport: { width: 1440, height: 1000 },
   });
+  await context.route(
+    "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit",
+    (route) =>
+      route.fulfill({
+        contentType: "application/javascript",
+        body: `window.turnstile = {
+      render(container, options) {
+        window.testTurnstile = options;
+        container.textContent = 'Test verification';
+        return 'test-widget';
+      },
+      remove() { window.testTurnstile = null; }
+    };`,
+      }),
+  );
   page = await context.newPage();
   page.setDefaultTimeout(15000);
   const errors = [];
@@ -328,6 +350,48 @@ try {
     await page.evaluate(() => window.workspace.accountCurrent()),
     null,
   );
+  // Register only after verification; expiration disables submission again.
+  await page
+    .getByRole("button", { name: "Create an account", exact: true })
+    .click();
+  const registration = page.getByRole("dialog", {
+    name: "Create an account",
+    exact: true,
+  });
+  await registration
+    .getByLabel("Username", { exact: true })
+    .fill(user.username);
+  await registration
+    .getByLabel("Password", { exact: true })
+    .fill("a secure test password");
+  await registration
+    .getByLabel("Confirm password", { exact: true })
+    .fill("a secure test password");
+  const submit = registration.getByRole("button", {
+    name: "Create account",
+    exact: true,
+  });
+  await expect(submit).toBeDisabled();
+  await page.waitForFunction(() => Boolean(window.testTurnstile));
+  await page.evaluate(() =>
+    window.testTurnstile.callback("test-captcha-token"),
+  );
+  await expect(submit).toBeEnabled();
+  await page.evaluate(() => window.testTurnstile["expired-callback"]());
+  await expect(submit).toBeDisabled();
+  await page.evaluate(() =>
+    window.testTurnstile.callback("test-captcha-token"),
+  );
+  await submit.click();
+  await expect(
+    page.getByRole("dialog", { name: "Your profile", exact: true }),
+  ).toBeVisible();
+  await page.reload();
+  await editor.waitFor();
+  await menu.click();
+  await expect(
+    page.getByRole("button", { name: "Your profile", exact: true }),
+  ).toBeVisible();
   assert.deepEqual(errors, []);
   console.log(
     "PASS: IndexedDB persistence, autosave, multi-file rename/imports, stale-tab protection, project picker/import/export, audio, graph, cookie login/reload/logout, assist and no Versions. Artifacts:",

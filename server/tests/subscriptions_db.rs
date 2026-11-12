@@ -1,3 +1,4 @@
+mod common;
 use async_trait::async_trait;
 use axum::{
     Router,
@@ -15,7 +16,7 @@ use tower::ServiceExt;
 use wien_server::{
     api,
     assistant::tools::{AssistantTools, ToolError},
-    auth::{self, Auth},
+    auth::{self},
     config::GenerationConfig,
     providers::{
         ModelOptions, ModelResponse, Provider, ProviderError,
@@ -84,7 +85,7 @@ async fn app(pool: &PgPool, model: Arc<Model>) -> Router {
         Arc::new(ReadyTools),
         Some(pool.clone()),
     )
-    .merge(auth::router(Auth::new(pool.clone()).await.unwrap()))
+    .merge(auth::router(common::auth(pool.clone()).await))
 }
 fn context() -> Value {
     json!({"prompt":"Softer bass", "file":{"path":"bass.strudel","content":"note('a1')","cursor":{"anchor":0,"head":0}}})
@@ -93,14 +94,20 @@ async fn request(
     app: &Router,
     method: &str,
     path: &str,
-    body: Value,
+    mut body: Value,
     token: Option<&str>,
 ) -> (StatusCode, Value) {
     let mut req = Request::builder()
         .method(method)
         .uri(path)
-        .header("host", "wien.aydar.media")
         .header("content-type", "application/json");
+    if path == "/auth/register" {
+        body["turnstile_token"] = json!("test-token");
+        req = req
+            .header("host", "wien.aydar.media")
+            .header("origin", "https://wien.aydar.media")
+            .header("x-wien-session", "cookie");
+    }
     if let Some(token) = token {
         req = req.header("authorization", format!("Bearer {token}"));
     }
@@ -109,9 +116,20 @@ async fn request(
         .oneshot(req.body(Body::from(body.to_string())).unwrap())
         .await
         .unwrap();
+    let registration_token = response
+        .headers()
+        .get("set-cookie")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.split(';').next())
+        .and_then(|v| v.split_once('='))
+        .map(|(_, v)| v.to_owned());
     let status = response.status();
     let body = to_bytes(response.into_body(), 8192).await.unwrap();
-    (status, serde_json::from_slice(&body).unwrap_or(Value::Null))
+    let mut result: Value = serde_json::from_slice(&body).unwrap_or(Value::Null);
+    if let Some(token) = registration_token {
+        result["token"] = json!(token);
+    }
+    (status, result)
 }
 async fn register(app: &Router) -> Value {
     let (status, body) = request(

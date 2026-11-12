@@ -1,4 +1,9 @@
-import type { Credentials, PasswordChange, UserProfile } from "./account";
+import type {
+  Credentials,
+  PasswordChange,
+  Registration,
+  UserProfile,
+} from "./account";
 import { tiers } from "./account";
 
 export interface TokenStore {
@@ -7,6 +12,10 @@ export interface TokenStore {
 }
 
 const messages: Record<string, string> = {
+  captcha_failed: "Verification expired or failed. Complete it again.",
+  registration_unavailable:
+    "Registration verification is unavailable. Please try again later.",
+  web_registration_required: "Create your account on the Wien website.",
   username_taken: "This username is already taken.",
   invalid_credentials: "Incorrect username or password.",
   authentication_required: "Your session has expired. Sign in again.",
@@ -131,7 +140,8 @@ export class AccountClient {
       await this.store.write(result.token as string);
     return user;
   }
-  register(credentials: Credentials) {
+  register(credentials: Registration) {
+    if (this.store) throw new Error(messages.web_registration_required);
     return this.signedIn("/auth/register", credentials);
   }
   login(credentials: Credentials) {

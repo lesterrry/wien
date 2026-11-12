@@ -1,3 +1,4 @@
+mod common;
 use axum::{
     Router,
     body::{Body, to_bytes},
@@ -6,19 +7,67 @@ use axum::{
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
-use wien_server::auth::{self, Auth};
+use wien_server::auth::{self};
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL in DATABASE_URL; CI runs this explicitly"]
+async fn registration_requires_browser_captcha_and_configured_verifier(pool: PgPool) {
+    for (browser, configured, captcha, expected) in [
+        (false, true, true, StatusCode::FORBIDDEN),
+        (true, true, false, StatusCode::BAD_REQUEST),
+        (true, false, true, StatusCode::SERVICE_UNAVAILABLE),
+    ] {
+        let auth = if configured {
+            common::auth(pool.clone()).await
+        } else {
+            auth::Auth::new(pool.clone()).await.unwrap()
+        };
+        let app = auth::router(auth);
+        let mut data = json!({"username":"guarded_user","password":"initial secure password"});
+        if captcha {
+            data["turnstile_token"] = json!("test-token");
+        }
+        let mut request = Request::builder()
+            .method("POST")
+            .uri("/auth/register")
+            .header("content-type", "application/json");
+        if browser {
+            request = request
+                .header("host", "wien.aydar.media")
+                .header("origin", "https://wien.aydar.media")
+                .header("x-wien-session", "cookie");
+        }
+        let response = app
+            .oneshot(request.body(Body::from(data.to_string())).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), expected);
+    }
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM users")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+}
 
 async fn request(
     app: &Router,
     method: &str,
     path: &str,
-    body: Value,
+    mut body: Value,
     token: Option<&str>,
 ) -> (StatusCode, Value) {
     let mut builder = Request::builder()
         .method(method)
         .uri(path)
         .header("content-type", "application/json");
+    if path == "/auth/register" {
+        body["turnstile_token"] = json!("test-token");
+        builder = builder
+            .header("host", "wien.aydar.media")
+            .header("origin", "https://wien.aydar.media")
+            .header("x-wien-session", "cookie");
+    }
     if let Some(token) = token {
         builder = builder.header("authorization", format!("Bearer {token}"));
     }
@@ -28,12 +77,20 @@ async fn request(
         .await
         .unwrap();
     assert_eq!(response.headers()["cache-control"], "no-store");
+    let registration_token = response
+        .headers()
+        .get("set-cookie")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.split(';').next())
+        .and_then(|v| v.split_once('='))
+        .map(|(_, v)| v.to_owned());
     let status = response.status();
     let bytes = to_bytes(response.into_body(), 8192).await.unwrap();
-    (
-        status,
-        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
-    )
+    let mut result: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+    if let Some(token) = registration_token {
+        result["token"] = json!(token);
+    }
+    (status, result)
 }
 async fn register(app: &Router, name: &str) -> Value {
     let (status, body) = request(
@@ -51,7 +108,7 @@ async fn register(app: &Router, name: &str) -> Value {
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL in DATABASE_URL; CI runs this explicitly"]
 async fn lifecycle_and_password_rotation(pool: PgPool) {
-    let app = auth::router(Auth::new(pool.clone()).await.unwrap());
+    let app = auth::router(common::auth(pool.clone()).await);
     let first = register(&app, "music_maker").await;
     let token = first["token"].as_str().unwrap();
     assert!(first["user"].get("password_hash").is_none());
@@ -172,7 +229,7 @@ async fn lifecycle_and_password_rotation(pool: PgPool) {
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL in DATABASE_URL; CI runs this explicitly"]
 async fn validation_conflicts_and_brute_force_limit(pool: PgPool) {
-    let app = auth::router(Auth::new(pool.clone()).await.unwrap());
+    let app = auth::router(common::auth(pool.clone()).await);
     for username in ["UPPERCASE", "has space", "кириллица", "ab", &"a".repeat(33)] {
         assert_eq!(
             request(
@@ -238,7 +295,7 @@ async fn validation_conflicts_and_brute_force_limit(pool: PgPool) {
         assert_eq!(status, StatusCode::UNAUTHORIZED, "{body}");
     }
     // The counter persists across API instances/restarts and also limits valid attempts.
-    let restarted = auth::router(Auth::new(pool).await.unwrap());
+    let restarted = auth::router(common::auth(pool).await);
     assert_eq!(
         request(
             &restarted,
@@ -256,7 +313,7 @@ async fn validation_conflicts_and_brute_force_limit(pool: PgPool) {
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL in DATABASE_URL; CI runs this explicitly"]
 async fn concurrent_registration_has_one_owner(pool: PgPool) {
-    let app = auth::router(Auth::new(pool.clone()).await.unwrap());
+    let app = auth::router(common::auth(pool.clone()).await);
     let data = json!({"username":"unique_owner","password":"initial secure password"});
     let (a, b) = tokio::join!(
         request(&app, "POST", "/auth/register", data.clone(), None),
@@ -275,15 +332,18 @@ async fn concurrent_registration_has_one_owner(pool: PgPool) {
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL in DATABASE_URL; CI runs this explicitly"]
 async fn browser_cookie_lifecycle_and_cross_origin_rejection(pool: PgPool) {
-    let app = auth::router(Auth::new(pool.clone()).await.unwrap());
+    let app = auth::router(common::auth(pool.clone()).await);
     async fn web(
         app: &Router,
         method: &str,
         path: &str,
-        body: Value,
+        mut body: Value,
         cookie: &str,
         origin: &str,
     ) -> (StatusCode, String, Value) {
+        if path == "/auth/register" {
+            body["turnstile_token"] = json!("test-token");
+        }
         let response = app
             .clone()
             .oneshot(

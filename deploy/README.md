@@ -1,6 +1,10 @@
 # Backend releases
 
 GitHub → Actions → **Release production** → **Run workflow** → choose a branch → Run.
+
+Регистрация в вебе требует `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` и
+`TURNSTILE_HOSTNAMES` в закрытом `/opt/wien/.env`. Эти значения передаются только
+серверу; клиент получает публичный sitekey через `/auth/registration`.
 Only `workflow_dispatch` deploys; pushes and pull requests do not deploy.
 The workflow must first be merged into the repository's default branch for the
 button to appear. The chosen branch supplies both source and server configs.

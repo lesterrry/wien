@@ -14,6 +14,10 @@ export interface Credentials {
   password: string;
 }
 
+export interface Registration extends Credentials {
+  turnstile_token: string;
+}
+
 export interface PasswordChange {
   current_password: string;
   new_password: string;

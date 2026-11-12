@@ -41,7 +41,7 @@ test("session stays in main and is sent only to the configured backend", async (
   );
   assert.equal(await client.current(), null);
   assert.deepEqual(
-    await client.register({
+    await client.login({
       username: user.username,
       password: "test password",
     }),
@@ -125,6 +125,7 @@ test("browser sessions use cookies without exposing or storing a bearer token", 
     await client.register({
       username: user.username,
       password: "a secure test password",
+      turnstile_token: "test-token",
     }),
     user,
   );

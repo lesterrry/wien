@@ -266,7 +266,9 @@ PostgreSQL через SQLx 0.9: обычные SQL-запросы с парам�
 в отдельном томе `users-data`, порт базы наружу не открыт. Для `cargo run` нужен
 `DATABASE_URL`. Без базы сервер не стартует; `/ready` проверяет и БД, и RAG.
 
-- `POST /auth/register`: `{username, password}`, возвращает профиль и bearer token.
+- `GET /auth/registration`: публичный ключ Turnstile для веб-формы.
+- `POST /auth/register`: `{username, password, turnstile_token}`, только веб с
+  `X-Wien-Session: cookie` и корректным Origin; возвращает профиль и HttpOnly cookie.
 - `POST /auth/login`: те же поля; неверный пароль и неизвестный username дают одинаковую ошибку.
 - `GET /users/me`: профиль пользователя из текущей сессии.
 - `POST /auth/logout`: отзывает текущую сессию.
@@ -279,7 +281,13 @@ PostgreSQL через SQLx 0.9: обычные SQL-запросы с парам�
 солью; 256-битные токены сессий хранятся только как SHA-256-хеши и истекают через
 30 дней. Ответы аккаунтов имеют `Cache-Control: no-store`.
 
-Регистрация пока без Turnstile, почты и восстановления забытого пароля. Лимиты
+Регистрация требует Cloudflare Turnstile: сервер вызывает Siteverify и проверяет
+`success`, hostname и action `register`. Настройки в окружении:
+`TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, `TURNSTILE_HOSTNAMES` (через запятую).
+Без настроек регистрация закрыта, вход работает. Секрет не возвращается клиенту.
+Managed-виджет разрешает `wien.aydar.media`, `localhost` и `127.0.0.1`, чтобы локальный
+веб-стенд мог регистрировать аккаунты через продовый API. Нет почты и восстановления
+забытого пароля. Лимиты
 попыток сохраняются в PostgreSQL между перезапусками; просроченные сессии и счётчики
 удаляются раз в час. Смена пароля требует текущий пароль. Имя пользователя неизменно.
 При регистрации создаётся подписка `free` с 10 запросами assist; миграция выдаёт
@@ -318,10 +326,12 @@ DATABASE_URL=postgresql://test:password@127.0.0.1:5432/test \
 
 ```sh
 cd client
-WIEN_BACKEND_URL=http://127.0.0.1:3009 node scripts/account-smoke.mjs
+WIEN_BACKEND_URL=http://127.0.0.1:3009 WIEN_TEST_USERNAME=test_user \
+  WIEN_TEST_PASSWORD='password of the disposable account' node scripts/account-smoke.mjs
 ```
 
-Этот сценарий создаёт тестовый аккаунт; он запрещает удалённый backend URL.
+Сначала создайте одноразовый аккаунт через локальный веб. Сценарий проверяет вход
+и меняет его пароль; удалённый backend URL запрещён.
 
 ## Browser sessions
 

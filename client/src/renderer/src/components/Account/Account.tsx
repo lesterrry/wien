@@ -13,8 +13,12 @@ import type { UserProfile } from "../../../../shared/account";
 import { Dialog } from "../Dialog/Dialog";
 import { SubscriptionPlans } from "../SubscriptionPlans/SubscriptionPlans";
 import styles from "./Account.module.css";
+import { Turnstile } from "./Turnstile";
 
 const api = window.workspace;
+const registrationRequested =
+  api.platform === "web" &&
+  new URLSearchParams(window.location.search).has("register");
 const errorMessage = (error: unknown) =>
   String(error instanceof Error ? error.message : error).replace(
     /^Error invoking remote method '[^']+': Error: /,
@@ -37,9 +41,13 @@ export function useAccount() {
 }
 
 export function AccountProvider({ children }: { children: ReactNode }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(registrationRequested);
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [mode, setMode] = useState<"login" | "register" | "password">("login");
+  const [mode, setMode] = useState<"login" | "register" | "password">(
+    registrationRequested ? "register" : "login",
+  );
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaAttempt, setCaptchaAttempt] = useState(0);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [nextPassword, setNextPassword] = useState("");
@@ -98,6 +106,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   }
 
   function clearPasswords() {
+    setCaptchaToken("");
     setPassword("");
     setNextPassword("");
     setConfirmation("");
@@ -128,15 +137,24 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     }
     setBusy(true);
     try {
+      if (mode === "register" && (!api.accountRegister || !captchaToken)) {
+        throw new Error(
+          "Complete the verification before creating an account.",
+        );
+      }
       const profile =
         mode === "password"
           ? await api.accountChangePassword({
               current_password: password,
               new_password: nextPassword,
             })
-          : await (mode === "register"
-              ? api.accountRegister
-              : api.accountLogin)({ username, password });
+          : mode === "register" && api.accountRegister
+            ? await api.accountRegister({
+                username,
+                password,
+                turnstile_token: captchaToken,
+              })
+            : await api.accountLogin({ username, password });
       refreshVersion.current++;
       setUser(profile);
       clearPasswords();
@@ -149,6 +167,10 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       setError(errorMessage(e));
     } finally {
+      if (mode === "register") {
+        setCaptchaToken("");
+        setCaptchaAttempt((value) => value + 1);
+      }
       setBusy(false);
     }
   }
@@ -286,7 +308,14 @@ export function AccountProvider({ children }: { children: ReactNode }) {
                       <p>12–128 characters.</p>
                     </>
                   )}
-                  <button className={styles.primary} type="submit">
+                  {mode === "register" && api.platform === "web" && (
+                    <Turnstile key={captchaAttempt} onToken={setCaptchaToken} />
+                  )}
+                  <button
+                    className={styles.primary}
+                    type="submit"
+                    disabled={mode === "register" && !captchaToken}
+                  >
                     {busy && <Loader2 className={styles.spinner} size={14} />}{" "}
                     {mode === "register"
                       ? "Create account"
@@ -304,11 +333,23 @@ export function AccountProvider({ children }: { children: ReactNode }) {
             )}
             {notice && <p role="status">{notice}</p>}
             <div className={styles.actions}>
-              {!user && (
+              {!user && api.platform === "web" && (
                 <button type="button" disabled={busy} onClick={switchMode}>
                   {mode === "register"
                     ? "Already have an account? Sign in"
                     : "Create an account"}
+                </button>
+              )}
+              {!user && api.platform !== "web" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void api.openExternalLink(
+                      "https://wien.aydar.media/?register",
+                    );
+                  }}
+                >
+                  Create an account on the website
                 </button>
               )}
               {user && (

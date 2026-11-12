@@ -1,4 +1,9 @@
-import type { Credentials, PasswordChange, UserProfile } from "./account";
+import type {
+  Credentials,
+  PasswordChange,
+  Registration,
+  UserProfile,
+} from "./account";
 import type { AssistRequest, AssistResult } from "./assistant";
 import type { PanelPreferences } from "./control-tree";
 import type { ModuleGraph } from "./modules";
@@ -32,7 +37,7 @@ export interface WorkspaceApi {
   platform: "desktop" | "web";
   exportProject?(): Promise<void>;
   accountCurrent(): Promise<UserProfile | null>;
-  accountRegister(credentials: Credentials): Promise<UserProfile>;
+  accountRegister?(credentials: Registration): Promise<UserProfile>;
   accountLogin(credentials: Credentials): Promise<UserProfile>;
   accountLogout(): Promise<void>;
   accountChangePassword(request: PasswordChange): Promise<UserProfile>;

@@ -2,6 +2,7 @@ mod cookie;
 mod limits;
 mod password;
 mod session;
+pub mod turnstile;
 
 use crate::users::{self, Profile, User};
 use axum::{
@@ -24,6 +25,7 @@ pub struct Auth {
     pool: PgPool,
     slots: Arc<Semaphore>,
     dummy_hash: Arc<String>,
+    registration: Option<Arc<dyn turnstile::RegistrationChallenge>>,
 }
 
 impl Auth {
@@ -36,7 +38,16 @@ impl Auth {
             pool,
             slots: Arc::new(Semaphore::new(2)),
             dummy_hash: Arc::new(dummy_hash),
+            registration: None,
         })
+    }
+
+    pub fn with_registration(
+        mut self,
+        challenge: Arc<dyn turnstile::RegistrationChallenge>,
+    ) -> Self {
+        self.registration = Some(challenge);
+        self
     }
 
     async fn admit(&self) -> Result<tokio::sync::OwnedSemaphorePermit, Error> {
@@ -133,6 +144,18 @@ pub struct Credentials {
 }
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
+pub struct Registration {
+    pub username: String,
+    pub password: String,
+    pub turnstile_token: String,
+}
+
+#[derive(Serialize, ToSchema)]
+struct RegistrationConfig {
+    sitekey: String,
+}
+#[derive(Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct ChangePassword {
     pub current_password: String,
     pub new_password: String,
@@ -177,6 +200,7 @@ fn body<T>(value: Result<Json<T>, JsonRejection>) -> Result<T, Error> {
 fn routes() -> (Router<Auth>, utoipa::openapi::OpenApi) {
     OpenApiRouter::new()
         .routes(routes!(register))
+        .routes(routes!(registration_config))
         .routes(routes!(login))
         .routes(routes!(logout))
         .routes(routes!(profile))
@@ -221,20 +245,42 @@ async fn no_store(request: Request, next: Next) -> Response {
     response
 }
 
-/// Create an account; username is exact and is never silently normalized.
-#[utoipa::path(post, path="/auth/register", request_body(content=Credentials, example=json!({"username":"music_maker","password":"choose a long password"})), responses((status=201,body=SignedIn),(status=400,body=Error),(status=409,body=Error),(status=429,body=Error),(status=503,body=Error)))]
+#[utoipa::path(get, path="/auth/registration", responses((status=200,body=RegistrationConfig),(status=503,body=Error)))]
+async fn registration_config(State(auth): State<Auth>) -> Result<Json<RegistrationConfig>, Error> {
+    let challenge = auth
+        .registration
+        .as_ref()
+        .ok_or_else(turnstile::unavailable)?;
+    Ok(Json(RegistrationConfig {
+        sitekey: challenge.sitekey().to_owned(),
+    }))
+}
+
+/// Register on the website with a verified Turnstile token; creates a cookie session.
+#[utoipa::path(post, path="/auth/register", request_body(content=Registration, example=json!({"username":"music_maker","password":"choose a long password","turnstile_token":"token from the Turnstile widget"})), responses((status=201,body=SignedIn),(status=400,body=Error),(status=403,body=Error),(status=409,body=Error),(status=429,body=Error),(status=503,body=Error)))]
 async fn register(
     State(auth): State<Auth>,
     headers: HeaderMap,
-    request: Result<Json<Credentials>, JsonRejection>,
+    request: Result<Json<Registration>, JsonRejection>,
 ) -> Result<Response, Error> {
-    cookie::mode(&headers)?;
+    if !cookie::mode(&headers)? {
+        return Err(Error::new(
+            StatusCode::FORBIDDEN,
+            "web_registration_required",
+            "Create your account on the Wien website.",
+        ));
+    }
     let request = body(request)?;
     if !users::valid_username(&request.username) || !password::valid(&request.password) {
         return Err(Error::invalid());
     }
     let permit = auth.admit().await?;
     limits::check(&auth.pool, "register", "global", 20).await?;
+    auth.registration
+        .as_ref()
+        .ok_or_else(turnstile::unavailable)?
+        .verify(&request.turnstile_token)
+        .await?;
     let hash = tokio::task::spawn_blocking(move || {
         let _permit = permit;
         password::hash(&request.password)
