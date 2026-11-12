@@ -14,7 +14,8 @@ use serde_json::{Value, json};
 use tower::ServiceExt;
 use wien_server::{
     api,
-    providers::{ModelOptions, ModelResponse, Provider, ProviderError},
+    config::GenerationConfig,
+    providers::{ModelOptions, ModelResponse, Provider, ProviderError, ReasoningEffort},
 };
 
 struct TestProvider {
@@ -30,6 +31,12 @@ impl Provider for TestProvider {
         options: &ModelOptions,
     ) -> Result<ModelResponse, ProviderError> {
         self.calls.fetch_add(1, Ordering::SeqCst);
+        assert_eq!(options.model, "configured-model");
+        assert_eq!(options.reasoning_effort, Some(ReasoningEffort::High));
+        assert_eq!(
+            options.instructions.as_deref(),
+            Some("Configured instructions")
+        );
         if let Some(error) = self.error {
             return Err(error);
         }
@@ -48,7 +55,17 @@ fn app(error: Option<ProviderError>) -> (Router, Arc<AtomicUsize>) {
         calls: calls.clone(),
         error,
     });
-    (support::router(provider, Default::default()), calls)
+    (
+        support::router(
+            provider,
+            GenerationConfig {
+                model: "configured-model".into(),
+                reasoning_effort: ReasoningEffort::High,
+                instructions: Some("Configured instructions".into()),
+            },
+        ),
+        calls,
+    )
 }
 
 fn request(body: Value) -> Request<Body> {
@@ -71,16 +88,11 @@ async fn json_body(response: axum::response::Response) -> Value {
 #[tokio::test]
 async fn routes_through_provider_and_returns_json() {
     let (app, calls) = app(None);
-    let response = app
-        .oneshot(request(
-            json!({"text":"hello", "options":{"model":"test-model", "reasoning_effort":"low"}}),
-        ))
-        .await
-        .unwrap();
+    let response = app.oneshot(request(json!({"text":"hello"}))).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(
         json_body(response).await,
-        json!({"id":"test-id", "model":"test-model", "text":"hello", "usage":null})
+        json!({"id":"test-id", "model":"configured-model", "text":"hello", "usage":null})
     );
     assert_eq!(calls.load(Ordering::SeqCst), 1);
 }
@@ -90,43 +102,36 @@ async fn rejects_invalid_requests_before_spending_any_model_calls() {
     let (app, calls) = app(None);
     for (body, status) in [
         (
-            json!({"text":"hello","provider":"missing","options":{"model":"test"}}),
+            json!({"text":"hello","provider":"codex"}),
             StatusCode::BAD_REQUEST,
         ),
         (
-            json!({"text":"hello","provider":"codex","options":{"model":"test"}}),
+            json!({"text":"hello","model":"override"}),
             StatusCode::BAD_REQUEST,
         ),
         (
-            json!({"text":"hello","options":{"model":"test","provider":"codex"}}),
+            json!({"text":"hello","reasoning_effort":"low"}),
             StatusCode::BAD_REQUEST,
         ),
         (
-            json!({"text":" ","options":{"model":"test"}}),
+            json!({"text":"hello","options":{"model":"override","reasoning_effort":"low"}}),
             StatusCode::BAD_REQUEST,
         ),
         (
-            json!({"text":"hello","options":{"model":""}}),
+            json!({"text":"hello","instructions":"override"}),
+            StatusCode::BAD_REQUEST,
+        ),
+        (json!({"text":" "}), StatusCode::BAD_REQUEST),
+        (
+            json!({"text":"hello","token":"test-only-secret"}),
             StatusCode::BAD_REQUEST,
         ),
         (
-            json!({"text":"hello","options":{"model":"test","temperature":0.5}}),
+            json!({"text":"x".repeat(128 * 1024 + 1)}),
             StatusCode::BAD_REQUEST,
         ),
         (
-            json!({"text":"hello","options":{"model":"test","reasoning_effort":"bogus"}}),
-            StatusCode::BAD_REQUEST,
-        ),
-        (
-            json!({"text":"hello","options":{"model":"test"},"token":"test-only-secret"}),
-            StatusCode::BAD_REQUEST,
-        ),
-        (
-            json!({"text":"x".repeat(128 * 1024 + 1),"options":{"model":"test"}}),
-            StatusCode::BAD_REQUEST,
-        ),
-        (
-            json!({"text":"x".repeat(256 * 1024),"options":{"model":"test"}}),
+            json!({"text":"x".repeat(256 * 1024)}),
             StatusCode::PAYLOAD_TOO_LARGE,
         ),
     ] {
@@ -145,7 +150,7 @@ async fn rejects_invalid_requests_before_spending_any_model_calls() {
 #[tokio::test]
 async fn rejects_malformed_json_and_cross_origin_or_rebinding_requests() {
     let (app, calls) = app(None);
-    let body = json!({"text":"hello", "options":{"model":"test"}});
+    let body = json!({"text":"hello"});
     let mut cross_origin = request(body.clone());
     cross_origin
         .headers_mut()
@@ -189,10 +194,7 @@ async fn returns_stable_error_codes_and_http_statuses() {
         (ProviderError::Incomplete, StatusCode::BAD_GATEWAY),
     ] {
         let (app, _) = app(Some(error));
-        let response = app
-            .oneshot(request(json!({"text":"hello","options":{"model":"test"}})))
-            .await
-            .unwrap();
+        let response = app.oneshot(request(json!({"text":"hello"}))).await.unwrap();
         assert_eq!(response.status(), status);
         assert_eq!(json_body(response).await["code"], error.code());
     }
@@ -210,9 +212,9 @@ async fn serves_openapi_and_offline_swagger_without_credentials() {
     let spec = json_body(response).await;
     assert_eq!(spec, serde_json::to_value(api::openapi()).unwrap());
     assert!(spec["paths"]["/v1/generate"]["post"]["responses"]["200"].is_object());
-    assert!(spec["components"]["schemas"]["ModelOptions"]["properties"]["model"].is_object());
+
     let schemas = spec["components"]["schemas"].as_object().unwrap();
-    for name in ["GenerateRequest", "ModelOptions", "ModelResponse"] {
+    for name in ["GenerateRequest", "ModelResponse"] {
         assert!(
             !schemas[name]["properties"]
                 .as_object()
@@ -220,7 +222,19 @@ async fn serves_openapi_and_offline_swagger_without_credentials() {
                 .contains_key("provider")
         );
     }
-    assert!(!schemas.contains_key("ProviderKind"));
+    for name in [
+        "ProviderKind",
+        "ModelOptions",
+        "ReasoningEffort",
+        "GenerationConfig",
+    ] {
+        assert!(!schemas.contains_key(name));
+    }
+    let properties = schemas["GenerateRequest"]["properties"]
+        .as_object()
+        .unwrap();
+    assert_eq!(properties.len(), 1);
+    assert!(properties.contains_key("text"));
     assert!(
         spec["paths"]["/v1/generate"]["post"]["responses"]
             .get("404")
@@ -241,11 +255,7 @@ async fn serves_openapi_and_offline_swagger_without_credentials() {
 async fn generated_http_body_matches_openapi_example_and_is_accepted() {
     let spec = serde_json::to_value(api::openapi()).unwrap();
     let example = spec["paths"]["/v1/generate"]["post"]["requestBody"]["content"]["application/json"]["example"].clone();
-    assert!(
-        example["options"]["model"]
-            .as_str()
-            .is_some_and(|value| !value.is_empty())
-    );
+    assert_eq!(example, json!({"text":"Hello!"}));
     let http = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/http/PostGenerate.http"

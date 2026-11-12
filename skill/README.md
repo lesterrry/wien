@@ -7,32 +7,24 @@ retrieval; `strudel-rag-grpc` exposes tonic RPCs; `strudel-rag-cli` provides the
 calling harness. This project does not render audio, execute Strudel, or claim to
 have listened to examples.
 
-## Build and fixture demonstration
+## Build and run
 
 Run all commands below from the repository root. Rust is pinned in
 `rust-toolchain.toml`; run `rustup show` to install it. Protobuf compilation uses a vendored `protoc`;
 you do not need a system `protoc` or `grpcurl`.
 
 ```sh
-cargo build --locked -p strudel-rag-cli --features fixture-provider
-./target/debug/strudel-rag --config skill/config.fixture.toml --allow-fixture ingest
-./target/debug/strudel-rag --config skill/config.fixture.toml --allow-fixture index
-./target/debug/strudel-rag --config skill/config.fixture.toml --allow-fixture search \
-  --query 'slow pattern cycles' --intent api --top-k 3
-./target/debug/strudel-rag --config skill/config.fixture.toml --allow-fixture info
+cargo build --locked -p strudel-rag-cli
+export AITUNNEL_KEY='your-key'
+export STRUDEL_RAG_BEARER_TOKEN='your-persistent-token'
+./target/debug/strudel-rag ingest
+./target/debug/strudel-rag index
+./target/debug/strudel-rag info
+./target/debug/strudel-rag serve
 ```
 
-The source is explicitly fixture-labelled, locally authored documentation, not
-an official Strudel corpus. The deterministic 64-bucket provider is compiled only
-with `fixture-provider`, requires `--allow-fixture`, accepts only fixture corpus,
-and may only be served on loopback. It checks plumbing, **not multilingual semantic
-quality**. There is no automatic mock fallback. A regular build disables it.
-
-Start the server in one terminal:
-
-```sh
-./target/debug/strudel-rag --config skill/config.fixture.toml --allow-fixture serve
-```
+Ingestion uses the configured real sources; indexing and search call AI Tunnel.
+Set credentials in the environment: the CLI does not load the root `.env`.
 
 In another terminal (a separate process, no local index opened by the client):
 
@@ -62,7 +54,7 @@ through the shared protobuf contract and provides the bundled skill and genre
 guides to the model. It requires a ready index. The commands below operate on
 `skill` alone.
 Its [Dockerfile](../Dockerfile) builds the production CLI with
-`--locked` and no fixture feature, then runs it as UID/GID 10001 in a slim
+`--locked`, then runs it as UID/GID 10001 in a slim
 runtime with CA certificates. Rust and protobuf build tooling stay out of the
 runtime image.
 
@@ -71,7 +63,7 @@ Run these commands from the repository root:
 ```sh
 # Keep this token for subsequent commands, or put it in the ignored root .env.
 export STRUDEL_RAG_BEARER_TOKEN="$(openssl rand -hex 32)"
-export OPENAI_API_KEY='your-key'
+export AITUNNEL_KEY='your-key'
 docker compose up -d --build skill
 docker compose exec skill strudel-rag remote info
 ```
@@ -84,8 +76,8 @@ Other containers on the Compose network can use `http://skill:50051` with that
 token. This is cleartext gRPC, not TLS; do not expose it to an untrusted network.
 
 Set embedding credentials before starting the service so both indexing jobs and
-live searches inherit them. Omit the API key for a keyless local endpoint and
-set its base URL/model before startup. If credentials change after startup,
+live searches inherit the same AI Tunnel key. Other embedding endpoints and
+key aliases are not supported. If credentials change after startup,
 recreate the service with `docker compose up -d --force-recreate skill`;
 `docker compose restart` alone does not refresh its environment.
 
@@ -114,12 +106,9 @@ docker compose exec skill strudel-rag remote info
 docker compose exec skill strudel-rag remote health
 ```
 
-Compose forwards `OPENAI_API_KEY`, `STRUDEL_RAG_EMBEDDING_API_KEY` (takes
-precedence), `STRUDEL_RAG_EMBEDDING_BASE_URL`, and `STRUDEL_RAG_EMBEDDING_MODEL`.
+Compose forwards `AITUNNEL_KEY` and `STRUDEL_RAG_EMBEDDING_MODEL`.
 Defaults match `skill/config.toml`. `index` and live searches require access
-to the configured embedding endpoint; starting the empty server does not.
-For an embedding service on the host under Docker Desktop, use
-`http://host.docker.internal:PORT/v1`, not container-local `127.0.0.1`.
+to AI Tunnel; the key is required at startup, but startup makes no paid call.
 Changing embedding identity requires `index --rebuild`; recreate the service
 with `docker compose up -d --force-recreate skill` to apply changed environment.
 For additional TOML settings, mount your configuration read-only at
@@ -170,9 +159,7 @@ that a real embedding endpoint or RU/EN retrieval quality has been evaluated.
 Set credentials in your environment, never flags or tracked config:
 
 ```sh
-export OPENAI_API_KEY='your-key'
-# Overrides the configured api_key_env, when set:
-# export STRUDEL_RAG_EMBEDDING_API_KEY='your-key'
+export AITUNNEL_KEY='your-key'
 ./target/debug/strudel-rag index
 ./target/debug/strudel-rag doctor --check-embeddings
 ./target/debug/strudel-rag search --query 'euclid pulses steps' --intent api --top-k 5
@@ -181,14 +168,13 @@ export OPENAI_API_KEY='your-key'
 ./target/debug/strudel-rag serve
 ```
 
-Configure an OpenAI-compatible endpoint by setting
-`STRUDEL_RAG_EMBEDDING_BASE_URL` (including `/v1`) and
-`STRUDEL_RAG_EMBEDDING_MODEL`; optional dimensions are configurable. Local
-endpoints may omit an API key. The model in the example config is just an
-example: choose a multilingual model and run the real eval before relying on
-RU-to-English search. BM25 does not translate Russian. Model/base URL/dimension
-changes require `index --rebuild`; incompatible query vectors are rejected,
-never silently replaced by BM25-only results.
+Embeddings use the dedicated AI Tunnel adapter at
+`https://api.aitunnel.ru/v1/embeddings` with `AITUNNEL_KEY` only.
+The default model is `text-embedding-3-small`; optional model and dimensions
+remain configurable. Changing them requires `index --rebuild`; incompatible
+query vectors are rejected rather than silently replaced by BM25-only results.
+The existing AI Tunnel index remains compatible when only the key changes.
+Fixtures remain test-only and never serve as a production fallback.
 
 ### Authorized checkout / saved HTML / personal examples
 
@@ -254,11 +240,11 @@ paths resolve from the config's directory; CLI paths resolve from the current
 working directory. Environment overrides:
 
 - `STRUDEL_RAG_CONFIG`, `STRUDEL_RAG_DATA_DIR`, `STRUDEL_RAG_SOURCES_MANIFEST`
-- `STRUDEL_RAG_EMBEDDING_PROVIDER`, `_BASE_URL`, `_MODEL`, `_DIMENSIONS`,
+- `STRUDEL_RAG_EMBEDDING_PROVIDER`, `_MODEL`, `_DIMENSIONS`,
   `_BATCH_SIZE`, `_TIMEOUT_SECS`, `_MAX_RETRIES` (all share the full
   `STRUDEL_RAG_EMBEDDING_` prefix)
 - `STRUDEL_RAG_BIND`, `STRUDEL_RAG_ENDPOINT`, `STRUDEL_RAG_TIMEOUT_SECS`
-- API key: `STRUDEL_RAG_EMBEDDING_API_KEY`, otherwise the configured `api_key_env`
+- API key: `AITUNNEL_KEY` only; production provider: `aitunnel`
 - Bearer token: the environment variable named by `bearer_token_env`
   (default `STRUDEL_RAG_BEARER_TOKEN`)
 
@@ -295,8 +281,6 @@ Scores are **not probabilities**. A cosine cutoff is a configurable heuristic.
 Mixed search only diversifies among already relevant candidates.
 
 ```sh
-./target/debug/strudel-rag --config skill/config.fixture.toml --allow-fixture \
-  eval --dataset skill/eval/fixture.jsonl --k 5
 ./target/debug/strudel-rag eval --dataset skill/eval/real.jsonl --k 5
 cargo fmt --all -- --check
 cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
@@ -379,7 +363,7 @@ Strudel. Parsing, retrieval and embedding do not upgrade verification status.
 ## Shared infrastructure
 
 Both services use the root `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`,
-`Dockerfile`, and `just check-rust` / CI pipeline. Generated gRPC types are in
+`Dockerfile`, and `just test` / CI checks. Generated gRPC types are in
 `crates/rag-protocol`; `crates/service-runtime` provides JSON logging to stderr
 (`RUST_LOG`, default `info`) and SIGINT/SIGTERM shutdown. CLI result JSON stays on stdout.
 Compose mounts `skill/config.toml` read-only at `/app/config.toml`; override the host

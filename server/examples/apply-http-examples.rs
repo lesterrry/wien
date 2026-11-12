@@ -23,7 +23,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn apply_example(spec: &Value, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    let source = fs::read_to_string(path)?;
+    // Swagger uses the current origin; REST Client examples need an absolute local URL.
+    let source =
+        fs::read_to_string(path)?.replace("@baseUrl = /\n", "@baseUrl = http://127.0.0.1:3001\n");
     let lines: Vec<_> = source.lines().collect();
     let invalid = || io::Error::other("Unexpected httpgenerator output format");
     let (method, route) = lines

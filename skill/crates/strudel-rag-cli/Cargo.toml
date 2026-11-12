@@ -10,10 +10,6 @@ license = "MIT"
 name = "strudel-rag"
 path = "src/main.rs"
 
-[features]
-default = []
-fixture-provider = ["strudel-rag-core/test-support"]
-
 [dependencies]
 service-runtime.workspace = true
 strudel-rag-core.workspace = true

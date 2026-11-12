@@ -578,11 +578,11 @@ mod tests {
             "index",
             "--allow-fixture",
             "--config",
-            "config.fixture.toml",
+            "test-config.toml",
         ])
         .unwrap();
         assert!(cli.allow_fixture);
-        assert_eq!(cli.config, Some(PathBuf::from("config.fixture.toml")));
+        assert_eq!(cli.config, Some(PathBuf::from("test-config.toml")));
         assert!(
             !Cli::try_parse_from(["strudel-rag", "info"])
                 .unwrap()

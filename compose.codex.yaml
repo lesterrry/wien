@@ -1,0 +1,13 @@
+# Local credentials mount, always included by just run-server.
+# The active adapter is selected separately in server/config.toml.
+services:
+  server:
+    environment:
+      WIEN_CODEX_AUTH_FILE: /run/wien/auth.json
+    volumes:
+      - type: bind
+        source: ${WIEN_CODEX_AUTH_FILE:-${CODEX_HOME:-${HOME}/.codex}/auth.json}
+        target: /run/wien/auth.json
+        read_only: true
+        bind:
+          create_host_path: false

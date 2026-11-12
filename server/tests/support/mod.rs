@@ -3,10 +3,8 @@ use serde_json::{Value, json};
 use std::sync::Arc;
 use wien_server::{
     api,
-    assistant::{
-        AssistantConfig,
-        tools::{AssistantTools, ToolError},
-    },
+    assistant::tools::{AssistantTools, ToolError},
+    config::GenerationConfig,
     providers::Provider,
 };
 
@@ -18,6 +16,6 @@ impl AssistantTools for ReadyTools {
         Ok(json!({"ready":true, "fixture":true}))
     }
 }
-pub fn router(provider: Arc<dyn Provider>, config: AssistantConfig) -> axum::Router {
+pub fn router(provider: Arc<dyn Provider>, config: GenerationConfig) -> axum::Router {
     api::router(provider, config, Arc::new(ReadyTools))
 }

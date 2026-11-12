@@ -41,7 +41,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         })?;
     tracing::info!(address = %listener.local_addr()?, "HTTP server listening");
-    axum::serve(listener, api::router(provider, config.assistant, tools))
+    axum::serve(listener, api::router(provider, config.generation, tools))
         .with_graceful_shutdown(service_runtime::shutdown_signal())
         .await?;
     Ok(())

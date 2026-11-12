@@ -256,20 +256,22 @@ async fn hybrid_filters_dedup_parents_and_generation_are_real() {
         Some(first.generation)
     );
 }
+#[cfg(feature = "test-support")]
 #[tokio::test]
 async fn http_reorders_indices_and_rejects_nonretryable_and_zero() {
     use wiremock::{
         Mock, MockServer, ResponseTemplate,
-        matchers::{method, path},
+        matchers::{header, method, path},
     };
     let server = MockServer::start().await;
-    Mock::given(method("POST")).and(path("/v1/embeddings")).respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"model":"reported","data":[{"index":1,"embedding":[0.0,2.0]},{"index":0,"embedding":[3.0,0.0]}]}))).expect(1).mount(&server).await;
+    Mock::given(method("POST")).and(path("/v1/embeddings")).and(header("authorization", "Bearer test-key")).respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"model":"reported","data":[{"index":1,"embedding":[0.0,2.0]},{"index":0,"embedding":[3.0,0.0]}]}))).expect(1).mount(&server).await;
     let config = EmbeddingConfig {
-        base_url: format!("{}/v1", server.uri()),
         dimensions: Some(2),
         ..Default::default()
     };
-    let p = HttpEmbeddingProvider::new(&config).unwrap();
+    let p =
+        AitunnelEmbeddingProvider::for_test(&config, format!("{}/v1", server.uri()), "test-key")
+            .unwrap();
     let batch = p.embed(&["a".into(), "b".into()]).await.unwrap();
     assert_eq!(batch.vectors, vec![vec![1.0, 0.0], vec![0.0, 1.0]]);
     server.reset().await;
@@ -289,6 +291,7 @@ async fn http_reorders_indices_and_rejects_nonretryable_and_zero() {
         .await;
     assert!(p.embed(&["a".into()]).await.is_err());
 }
+#[cfg(feature = "test-support")]
 #[tokio::test]
 async fn http_retries_only_retryable_failures() {
     use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
@@ -298,12 +301,15 @@ async fn http_retries_only_retryable_failures() {
         .expect(2)
         .mount(&server)
         .await;
-    let p = HttpEmbeddingProvider::new(&EmbeddingConfig {
-        base_url: server.uri(),
-        max_retries: 1,
-        timeout_secs: 3,
-        ..Default::default()
-    })
+    let p = AitunnelEmbeddingProvider::for_test(
+        &EmbeddingConfig {
+            max_retries: 1,
+            timeout_secs: 3,
+            ..Default::default()
+        },
+        server.uri(),
+        "test-key",
+    )
     .unwrap();
     assert!(p.embed(&["a".into()]).await.is_err());
 }

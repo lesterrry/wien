@@ -1,7 +1,10 @@
-use crate::{Config, EmbeddingConfig, Error, Result, sha256, store};
+pub mod aitunnel;
+pub use aitunnel::AitunnelEmbeddingProvider;
+
+use crate::{Config, Error, Result, sha256, store};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct EmbeddingIdentity {
     pub base_url: String,
@@ -27,7 +30,7 @@ pub trait EmbeddingProvider: Send + Sync {
 pub fn provider_from_config(config: &Config) -> Result<Arc<dyn EmbeddingProvider>> {
     config.validate()?;
     match config.embedding.provider.as_str() {
-        "http" => Ok(Arc::new(HttpEmbeddingProvider::new(&config.embedding)?)),
+        "aitunnel" => Ok(Arc::new(AitunnelEmbeddingProvider::new(&config.embedding)?)),
         "mock" => {
             if !config.allow_fixture {
                 return Err(Error::Config(
@@ -41,158 +44,11 @@ pub fn provider_from_config(config: &Config) -> Result<Arc<dyn EmbeddingProvider
             #[cfg(not(feature = "test-support"))]
             {
                 Err(Error::Config(
-                    "mock provider requires the fixture-provider feature".into(),
+                    "mock provider is only available in test-support builds".into(),
                 ))
             }
         }
         _ => Err(Error::Config("unknown embedding provider".into())),
-    }
-}
-#[derive(Clone)]
-pub struct HttpEmbeddingProvider {
-    config: EmbeddingConfig,
-    client: reqwest::Client,
-}
-impl HttpEmbeddingProvider {
-    pub fn new(config: &EmbeddingConfig) -> Result<Self> {
-        Ok(Self {
-            config: config.clone(),
-            client: reqwest::Client::builder()
-                .redirect(reqwest::redirect::Policy::none())
-                .connect_timeout(Duration::from_secs(10))
-                .timeout(Duration::from_secs(config.timeout_secs))
-                .build()
-                .map_err(|_| Error::Config("could not construct HTTP embedding client".into()))?,
-        })
-    }
-}
-#[derive(Deserialize)]
-struct HttpResponse {
-    model: String,
-    data: Vec<HttpVector>,
-}
-#[derive(Deserialize)]
-struct HttpVector {
-    index: usize,
-    embedding: Vec<f32>,
-}
-#[async_trait]
-impl EmbeddingProvider for HttpEmbeddingProvider {
-    fn identity(&self) -> EmbeddingIdentity {
-        EmbeddingIdentity {
-            base_url: self.config.base_url.trim_end_matches('/').into(),
-            model: self.config.model.clone(),
-            dimensions: self.config.dimensions,
-            embedding_text_version: 1,
-        }
-    }
-    async fn embed(&self, inputs: &[String]) -> Result<EmbeddingBatch> {
-        let mut result = EmbeddingBatch {
-            model: String::new(),
-            vectors: Vec::with_capacity(inputs.len()),
-        };
-        let mut dimension = self.config.dimensions;
-        for batch in inputs.chunks(self.config.batch_size) {
-            let deadline =
-                tokio::time::Instant::now() + Duration::from_secs(self.config.timeout_secs);
-            let mut attempt = 0;
-            let response = loop {
-                let mut body = serde_json::json!({"model":self.config.model,"input":batch,"encoding_format":"float"});
-                if let Some(d) = self.config.dimensions {
-                    body["dimensions"] = d.into()
-                }
-                let mut request = self
-                    .client
-                    .post(format!(
-                        "{}/embeddings",
-                        self.config.base_url.trim_end_matches('/')
-                    ))
-                    .json(&body);
-                if let Some(key) = self.config.api_key() {
-                    request = request.bearer_auth(key)
-                }
-                let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
-                if remaining.is_zero() {
-                    return Err(Error::Provider("embedding deadline exceeded".into()));
-                }
-                let response = request.timeout(remaining).send().await;
-                let mut retry_after = None;
-                let retry = match &response {
-                    Err(e) => e.is_timeout() || e.is_connect(),
-                    Ok(r) => {
-                        retry_after = r
-                            .headers()
-                            .get(reqwest::header::RETRY_AFTER)
-                            .and_then(|h| h.to_str().ok())
-                            .and_then(|s| {
-                                s.parse::<u64>().ok().map(Duration::from_secs).or_else(|| {
-                                    httpdate::parse_http_date(s).ok().map(|t| {
-                                        t.duration_since(std::time::SystemTime::now())
-                                            .unwrap_or_default()
-                                    })
-                                })
-                            });
-                        matches!(r.status().as_u16(), 408 | 429 | 500 | 502 | 503 | 504)
-                    }
-                };
-                if retry && attempt < self.config.max_retries {
-                    let backoff =
-                        Duration::from_millis(250u64.saturating_mul(1u64 << attempt.min(10)))
-                            .min(Duration::from_secs(4));
-                    let delay = retry_after.unwrap_or(backoff).max(backoff);
-                    let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
-                    if delay >= remaining {
-                        return Err(Error::Provider("embedding retry deadline exceeded".into()));
-                    }
-                    tokio::time::sleep(delay).await;
-                    attempt += 1;
-                    continue;
-                }
-                let r =
-                    response.map_err(|_| Error::Provider("embedding transport failure".into()))?;
-                if !r.status().is_success() {
-                    return Err(Error::Provider(format!(
-                        "embedding endpoint returned HTTP {}",
-                        r.status().as_u16()
-                    )));
-                }
-                break tokio::time::timeout_at(deadline, r.json::<HttpResponse>())
-                    .await
-                    .map_err(|_| Error::Provider("embedding response deadline exceeded".into()))?
-                    .map_err(|_| Error::Provider("invalid embedding response JSON".into()))?;
-            };
-            if response.model.trim().is_empty()
-                || (!result.model.is_empty() && response.model != result.model)
-            {
-                return Err(Error::Provider(
-                    "inconsistent reported embedding model".into(),
-                ));
-            }
-            result.model = response.model;
-            if response.data.len() != batch.len() {
-                return Err(Error::Provider("embedding count mismatch".into()));
-            }
-            let mut ordered: Vec<Option<Vec<f32>>> = vec![None; batch.len()];
-            for row in response.data {
-                if row.index >= ordered.len() || ordered[row.index].is_some() {
-                    return Err(Error::Provider(
-                        "embedding indices must be a unique complete permutation".into(),
-                    ));
-                }
-                let mut vector = row.embedding;
-                let d = normalize_vector(&mut vector, dimension)?;
-                dimension = Some(d);
-                ordered[row.index] = Some(vector);
-            }
-            for vector in ordered {
-                result.vectors.push(
-                    vector.ok_or_else(|| {
-                        Error::Provider("missing embedding response index".into())
-                    })?,
-                )
-            }
-        }
-        Ok(result)
     }
 }
 pub fn normalize_vector(vector: &mut [f32], dimension: Option<usize>) -> Result<usize> {

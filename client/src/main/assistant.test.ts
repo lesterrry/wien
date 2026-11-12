@@ -2,6 +2,47 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { externalWebUrl } from "../shared/links";
 import { askAssistant } from "./assistant";
+import { backendConfig } from "./config";
+
+test("backend config supports local ports and HTTPS domains with explicit URL priority", () => {
+  assert.deepEqual(backendConfig({ WIEN_SERVER_PORT: "3007" }), {
+    url: "http://127.0.0.1:3007",
+    local: true,
+  });
+  assert.deepEqual(
+    backendConfig({
+      WIEN_BACKEND_URL: "https://wien.aydar.media/",
+      WIEN_SERVER_PORT: "invalid",
+    }),
+    { url: "https://wien.aydar.media", local: false },
+  );
+  assert.equal(
+    backendConfig({ WIEN_BACKEND_URL: "http://[::1]:3001" }).local,
+    true,
+  );
+});
+
+test("invalid endpoints fail before sending file contents and hide credentials", () => {
+  for (const address of [
+    "",
+    "not-a-url",
+    "file:///etc/passwd",
+    "http://wien.aydar.media",
+    "https://user:test-only-secret@wien.aydar.media",
+    "https://wien.aydar.media/v1/assist",
+    "https://wien.aydar.media?token=test-only-secret",
+    "https://wien.aydar.media#test-only-secret",
+  ]) {
+    assert.throws(
+      () => backendConfig({ WIEN_BACKEND_URL: address }),
+      (error: Error) =>
+        error.message.startsWith("Invalid backend URL.") &&
+        !error.message.includes("test-only-secret"),
+    );
+  }
+  for (const port of ["", "0", "65536", "3001/path"])
+    assert.throws(() => backendConfig({ WIEN_SERVER_PORT: port }));
+});
 
 test("model links only open absolute HTTP(S) URLs without credentials", () => {
   assert.equal(
@@ -38,7 +79,7 @@ const request = {
   },
 };
 
-test("assistant sends context only to loopback, without credentials or redirects", async (t) => {
+test("assistant sends context to configured local port, without credentials or redirects", async (t) => {
   const previous = process.env.WIEN_SERVER_PORT;
   process.env.WIEN_SERVER_PORT = "3007";
   t.after(() => {
@@ -57,6 +98,40 @@ test("assistant sends context only to loopback, without credentials or redirects
   assert.deepEqual(await askAssistant(request, new AbortController().signal), {
     message: "Done.",
     code: "note('a1').gain(0.1)",
+  });
+});
+
+test("remote assistant uses configured domain and explains disabled generation without retrying", async (t) => {
+  const previous = process.env.WIEN_BACKEND_URL;
+  process.env.WIEN_BACKEND_URL = "https://wien.aydar.media/";
+  t.after(() => {
+    if (previous === undefined) delete process.env.WIEN_BACKEND_URL;
+    else process.env.WIEN_BACKEND_URL = previous;
+  });
+  const fetch = t.mock.method(
+    globalThis,
+    "fetch",
+    async (url: string, init: RequestInit) => {
+      assert.equal(url, "https://wien.aydar.media/v1/assist");
+      assert.equal(init.redirect, "error");
+      assert.deepEqual(init.headers, { "Content-Type": "application/json" });
+      assert.deepEqual(JSON.parse(String(init.body)), request);
+      return Response.json(
+        { code: "provider_not_configured", message: "test-only-secret" },
+        { status: 503 },
+      );
+    },
+  );
+  await assert.rejects(askAssistant(request, new AbortController().signal), {
+    message: "Generation is disabled on this server.",
+  });
+  assert.equal(fetch.mock.callCount(), 1);
+  t.mock.method(globalThis, "fetch", async () => {
+    throw new Error("test-only-secret");
+  });
+  await assert.rejects(askAssistant(request, new AbortController().signal), {
+    message:
+      "Cannot reach the assistant at https://wien.aydar.media. Check the backend address and connection.",
   });
 });
 
@@ -83,7 +158,7 @@ test("assistant rejects unexpected responses and hides raw server errors", async
   await assert.rejects(
     askAssistant(request, new AbortController().signal),
     (error: Error) =>
-      error.message.includes("codex login") &&
+      error.message.includes("model credentials") &&
       !error.message.includes("test-only-secret"),
   );
 });
