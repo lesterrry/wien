@@ -37,7 +37,7 @@ const server = http.createServer(async (req, res) => {
 });
 let app, browser;
 
-async function check(page, desktop, legacy = false) {
+async function check(page, desktop) {
   page.setDefaultTimeout(30000);
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -106,11 +106,8 @@ $: note("c3 e3").s("triangle").gain(0.1)
     .fill("0.5");
   if (process.env.WIEN_AUDIO_SCREENSHOT && !desktop)
     await page.screenshot({ path: process.env.WIEN_AUDIO_SCREENSHOT });
-  const file = path.join(
-    temporary,
-    `${legacy ? "legacy" : desktop ? "desktop" : "web"}.wav`,
-  );
-  if (desktop && !legacy) {
+  const file = path.join(temporary, `${desktop ? "desktop" : "web"}.wav`);
+  if (desktop) {
     await app.evaluate(({ dialog }) => {
       dialog.showSaveDialog = async () => ({ canceled: true });
     });
@@ -129,25 +126,6 @@ $: note("c3 e3").s("triangle").gain(0.1)
       };
     }, file);
     await dialog.getByRole("button", { name: "Save WAV", exact: true }).click();
-  } else if (desktop && legacy) {
-    assert.equal(
-      await page.evaluate(() => typeof window.workspace.saveAudio),
-      "undefined",
-    );
-    await app.evaluate(({ session }, file) => {
-      session.defaultSession.once("will-download", (_event, item) => {
-        item.setSavePath(file);
-      });
-    }, file);
-    await dialog.getByRole("button", { name: "Save WAV", exact: true }).click();
-    await expect
-      .poll(async () =>
-        fs.stat(file).then(
-          (stat) => stat.size,
-          () => 0,
-        ),
-      )
-      .toBe(44 + 4.5 * 44100 * 4);
   } else {
     const downloading = page.waitForEvent("download");
     await dialog.getByRole("button", { name: "Save WAV", exact: true }).click();
@@ -182,7 +160,7 @@ $: note("c3 e3").s("triangle").gain(0.1)
   assert(tailPeak > 0, "effect tail is missing");
   assert.deepEqual(errors, []);
   console.log(
-    `${legacy ? "Desktop with old preload" : desktop ? "Desktop" : "Web"}: WAV signal/length/effect tail, imports, $: tracks, errors, cancel/retry, save and live-context isolation passed.`,
+    `${desktop ? "Desktop" : "Web"}: WAV signal/length/effect tail, imports, $: tracks, errors, cancel/retry, save and live-context isolation passed.`,
   );
 }
 
@@ -206,32 +184,6 @@ try {
     env,
   });
   await check(await app.firstWindow(), true);
-  await app.close();
-  app = null;
-  // Model a renderer hot-update with an old, immutable contextBridge API.
-  // Only the test copy loses the method; the actual build stays untouched.
-  const legacyOutput = path.join(temporary, "legacy", "out");
-  await fs.cp(path.resolve("out"), legacyOutput, { recursive: true });
-  await fs.copyFile("config.yaml", path.join(temporary, "legacy/config.yaml"));
-  await fs.mkdir(path.join(temporary, "legacy/resources"));
-  await fs.copyFile(
-    "resources/icon.png",
-    path.join(temporary, "legacy/resources/icon.png"),
-  );
-  await fs.symlink(
-    path.resolve("node_modules"),
-    path.join(temporary, "legacy", "node_modules"),
-  );
-  const preloadPath = path.join(legacyOutput, "preload/index.js");
-  const preload = await fs.readFile(preloadPath, "utf8");
-  const oldPreload = preload.replace(/^ {2}saveAudio:.*\n/m, "");
-  assert.notEqual(oldPreload, preload);
-  await fs.writeFile(preloadPath, oldPreload);
-  app = await electron.launch({
-    args: ["--mute-audio", path.join(legacyOutput, "main/index.js")],
-    env,
-  });
-  await check(await app.firstWindow(), true, true);
 } finally {
   await app?.close();
   await browser?.close();

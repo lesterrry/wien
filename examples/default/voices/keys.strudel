@@ -29,5 +29,5 @@ export const answer = piano(cat(
   note("~ ~ ~ ~ ~ c#6 ~ a5"), note("~ ~ g#5 ~ ~ ~ ~ ~"),
   note("~ ~ ~ ~ ~ b5 ~ g#5"), note("~ ~ e5 ~ ~ ~ ~ ~"),
   note("~ ~ ~ ~ ~ c#6 ~ b5"), note("a5 ~ ~ ~ ~ ~ ~ ~")
-)).gain(level * 0.28).pan(0.65).orbit(2)
-export default piano(phrase).pan(-0.12)
+)).gain(level * 0.28).orbit(2)
+export default piano(phrase)

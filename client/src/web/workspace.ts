@@ -3,7 +3,7 @@ import {
   AssistAccessError,
   requestAssistant,
 } from "../shared/assistant-client";
-import { downloadAudio } from "../shared/download-audio";
+import { validateWav, wavFilename } from "../shared/audio-export";
 import { exampleNames, getExampleFiles } from "../shared/examples";
 import { externalWebUrl } from "../shared/links";
 import type { WorkspaceApi } from "../shared/types";
@@ -67,7 +67,16 @@ export const workspace: WorkspaceApi = {
   readControlPreferences: (root) => projects.preferences(root),
   saveControlPreferences: (root, value) =>
     projects.savePreferences(root, value),
-  saveAudio: downloadAudio,
+  async saveAudio(name, data) {
+    validateWav(data);
+    const url = URL.createObjectURL(new Blob([data], { type: "audio/wav" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = wavFilename(name);
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    return true;
+  },
   async exportProject() {
     const project = await projects.export();
     const url = URL.createObjectURL(

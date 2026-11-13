@@ -4,7 +4,6 @@ import {
   type AudioExportProgress,
   wavFilename,
 } from "../../../../shared/audio-export";
-import { downloadAudio } from "../../../../shared/download-audio";
 import type { ModuleGraph } from "../../../../shared/modules";
 import { renderAudio } from "../../audio-export";
 import { Dialog } from "../Dialog/Dialog";
@@ -41,15 +40,7 @@ export function AudioExportDialog({
   const save = async (data: ArrayBuffer) => {
     setSaving(true);
     try {
-      // React can hot-update while Electron's preload (or the web workspace
-      // object) still belongs to the previous build. Keep the rendered buffer
-      // usable without reloading the window and losing it.
-      const saveAudio = window.workspace.saveAudio;
-      const saved =
-        typeof saveAudio === "function"
-          ? await saveAudio(wavFilename(path), data)
-          : await downloadAudio(wavFilename(path), data);
-      if (saved) onClose();
+      if (await window.workspace.saveAudio(wavFilename(path), data)) onClose();
     } finally {
       setSaving(false);
     }
