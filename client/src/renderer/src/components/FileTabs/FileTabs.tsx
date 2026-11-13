@@ -195,7 +195,7 @@ export function FileTabs({
             onClick={controller.onSelect}
           >
             <SlidersHorizontal size={13} />
-            <span className={styles.fileTabName}>Controls</span>
+            <span className={styles.fileTabName}>Control Panel</span>
           </button>
           <button
             type="button"

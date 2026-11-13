@@ -271,7 +271,7 @@
 }
 .fullscreen .groups {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
   gap: 12px;
   align-items: stretch;
 }
@@ -290,6 +290,13 @@
   border-radius: var(--control-radius);
 }
 
+.fullscreen .composition {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 120px), 1fr));
+  align-items: start;
+}
+
 .compositionHeading {
   display: flex;
   align-items: center;
@@ -304,6 +311,10 @@
   background: transparent;
   text-align: left;
   cursor: pointer;
+}
+
+.fullscreen .compositionHeading {
+  grid-column: 1 / -1;
 }
 
 .compositionHeading > span {
