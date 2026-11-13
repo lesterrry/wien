@@ -4,8 +4,8 @@ import styles from "./SplitMarquee.module.css";
 const REVERSE = true;
 const SPEED = 24;
 const STRETCH = 6;
-const STRIPE_WIDTH = 2;
-const STRIPE_GAP = 1.75;
+const STRIPE_WIDTH = 1.75;
+const STRIPE_GAP = 0.75;
 
 export function SplitMarquee({
   text,
