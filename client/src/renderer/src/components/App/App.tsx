@@ -92,6 +92,7 @@ import { Dialog } from "../Dialog/Dialog";
 import { Explorer } from "../Explorer/Explorer";
 import { FileTabs } from "../FileTabs/FileTabs";
 import { GraphView } from "../GraphView/GraphView";
+import { SplitMarquee } from "../SplitMarquee/SplitMarquee";
 import { StrudelEditor } from "../StrudelEditor/StrudelEditor";
 import { VersionsPanel } from "../VersionsPanel/VersionsPanel";
 import styles from "./App.module.css";
@@ -1618,7 +1619,10 @@ export function App() {
       <div className={styles.titlebar}>
         <div className={styles.titlebarSidebar}>
           <span className={styles.appName}>
-            wien<span className={styles.wordmarkDot}>.</span>
+            <SplitMarquee
+              text="wien hauptbahnhof südtiroler platz"
+              paused={playingPaths.size === 0}
+            />
           </span>
           <button
             className={styles.iconButton}
