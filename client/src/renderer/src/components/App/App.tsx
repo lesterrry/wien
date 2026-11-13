@@ -2498,7 +2498,9 @@ export function App() {
                   : "Your snippets are plain files on your computer."}
               </p>
               {commands
-                .filter((command) => command.key)
+                .filter((command) =>
+                  ["play", "stop", "stopAll", "assist"].includes(command.id),
+                )
                 .map((command) => (
                   <div key={command.id}>
                     <span>{command.label}</span>
