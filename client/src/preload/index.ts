@@ -3,6 +3,7 @@ import type { WorkspaceApi } from "../shared/types";
 
 const api: WorkspaceApi = {
   platform: "desktop",
+  saveAudio: (name, data) => ipcRenderer.invoke("audio:save", name, data),
   onMenuCommand: (callback) => {
     const listener = (
       _event: Electron.IpcRendererEvent,

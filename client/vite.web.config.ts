@@ -30,6 +30,12 @@ export default defineConfig(({ command }) => ({
     outDir: resolve(__dirname, "out-web"),
     emptyOutDir: true,
     chunkSizeWarningLimit: 1800,
+    rollupOptions: {
+      input: {
+        index: resolve(__dirname, "src/web/index.html"),
+        audioExport: resolve(__dirname, "src/web/audio-export.html"),
+      },
+    },
   },
   server: {
     host: "127.0.0.1",

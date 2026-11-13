@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit",
     "format": "biome check --write .",
     "test": "pnpm check && pnpm test:unit",
-    "test:unit": "node --import tsx --test src/shared/snippet-names.test.ts src/shared/examples.test.ts src/shared/commands.test.ts src/dev/web-api-proxy.test.ts src/main/project-fs.test.ts src/main/project-versions.test.ts src/main/assistant.test.ts src/main/account.test.ts src/shared/modules.test.ts src/shared/controls.test.ts src/shared/control-tree.test.ts src/shared/dependency-graph.test.ts src/renderer/src/components/GraphView/layout.test.ts && pnpm test:modules",
+    "test:unit": "node --import tsx --test src/shared/audio-export.test.ts src/shared/snippet-names.test.ts src/shared/examples.test.ts src/shared/commands.test.ts src/dev/web-api-proxy.test.ts src/main/project-fs.test.ts src/main/project-versions.test.ts src/main/assistant.test.ts src/main/account.test.ts src/shared/modules.test.ts src/shared/controls.test.ts src/shared/control-tree.test.ts src/shared/dependency-graph.test.ts src/renderer/src/components/GraphView/layout.test.ts && pnpm test:modules",
     "test:smoke": "pnpm build && node scripts/explorer-smoke.mjs && node scripts/smoke.mjs && node scripts/window-smoke.mjs && node scripts/assistant-smoke.mjs && node scripts/subscriptions-smoke.mjs && node scripts/background-playback-smoke.mjs && node scripts/graph-smoke.mjs && node scripts/slider-smoke.mjs && node scripts/controls-smoke.mjs && node scripts/panel-modes-smoke.mjs && node scripts/playground-smoke.mjs && node scripts/versions-smoke.mjs",
     "build": "pnpm typecheck && electron-vite build",
     "preview": "electron-vite preview",
@@ -24,7 +24,8 @@
     "test:modules": "esbuild src/renderer/src/module-compiler.test.ts --bundle --platform=node --main-fields=module,main --format=cjs --outfile=out/tests/modules.cjs && node --test out/tests/modules.cjs",
     "dev:web": "vite --config vite.web.config.ts",
     "build:web": "pnpm typecheck && vite build --config vite.web.config.ts",
-    "test:web": "node scripts/web-smoke.mjs"
+    "test:web": "node scripts/web-smoke.mjs",
+    "test:audio-export": "pnpm build && pnpm build:web && node scripts/audio-export-smoke.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.1",

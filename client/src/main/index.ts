@@ -2,6 +2,7 @@ import * as fs from "node:fs/promises";
 import path from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import type { AssistRequest } from "../shared/assistant";
+import { validateWav, wavFilename } from "../shared/audio-export";
 import { matchCommand } from "../shared/commands";
 import {
   defaultExampleFiles,
@@ -111,6 +112,30 @@ async function initializeProject() {
 }
 
 function registerIpc() {
+  // A native save dialog is deliberately outside the autosave/project IO queue.
+  ipcMain.handle(
+    "audio:save",
+    async (event, name: string, data: ArrayBuffer) => {
+      if (
+        !window ||
+        event.sender !== window.webContents ||
+        event.senderFrame !== window.webContents.mainFrame
+      )
+        throw new Error("Invalid audio export request.");
+      if (typeof name !== "string" || name.length > 255)
+        throw new Error("Invalid filename.");
+      validateWav(data);
+      const result = await dialog.showSaveDialog(window, {
+        title: "Save WAV",
+        buttonLabel: "Save WAV",
+        defaultPath: wavFilename(name),
+        filters: [{ name: "WAV audio", extensions: ["wav"] }],
+      });
+      if (result.canceled || !result.filePath) return false;
+      await fs.writeFile(result.filePath, new Uint8Array(data));
+      return true;
+    },
+  );
   const origin = backendConfig().url;
   const accountStorage = new AccountStorage(app.getPath("userData"), origin);
   const account = new AccountClient(origin, accountStorage);

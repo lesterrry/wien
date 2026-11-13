@@ -30,7 +30,13 @@ import {
   UserRound,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  type MouseEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   type CommandId,
   type CommandState,
@@ -57,7 +63,12 @@ import {
   readControlCustomization,
   readControls,
 } from "../../../../shared/controls";
-import { type Edit, editSource, hasExports } from "../../../../shared/modules";
+import {
+  type Edit,
+  editSource,
+  hasExports,
+  loadGraph,
+} from "../../../../shared/modules";
 import { nextUntitledName } from "../../../../shared/snippet-names";
 import {
   type Entry,
@@ -74,6 +85,7 @@ import {
 } from "../../hooks/useSnippetSessions";
 import { useAccount } from "../Account/Account";
 import { AppMenu } from "../AppMenu/AppMenu";
+import { AudioExportDialog } from "../AudioExportDialog/AudioExportDialog";
 import { ControlSettingsDialog } from "../ControlSettingsDialog/ControlSettingsDialog";
 import { ControlsPanel } from "../ControlsPanel/ControlsPanel";
 import { Dialog } from "../Dialog/Dialog";
@@ -91,6 +103,7 @@ type Modal =
   | { kind: "delete"; entry: Entry }
   | { kind: "reload" }
   | { kind: "examples" }
+  | { kind: "audio-export"; path: string }
   | { kind: "help" };
 
 const api = window.workspace;
@@ -623,6 +636,21 @@ export function App() {
       window.removeEventListener("keydown", handleEscape);
     };
   }, [context, projectMenu]);
+
+  function openSnippetActions(event: MouseEvent<HTMLButtonElement>) {
+    event.stopPropagation();
+    if (!document) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    setContext({
+      entry: {
+        id: document.path,
+        name: document.path.split("/").at(-1) ?? document.path,
+        exported: hasExports(document.code),
+      },
+      x: rect.right - 220,
+      y: rect.bottom + 8,
+    });
+  }
 
   function showModal(next: Modal) {
     setContext(null);
@@ -2064,20 +2092,7 @@ export function App() {
                 title="Snippet actions"
                 aria-label="Snippet actions"
                 disabled={!document || busy}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  if (!document) return;
-                  const rect = event.currentTarget.getBoundingClientRect();
-                  setContext({
-                    entry: {
-                      id: document.path,
-                      name: filename ?? document.path,
-                      exported: hasExports(document.code),
-                    },
-                    x: rect.right - 220,
-                    y: rect.bottom + 8,
-                  });
-                }}
+                onClick={openSnippetActions}
               >
                 <MoreHorizontal size={18} />
               </button>
@@ -2140,6 +2155,16 @@ export function App() {
                   )}
                   <span>{playback.started ? "Update" : "Play"}</span>
                   <kbd>{shortcut} ↵</kbd>
+                </button>
+                <button
+                  type="button"
+                  className={styles.iconButton}
+                  title="Snippet actions"
+                  aria-label="Snippet actions"
+                  disabled={!document || busy}
+                  onClick={openSnippetActions}
+                >
+                  <MoreHorizontal size={18} />
                 </button>
               </div>
             ) : undefined
@@ -2302,6 +2327,16 @@ export function App() {
         >
           {!context.entry.children && (
             <>
+              <button
+                type="button"
+                disabled={busy || recoveryBlocked}
+                onClick={() =>
+                  showModal({ kind: "audio-export", path: context.entry.id })
+                }
+              >
+                <ArrowDownToLine size={14} />
+                Save WAV
+              </button>
               <button type="button" onClick={() => openGraph(context.entry.id)}>
                 <Network size={14} />
                 View in Graph View
@@ -2405,7 +2440,25 @@ export function App() {
           </ul>
         </Dialog>
       )}
-      {modal && modal.kind !== "examples" && (
+      {modal?.kind === "audio-export" && (
+        <AudioExportDialog
+          path={modal.path}
+          snapshot={() => {
+            const drafts = new Map(
+              sessionsRef.current.map((session) => [
+                session.document.path,
+                session.document.code,
+              ]),
+            );
+            return loadGraph(
+              modal.path,
+              async (path) => drafts.get(path) ?? (await api.read(path)),
+            );
+          }}
+          onClose={() => setModal(null)}
+        />
+      )}
+      {modal && modal.kind !== "examples" && modal.kind !== "audio-export" && (
         <Dialog
           title={
             modal.kind === "create"

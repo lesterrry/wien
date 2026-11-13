@@ -47,6 +47,7 @@ declare module "@strudel/core" {
   }): {
     evaluate(code: string, autostart: boolean): Promise<unknown>;
     stop(): void;
+    scheduler: { cps: number };
   };
 }
 declare module "@strudel/mini";
@@ -63,7 +64,19 @@ declare module "@strudel/transpiler" {
 }
 declare module "@strudel/webaudio" {
   export function getAudioContext(): AudioContext;
-  export function initAudio(): Promise<void>;
+  export function initAudio(options?: {
+    maxPolyphony: number;
+    multiChannelOrbits: boolean;
+  }): Promise<void>;
+  export function setAudioContext(context: OfflineAudioContext): void;
+  export function setSuperdoughAudioController(controller: null): void;
+  export function superdough(
+    value: Record<string, unknown>,
+    time: number,
+    duration: number,
+    cps: number,
+    absoluteTime: number,
+  ): Promise<unknown>;
   export function registerSynthSounds(): Promise<void>;
   export function registerZZFXSounds(): void;
   export function samples(

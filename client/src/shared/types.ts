@@ -39,6 +39,7 @@ export interface WorkspaceApi {
   onMenuCommand?(callback: (command: CommandId) => void): () => void;
   updateMenuState?(state: CommandState): void;
   exportProject?(): Promise<void>;
+  saveAudio(name: string, data: ArrayBuffer): Promise<boolean>;
   accountCurrent(): Promise<UserProfile | null>;
   accountRegister?(credentials: Registration): Promise<UserProfile>;
   accountLogin(credentials: Credentials): Promise<UserProfile>;

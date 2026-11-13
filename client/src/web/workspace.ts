@@ -3,6 +3,7 @@ import {
   AssistAccessError,
   requestAssistant,
 } from "../shared/assistant-client";
+import { downloadAudio } from "../shared/download-audio";
 import { exampleNames, getExampleFiles } from "../shared/examples";
 import { externalWebUrl } from "../shared/links";
 import type { WorkspaceApi } from "../shared/types";
@@ -66,6 +67,7 @@ export const workspace: WorkspaceApi = {
   readControlPreferences: (root) => projects.preferences(root),
   saveControlPreferences: (root, value) =>
     projects.savePreferences(root, value),
+  saveAudio: downloadAudio,
   async exportProject() {
     const project = await projects.export();
     const url = URL.createObjectURL(
