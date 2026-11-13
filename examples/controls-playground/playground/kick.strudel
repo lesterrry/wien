@@ -1,5 +1,5 @@
 // Deep import: kickGain is audible while playground.strudel is playing.
-const kickGain = 0.28
+const kickGain = 0.28 // @knob step=0.01
 const kickDecay = 0.16 // @slider 0.05..0.4
 const enabled = true
 

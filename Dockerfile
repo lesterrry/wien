@@ -51,6 +51,7 @@ RUN corepack enable
 COPY client/package.json client/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile --ignore-scripts
 COPY client/src/ ./src/
+COPY examples/ /build/examples/
 COPY client/tsconfig.json client/vite.web.config.ts client/electron.vite.config.ts ./
 RUN pnpm build:web
 

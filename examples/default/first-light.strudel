@@ -1,0 +1,25 @@
+// First light
+// A composition made from reusable snippets.
+// Use Playback > Play / Update to start, and Playback > Stop Current to stop.
+
+import glass from './instruments/glass.strudel'
+
+// Adjust these in the Controls panel while playing.
+const tempo = 108
+let bassGain = 0.45
+var brightness = 800
+
+setcpm(tempo / 4)
+
+stack(
+  // Open instruments/glass.strudel to change this voice.
+  // Return here and press Update to hear your changes.
+  glass,
+
+  // Something to hold it together
+  note("<c2 a1 f1 g1>*4")
+    .s("sine")
+    .decay(0.18).sustain(0)
+    .lpf(brightness)
+    .gain(bassGain)
+)

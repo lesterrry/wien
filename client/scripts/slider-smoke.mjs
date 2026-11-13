@@ -20,7 +20,10 @@ try {
   page.on("pageerror", (error) => errors.push(error.message));
   const code = page.getByLabel("Strudel code editor");
   await code.waitFor();
-  const example = await fs.readFile("../examples/sliders.strudel", "utf8");
+  const example = await fs.readFile(
+    "../examples/default/controls-demo.strudel",
+    "utf8",
+  );
   const modifier = process.platform === "darwin" ? "Meta" : "Control";
   async function replaceCode(source) {
     await code.click();
@@ -136,36 +139,28 @@ try {
   assert.equal(await repeats.getAttribute("aria-valuenow"), "2");
   await repeats.press("Shift+ArrowDown");
   assert.equal(await repeats.getAttribute("aria-valuenow"), "1");
-  // Both numeric controls share wheel handling, including sub-step accumulation.
-  await repeats.evaluate((element) => {
-    for (let i = 0; i < 5; i++)
-      element.dispatchEvent(
-        new WheelEvent("wheel", {
-          deltaY: -100,
-          shiftKey: true,
-          cancelable: true,
-        }),
-      );
-  });
-  await expect(repeats).toHaveAttribute("aria-valuenow", "2");
-  await repeats.press("ArrowDown");
+  // Wheel events remain available for scrolling and never change control values.
   await speed.press("Home");
-  await speed.evaluate((element) => {
-    element.dispatchEvent(
-      new WheelEvent("wheel", { deltaY: -3, deltaMode: 1, cancelable: true }),
+  for (const target of [repeats, speed]) {
+    const allowed = await target.evaluate((element) =>
+      [
+        { deltaY: -100, shiftKey: true },
+        { deltaY: -3, deltaMode: 1 },
+        { deltaY: -100, ctrlKey: true },
+      ].every((init) =>
+        element.dispatchEvent(
+          new WheelEvent("wheel", {
+            ...init,
+            bubbles: true,
+            cancelable: true,
+          }),
+        ),
+      ),
     );
-  });
-  await expect(speed).toHaveValue("0.2575");
-  await speed.evaluate((element) => {
-    element.dispatchEvent(
-      new WheelEvent("wheel", {
-        deltaY: -100,
-        ctrlKey: true,
-        cancelable: true,
-      }),
-    );
-  });
-  await expect(speed).toHaveValue("0.2575");
+    assert.equal(allowed, true);
+  }
+  await expect(repeats).toHaveAttribute("aria-valuenow", "1");
+  await expect(speed).toHaveValue("0.25");
   await speed.press("End");
   const effects = page.getByRole("group", { name: "effects options" });
   const chorus = effects.getByRole("checkbox", { name: "Chorus" });
@@ -265,7 +260,7 @@ try {
   await pan.press("End");
   assert.equal(await pan.inputValue(), "1");
   await gain.press("ArrowUp");
-  assert.equal(await gain.getAttribute("aria-valuenow"), "0.21");
+  assert.equal(await gain.getAttribute("aria-valuenow"), "1.2");
   await gain.press("ArrowDown");
   assert.equal(await gain.getAttribute("aria-valuenow"), "0.2");
   assert.equal(

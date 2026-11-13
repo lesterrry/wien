@@ -1,9 +1,8 @@
-.iconButton {
-  composes: iconButton from "../../styles/common.module.css";
-}
-
 .enumControl {
-  composes: numberControl from "../NumberKnob/NumberKnob.module.css";
+  composes: controlCard from "../NumberKnob/NumberKnob.module.css";
+  height: auto;
+  max-height: 176px;
+  align-self: start;
 }
 
 .controlHeading {
@@ -14,14 +13,8 @@
   composes: controlName from "../NumberKnob/NumberKnob.module.css";
 }
 
-.controlHeading .iconButton {
-  width: 22px;
-  height: 22px;
-  flex-shrink: 0;
-}
-
 .scroll {
-  flex: 1;
+  flex: 0 1 auto;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
@@ -81,7 +74,7 @@
 .option[data-selected="true"]::after {
   background: var(--color-brand);
   border-color: var(--color-brand);
-  box-shadow: 0 0 0 3px var(--color-brand-glow);
+  filter: var(--control-glow);
 }
 
 .option:hover {

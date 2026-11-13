@@ -1,0 +1,18 @@
+.actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 2px;
+  opacity: var(--control-actions-opacity, 1);
+  pointer-events: var(--control-actions-pointer-events, auto);
+  transition: opacity 120ms ease;
+}
+
+.iconButton {
+  composes: iconButton from "../../styles/common.module.css";
+}
+
+.actions .iconButton {
+  width: 22px;
+  height: 22px;
+}

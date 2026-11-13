@@ -59,7 +59,8 @@ export interface WorkspaceApi {
   ): Promise<void>;
   current(): Promise<Project>;
   open(): Promise<Project | null>;
-  create(): Promise<Project | null>;
+  examples(): Promise<string[]>;
+  create(example?: string): Promise<Project | null>;
   read(path: string): Promise<string>;
   save(request: SaveRequest): Promise<void>;
   graph(path: string, code: string): Promise<ModuleGraph>;

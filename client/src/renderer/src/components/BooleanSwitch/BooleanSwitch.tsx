@@ -1,5 +1,5 @@
-import { Settings, X } from "lucide-react";
 import type { BooleanControl } from "../../../../shared/controls";
+import { ControlActions } from "../ControlActions/ControlActions";
 import { ControlTitle } from "../ControlTitle/ControlTitle";
 import styles from "./BooleanSwitch.module.css";
 
@@ -10,6 +10,7 @@ export function BooleanSwitch({
   onIgnore,
   onDefinition,
   onConfigure,
+  onReset,
 }: {
   control: BooleanControl;
   disabled: boolean;
@@ -17,10 +18,11 @@ export function BooleanSwitch({
   onIgnore?: (name: string) => void;
   onDefinition?: (name: string) => void;
   onConfigure?: (name: string) => void;
+  onReset?: () => void;
 }) {
   const { name, value } = control;
   return (
-    <div className={styles.booleanControl}>
+    <div className={styles.booleanControl} data-control-card>
       <div className={styles.controlHeading}>
         <ControlTitle
           className={styles.controlName}
@@ -28,30 +30,13 @@ export function BooleanSwitch({
           disabled={disabled}
           onDefinition={onDefinition}
         />
-        {onConfigure && (
-          <button
-            type="button"
-            className={styles.iconButton}
-            disabled={disabled}
-            aria-label={`Settings for ${name}`}
-            title="Control settings"
-            onClick={() => onConfigure(name)}
-          >
-            <Settings size={13} />
-          </button>
-        )}
-        {onIgnore && (
-          <button
-            type="button"
-            className={styles.iconButton}
-            disabled={disabled}
-            aria-label={`Hide ${name} control`}
-            title="Hide control · adds //@ignore"
-            onClick={() => onIgnore(name)}
-          >
-            <X size={13} />
-          </button>
-        )}
+        <ControlActions
+          name={name}
+          disabled={disabled}
+          onReset={onReset}
+          onConfigure={onConfigure}
+          onIgnore={onIgnore}
+        />
       </div>
       <div className={styles.controlBody}>
         <button

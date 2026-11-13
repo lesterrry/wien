@@ -10,6 +10,7 @@ import {
   FilePlus2,
   FolderOpen,
   FolderPlus,
+  Library,
   Loader2,
   MoreHorizontal,
   Network,
@@ -90,6 +91,7 @@ type Modal =
   | { kind: "move"; entry: Entry }
   | { kind: "delete"; entry: Entry }
   | { kind: "reload" }
+  | { kind: "examples" }
   | { kind: "help" };
 
 const api = window.workspace;
@@ -202,6 +204,7 @@ export function App() {
   const [sidebar, setSidebar] = useState(true);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [projectMenu, setProjectMenu] = useState(false);
+  const [examples, setExamples] = useState<string[]>([]);
   const [context, setContext] = useState<{
     entry: Entry;
     x: number;
@@ -490,6 +493,13 @@ export function App() {
 
   useEffect(() => {
     void api
+      .examples()
+      .then(setExamples)
+      .catch((error) => setError(message(error)));
+  }, []);
+
+  useEffect(() => {
+    void api
       .current()
       .then(async (project) => {
         setProject(project);
@@ -703,7 +713,8 @@ export function App() {
     );
   }
 
-  async function switchProject(create: boolean) {
+  async function switchProject(create: boolean, example?: string) {
+    setProjectMenu(false);
     await run(async () => {
       await controlQueue.current;
       await preferencesSave.current;
@@ -735,7 +746,7 @@ export function App() {
           setError(message(error));
         }
       }
-      const next = await (create ? api.create() : api.open());
+      const next = await (create ? api.create(example) : api.open());
       if (!next) return;
       recoveryBlockedRef.current = false;
       setRecoveryBlocked(false);
@@ -1063,6 +1074,10 @@ export function App() {
   }
 
   function previewControl(control: Control, change: ControlChange): Control {
+    if (change.type === "reset")
+      return control.defaultValue === undefined
+        ? control
+        : previewControl(control, { type: "set", value: control.defaultValue });
     if (change.type === "set")
       return {
         ...control,
@@ -1639,6 +1654,18 @@ export function App() {
                   <FolderOpen size={15} />
                   Open project…
                 </button>
+                {examples.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProjectMenu(false);
+                      showModal({ kind: "examples" });
+                    }}
+                  >
+                    <Library size={15} />
+                    New from example
+                  </button>
+                )}
                 <div className={styles.menuDivider} />
                 {api.platform === "web" ? (
                   <button
@@ -2286,7 +2313,27 @@ export function App() {
           onClose={() => setControlSettings(null)}
         />
       )}
-      {modal && (
+      {modal?.kind === "examples" && (
+        <Dialog title="New from example" onClose={() => setModal(null)}>
+          <ul className={styles.exampleList} aria-label="Examples">
+            {examples.map((example) => (
+              <li key={example}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModal(null);
+                    void switchProject(true, example);
+                  }}
+                >
+                  <Library size={16} />
+                  {example}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Dialog>
+      )}
+      {modal && modal.kind !== "examples" && (
         <Dialog
           title={
             modal.kind === "create"

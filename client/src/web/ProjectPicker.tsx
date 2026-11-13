@@ -11,6 +11,7 @@ type Choice =
 export function pickProject(
   projects: BrowserProject[],
   create: boolean,
+  initialName = "Untitled session",
 ): Promise<Choice | null> {
   return new Promise((resolve) => {
     const container = document.createElement("div");
@@ -23,20 +24,29 @@ export function pickProject(
         container.remove();
       });
     };
-    root.render(<Picker projects={projects} create={create} finish={finish} />);
+    root.render(
+      <Picker
+        projects={projects}
+        create={create}
+        initialName={initialName}
+        finish={finish}
+      />,
+    );
   });
 }
 
 function Picker({
   projects,
   create,
+  initialName,
   finish,
 }: {
   projects: BrowserProject[];
   create: boolean;
+  initialName: string;
   finish: (choice: Choice | null) => void;
 }) {
-  const [name, setName] = useState("Untitled session");
+  const [name, setName] = useState(initialName);
   const [error, setError] = useState("");
   return (
     <Dialog
@@ -48,6 +58,12 @@ function Picker({
         <form
           onSubmit={(event) => {
             event.preventDefault();
+            if (projects.some((project) => project.name === name.trim())) {
+              setError(
+                "A project with this name already exists. Choose another name.",
+              );
+              return;
+            }
             if (name.trim()) finish({ kind: "create", name });
           }}
         >

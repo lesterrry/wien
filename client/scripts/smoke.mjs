@@ -103,8 +103,8 @@ try {
   await page.getByRole("button", { name: /^Play/ }).waitFor();
 
   console.log("Checking numeric controls and reactive audio");
-  await replaceCode(`var gain = 0.2;
-let cutoff = 800.0;
+  await replaceCode(`var gain = 0.2; // @knob step=0.01
+let cutoff = 800.0; // @knob step=0.01
 const speed = (2 / 2);
 note("c3*8").s("sine").gain(gain).lpf(cutoff).fast(speed)`);
   const gainValue = page.getByLabel("gain value", { exact: true });
@@ -136,15 +136,15 @@ note("c3*8").s("sine").gain(gain).lpf(cutoff).fast(speed)`);
   await page.mouse.down();
   await page.mouse.move(cutoffX, cutoffY - 35, { steps: 20 });
   await page.mouse.up();
-  assert.equal(await cutoffKnob.getAttribute("aria-valuenow"), "800.35");
+  assert.equal(await cutoffKnob.getAttribute("aria-valuenow"), "800.035");
   const cutoffRotation =
     ((await angle(cutoffKnob)) - cutoffAngleBefore + 360) % 360;
   await cutoffKnob.press("ArrowUp");
-  assert.equal(await cutoffKnob.getAttribute("aria-valuenow"), "800.36");
+  assert.equal(await cutoffKnob.getAttribute("aria-valuenow"), "800.045");
   await cutoffKnob.press("Shift+ArrowUp");
-  assert.equal(await cutoffKnob.getAttribute("aria-valuenow"), "800.361");
+  assert.equal(await cutoffKnob.getAttribute("aria-valuenow"), "800.046");
   await cutoffKnob.press("Alt+ArrowUp");
-  assert.equal(await cutoffKnob.getAttribute("aria-valuenow"), "800.461");
+  assert.equal(await cutoffKnob.getAttribute("aria-valuenow"), "800.146");
   await page.getByRole("button", { name: /^Play/ }).click();
   await page.getByRole("button", { name: /^Update/ }).waitFor();
   await page.waitForFunction(() => window.getTime() > 0.3);
@@ -212,10 +212,10 @@ note("c3*8").s("sine").gain(gain).lpf(cutoff).fast(speed)`);
     window
       .getPattern()
       .queryArc(0, 1)
-      .every((hap) => Math.abs(hap.value.gain - 0.55) < 0.00001),
+      .every((hap) => Math.abs(hap.value.gain - 0.235) < 0.00001),
   );
-  assert.match(await code.textContent(), /gain = 0.55/);
-  assert.equal(await gainValue.textContent(), "0.55");
+  assert.match(await code.textContent(), /gain = 0.235/);
+  assert.equal(await gainValue.textContent(), "0.235");
   assert.equal(
     await gainKnob.evaluate((node) => getComputedStyle(node).outlineStyle),
     "none",
@@ -242,12 +242,12 @@ note("c3*8").s("sine").gain(gain).lpf(cutoff).fast(speed)`);
   await page.screenshot({ path: path.join(temporary, "controls.png") });
   console.log("Controls screenshot:", path.join(temporary, "controls.png"));
   await page.getByRole("button", { name: "Stop playback" }).click();
-  await replaceCode(`var gain = 0.123456789;
+  await replaceCode(`var gain = 0.123456789; // @knob step=0.01
 let cutoff = -123456.75;
 note("c3*8").s("sine").gain(gain)`);
   await expect(gainValue).toHaveText("0.12346");
   await gainKnob.press("Shift+ArrowUp");
-  assert.match(await code.textContent(), /gain = 0.12446/);
+  assert.match(await code.textContent(), /gain = 0.124456789/);
   const cutoffValue = page.getByLabel("cutoff value", { exact: true });
   await expect(cutoffValue).toHaveText("-123456.75");
   await page.getByRole("button", { name: "Toggle controls" }).click();

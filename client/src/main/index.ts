@@ -3,6 +3,11 @@ import path from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import type { AssistRequest } from "../shared/assistant";
 import { matchCommand } from "../shared/commands";
+import {
+  defaultExampleFiles,
+  exampleNames,
+  getExampleFiles,
+} from "../shared/examples";
 import { externalWebUrl } from "../shared/links";
 import type { SaveRequest } from "../shared/types";
 import { AccountClient } from "./account";
@@ -12,7 +17,6 @@ import { backendConfig } from "./config";
 import { installMenu, updateMenuState } from "./menu";
 import { ProjectFs } from "./project-fs";
 import { ProjectVersions } from "./project-versions";
-import { starterFiles } from "./starter";
 
 if (!app.isPackaged && process.env.WIEN_USER_DATA) {
   app.setPath("userData", process.env.WIEN_USER_DATA);
@@ -59,9 +63,9 @@ async function selectProject(root: string) {
   return info;
 }
 
-async function createStarter(root: string) {
+async function createStarter(root: string, files = defaultExampleFiles) {
   await fs.mkdir(root);
-  for (const [relative, code] of Object.entries(starterFiles)) {
+  for (const [relative, code] of Object.entries(files)) {
     const target = path.join(root, relative);
     await fs.mkdir(path.dirname(target), { recursive: true });
     await fs.writeFile(target, code, { flag: "wx" });
@@ -194,6 +198,7 @@ function registerIpc() {
     return project.saveControlPreferences(preferences);
   });
   handle("project:current", () => project.project());
+  handle("project:examples", () => exampleNames);
   const availableVersions = () => {
     if (versionUnavailable) throw new Error(versionUnavailable);
     return versions;
@@ -236,16 +241,30 @@ function registerIpc() {
     });
     return result.canceled ? null : selectProject(result.filePaths[0]);
   });
-  handle("project:create", async () => {
+  handle("project:create", async (example?: string) => {
+    const files = getExampleFiles(example ?? "default");
     if (!window) return null;
+    const defaultPath = example
+      ? path.join(path.dirname(project.root), example)
+      : path.join(app.getPath("documents"), "Untitled session");
+    if (example) {
+      const exists = await fs.lstat(defaultPath).then(
+        () => true,
+        (error: NodeJS.ErrnoException) => {
+          if (error.code === "ENOENT") return false;
+          throw error;
+        },
+      );
+      if (!exists) return createStarter(defaultPath, files);
+    }
     const result = await dialog.showSaveDialog(window, {
-      title: "Create a music project",
+      title: example ? "Choose another project name" : "Create a music project",
       buttonLabel: "Create project",
-      defaultPath: path.join(app.getPath("documents"), "Untitled session"),
+      defaultPath,
       properties: ["createDirectory"],
     });
     if (result.canceled || !result.filePath) return null;
-    return createStarter(result.filePath);
+    return createStarter(result.filePath, files);
   });
   ipcMain.on("app:close", (event) => {
     if (event.sender === window?.webContents) window.close();

@@ -6,6 +6,7 @@ import {
   initialCustomization,
   sliderFields,
 } from "./control-customizations";
+import { canResetControl } from "./control-defaults";
 import {
   changeControl,
   configureControl,
@@ -14,6 +15,12 @@ import {
   readControlCustomization,
   readControls,
 } from "./controls";
+import {
+  clampKnobValue,
+  knobAngle,
+  knobIncrement,
+  normalizeKnobValue,
+} from "./knob";
 import { editSource } from "./modules";
 import { clampSliderValue, validateSliderRange } from "./slider";
 
@@ -71,10 +78,10 @@ test("ignore adds a reversible comment above the declaration and preserves CRLF"
   const edit = ignoreControl(code, "gain");
   assert(edit);
   const hidden = editSource(code, [edit]);
-  assert.match(hidden, / {2}\/\/@ignore\r\n {2}export const gain/);
+  assert.match(hidden, / {2}\/\/ @ignore\r\n {2}export const gain/);
   assert.deepEqual(readControls(hidden), { controls: [], valid: true });
   assert.equal(ignoreControl(hidden, "gain"), undefined);
-  assert.equal(hidden.replace("  //@ignore\r\n", ""), code);
+  assert.equal(hidden.replace("  // @ignore\r\n", ""), code);
 });
 
 test("ignoring one comma binding leaves its neighbors available and code valid", () => {
@@ -997,7 +1004,7 @@ test("customization edits round trip slider metadata without changing expression
   assert.equal(configureControl(changed, "cutoff", settings), undefined);
   const plain = configureControl(changed, "cutoff", {
     kind: "number",
-    values: {},
+    values: { step: "1", min: "", max: "", split: "0" },
   });
   assert(plain);
   const restored = editSource(changed, [plain]);
@@ -1077,7 +1084,7 @@ test("binding-local annotations are not applied to comma siblings", () => {
     assert(target);
     const edit = configureControl(source, target.name, {
       kind: "number",
-      values: {},
+      values: { step: "1", min: "", max: "", split: "0" },
     });
     assert(edit);
     const after = readControls(editSource(source, [edit]));
@@ -1246,9 +1253,431 @@ test("settings are offered only for controls with working customization choices"
     [
       ["number", true],
       ["slider", true],
-      ["boolean", false],
-      ["enum", false],
+      ["boolean", true],
+      ["enum", true],
       ["multi-enum", true],
     ],
   );
+});
+
+test("knobs default to step one and accept fractional steps on whole-number values", () => {
+  for (const value of ["2", "0.5", "2.0"]) {
+    const { control, settings } = readControlCustomization(
+      `const gain = ${value}`,
+      "gain",
+    );
+    assert(control.kind === "number");
+    assert.equal(control.step, 1);
+    assert.deepEqual(settings, {
+      kind: "number",
+      values: { step: "1", min: "", max: "", split: "0" },
+    });
+  }
+  for (const step of ["0.25", "1e-7", "10"]) {
+    for (const source of [
+      `// @knob step=${step}\nconst gain = 2;`,
+      `const gain = 2; // @knob step=${step}`,
+    ]) {
+      const { control, settings } = readControlCustomization(source, "gain");
+      assert(control.kind === "number");
+      assert.equal(control.step, Number(step));
+      assert.equal(control.integer, Number.isInteger(Number(step)));
+      assert.equal(settings.values.step, step);
+      const edit = changeControl(source, "gain", {
+        type: "set",
+        value: 2 + Number(step),
+      });
+      assert(edit);
+      const changed = editSource(source, [edit]);
+      assert.equal(readControls(changed).controls[0].value, 2 + Number(step));
+      assert.equal(
+        readControlCustomization(changed, "gain").settings.values.step,
+        step,
+      );
+    }
+  }
+});
+
+test("knob step edits preserve expressions and prose, reset defaults and switch control type", () => {
+  let source = "// voice\r\nconst gain = (1 / 2); // keep me\r\n";
+  const apply = (kind: string, values: Record<string, string | string[]>) => {
+    if (kind === "number") values = { min: "", max: "", split: "0", ...values };
+    const edit = configureControl(source, "gain", { kind, values });
+    assert(edit);
+    source = editSource(source, [edit]);
+    assert(source.includes("const gain = (1 / 2); // keep me"));
+    assert(!/(?<!\r)\n/.test(source));
+    assert.deepEqual(readControlCustomization(source, "gain").settings, {
+      kind,
+      values,
+    });
+  };
+  apply("number", { step: "0.1" });
+  apply("number", { step: "0.25" });
+  assert.equal((source.match(/@knob/g) ?? []).length, 1);
+  apply("number", { step: "1" });
+  assert(!source.includes("@knob"));
+  apply("slider", { presentation: "vertical", range: ["0", "1"] });
+  apply("number", { step: "0.01" });
+  assert(!source.includes("@slider"));
+});
+
+test("invalid knob steps fail in both annotations and the settings schema", () => {
+  const source = "const gain = 1;";
+  for (const step of [
+    "",
+    "0",
+    "-1",
+    "Infinity",
+    "NaN",
+    "1e999",
+    "1e-999",
+    "1 + 2",
+  ]) {
+    assert.throws(() =>
+      configureControl(source, "gain", { kind: "number", values: { step } }),
+    );
+    const result = readControls(
+      `${source} // @knob step=${step}\nconst valid = true;`,
+    );
+    assert.equal(result.errors?.length, 1);
+    assert.deepEqual(
+      result.controls.map(({ name }) => name),
+      ["valid"],
+    );
+  }
+  for (const annotation of [
+    "@knob step=1 step=2",
+    "@knob unknown",
+    "@knob step=1\n// @knob step=2",
+    "@knob step=1\n// @slider",
+    "@slider\n// @knob step=1",
+  ]) {
+    assert.equal(
+      readControls(`// ${annotation}\nconst gain = 1;`).errors?.length,
+      1,
+    );
+  }
+  assert.equal(
+    readControls("// @knob step=0\n// @ignore\nconst gain = 1;").errors,
+    undefined,
+  );
+});
+
+test("editing a shared knob annotation keeps sibling steps and rejects stale settings", () => {
+  const source = "// @knob step=0.1\nexport const a = 1, b = 2;";
+  const initial = readControlCustomization(source, "a").settings;
+  const next = {
+    kind: "number",
+    values: { step: "10", min: "", max: "", split: "0" },
+  };
+  const edit = configureControl(source, "a", next, initial);
+  assert(edit);
+  const changed = editSource(source, [edit]);
+  assert.deepEqual(readControlCustomization(changed, "b").settings, initial);
+  assert.deepEqual(readControlCustomization(changed, "a").settings, next);
+  assert.throws(
+    () =>
+      configureControl(
+        changed,
+        "a",
+        { kind: "number", values: { step: "2", min: "", max: "", split: "0" } },
+        initial,
+      ),
+    /changed in the source/,
+  );
+});
+
+test("bounded knobs clamp source edits and follow the 7-to-5 o'clock arc", () => {
+  const source = "const gain = 50; // @knob min=0 max=100";
+  const control = readControls(source).controls[0];
+  assert(control.kind === "number");
+  assert.equal(knobAngle(0, control), -150);
+  assert.equal(knobAngle(50, control), 0);
+  assert.equal(knobAngle(100, control), 150);
+  for (const [input, expected] of [
+    [-100, 0],
+    [200, 100],
+  ]) {
+    const edit = changeControl(source, "gain", { type: "set", value: input });
+    assert(edit);
+    assert.equal(
+      readControls(editSource(source, [edit])).controls[0].value,
+      expected,
+    );
+    assert.equal(knobAngle(input, control), expected === 0 ? -150 : 150);
+  }
+  // The unsnapped movement accumulator clamps at the boundary, so reversal is immediate.
+  assert.equal(clampKnobValue(clampKnobValue(1000, control) - 1, control), 99);
+  assert.equal(clampKnobValue(clampKnobValue(-1000, control) + 1, control), 1);
+});
+
+test("split snaps on the bounded arc and on every turn of an unlimited knob", () => {
+  for (const annotation of [
+    "step=1 min=0 max=100 split=10",
+    "step=2 split=4",
+  ]) {
+    const control = readControls(`const gain = 0; // @knob ${annotation}`)
+      .controls[0];
+    assert(control.kind === "number");
+    const increment = knobIncrement(control);
+    assert.equal(increment, control.min === undefined ? 6 : 10);
+    assert.equal(normalizeKnobValue(increment * 0.49, control), 0);
+    assert.equal(normalizeKnobValue(increment * 0.51, control), increment);
+    assert.equal(normalizeKnobValue(increment * 2.4, control), increment * 2);
+    if (control.min === undefined) {
+      assert.equal(normalizeKnobValue(-7, control), -6);
+      assert.equal(normalizeKnobValue(25, control), 24);
+      assert.equal(knobAngle(24, control), 0);
+      assert.equal(knobAngle(6, control), 90);
+    }
+  }
+  const free = readControls("const gain = 0.0; // @knob step=0.1 split=0")
+    .controls[0];
+  assert(free.kind === "number");
+  assert.equal(normalizeKnobValue(0.12345, free), 0.12345);
+  for (let split = 1; split <= 10; split++) {
+    const source = `const gain = 0; // @knob min=-0.1 max=0.2 split=${split}`;
+    const control = readControls(source).controls[0];
+    assert(control.kind === "number");
+    assert.equal(normalizeKnobValue(-1, control), -0.1);
+    assert.equal(normalizeKnobValue(1, control), 0.2);
+    const value = normalizeKnobValue(0.05, control);
+    const edit = changeControl(source, "gain", { type: "set", value });
+    if (edit) {
+      const updated = readControls(editSource(source, [edit])).controls[0];
+      assert.equal(updated.value, value);
+    }
+    assert.equal(normalizeKnobValue(value, control), value);
+  }
+});
+
+test("knob limits and splits round trip, clamp and snap in a single settings edit", () => {
+  for (const [value, expected] of [
+    [150, 100],
+    [-1, 0],
+    [46, 50],
+  ]) {
+    const source = `const gain = ${value}; // voice`;
+    const settings = readControlCustomization(source, "gain").settings;
+    settings.values = { ...settings.values, min: "0", max: "100", split: "10" };
+    const edit = configureControl(source, "gain", settings);
+    assert(edit);
+    const code = editSource(source, [edit]);
+    assert(code.includes("// voice"));
+    const updated = readControlCustomization(code, "gain");
+    assert.equal(updated.control.value, expected);
+    assert.deepEqual(updated.settings, settings);
+    assert.equal(configureControl(code, "gain", settings), undefined);
+    // Clear bounds without clearing Split: the same control becomes unlimited.
+    const unlimited = {
+      ...settings,
+      values: { ...settings.values, min: "", max: "" },
+    };
+    const freeEdit = configureControl(code, "gain", unlimited);
+    assert(freeEdit);
+    const free = readControlCustomization(editSource(code, [freeEdit]), "gain");
+    assert.deepEqual(free.settings, unlimited);
+    assert(free.control.kind === "number");
+    assert.equal(free.control.min, undefined);
+    assert.equal(free.control.split, 10);
+  }
+  const source = "const gain = 99; // @knob min=0 max=10 split=5";
+  const settings = readControlCustomization(source, "gain").settings;
+  const edit = configureControl(source, "gain", settings);
+  assert(edit);
+  assert.equal(readControls(editSource(source, [edit])).controls[0].value, 10);
+});
+
+test("knob bounds and split validation are shared by code and settings", () => {
+  const source = "const gain = 0;";
+  const base = readControlCustomization(source, "gain").settings;
+  for (const [values, annotation] of [
+    [{ min: "0" }, "min=0"],
+    [{ max: "1" }, "max=1"],
+    [{ min: "2", max: "1" }, "min=2 max=1"],
+    [{ min: "1", max: "1" }, "min=1 max=1"],
+    [{ min: "-1e308", max: "1e308" }, "min=-1e308 max=1e308"],
+    [{ min: "NaN", max: "1" }, "min=NaN max=1"],
+    [{ split: "-1" }, "split=-1"],
+    [{ split: "11" }, "split=11"],
+    [{ split: "1.5" }, "split=1.5"],
+    [{ split: "Infinity" }, "split=Infinity"],
+  ] as const) {
+    assert.throws(() =>
+      configureControl(source, "gain", {
+        ...base,
+        values: { ...base.values, ...values },
+      }),
+    );
+    const result = readControls(
+      `${source} // @knob ${annotation}\nconst valid = true;`,
+    );
+    assert.equal(result.errors?.length, 1, annotation);
+    assert.deepEqual(
+      result.controls.map(({ name }) => name),
+      ["valid"],
+    );
+  }
+  for (const annotation of ["min=0 min=1 max=2", "split=1 split=2"])
+    assert.equal(
+      readControls(`${source} // @knob ${annotation}`).errors?.length,
+      1,
+    );
+});
+
+test("defaults reset every control kind, including zero, false, fractional numbers and empty arrays", () => {
+  for (const [source, name, expected] of [
+    ["const gain = 1; // @default 0", "gain", 0],
+    ["const gain = 1; // @default 0.25", "gain", 0.25],
+    [
+      "// @knob min=0 max=10 split=5\n// @default 4\nconst gain = 2;",
+      "gain",
+      4,
+    ],
+    ["// @slider 0..1\n// @default 0.25\nconst gain = 1;", "gain", 0.25],
+    ["const enabled = true; // @default false", "enabled", false],
+    [
+      `${waveCode}\nconst wave = Wave.Sine; // @default Wave.Saw`,
+      "wave",
+      "sawtooth",
+    ],
+    [`${waveCode}\nconst layers = [Wave.Sine]; // @default []`, "layers", []],
+    [
+      `${waveCode}\nconst layers = [Wave.Sine, Wave.Saw]; // @default [Wave.Saw, Wave.Sine]`,
+      "layers",
+      ["sawtooth", "sine"],
+    ],
+  ] as const) {
+    const before = readControlCustomization(source, name);
+    assert.equal(canResetControl(before.control), true, source);
+    assert.deepEqual(before.control.defaultValue, expected);
+    const edit = changeControl(source, name, { type: "reset" });
+    assert(edit, source);
+    const code = editSource(source, [edit]);
+    const after = readControlCustomization(code, name);
+    assert.deepEqual(after.control.value, expected);
+    assert.equal(canResetControl(after.control), false);
+    assert.equal(changeControl(code, name, { type: "reset" }), undefined);
+    assert.equal(after.settings.values.default, before.settings.values.default);
+  }
+  const source = "const gain = 1;";
+  assert.equal(canResetControl(readControls(source).controls[0]), false);
+  assert.equal(changeControl(source, "gain", { type: "reset" }), undefined);
+});
+
+test("default edits round trip with existing annotations, CRLF, prose and no value changes", () => {
+  for (const original of [
+    "// voice\r\n  const gain = (2 / 4); // @slider 0..1\r\nconst other = true;",
+    "// @knob min=0 max=1\n// explanation\nconst gain = 0.5; // voice\n",
+    `${waveCode}\n// @multi Wave order=Saw,Sine,Triangle\nconst layers = [Wave.Sine, Wave.Saw]; // voice`,
+  ]) {
+    let source = original;
+    const name = source.includes("layers =") ? "layers" : "gain";
+    const originalValue = readControlCustomization(source, name).control.value;
+    const expression = name === "layers" ? "[Wave.Saw]" : "0.25";
+    for (const value of [
+      expression,
+      name === "layers" ? "[]" : "0",
+      undefined,
+    ]) {
+      const current = readControlCustomization(source, name);
+      const settings = {
+        ...current.settings,
+        values: { ...current.settings.values },
+      };
+      if (value === undefined) delete settings.values.default;
+      else settings.values.default = value;
+      const edit = configureControl(source, name, settings, current.settings);
+      assert(edit);
+      source = editSource(source, [edit]);
+      const after = readControlCustomization(source, name);
+      assert.deepEqual(after.settings, settings);
+      assert.deepEqual(after.control.value, originalValue);
+      assert(source.includes("// voice"));
+      if (original.includes("\r\n")) assert(!/(?<!\r)\n/.test(source));
+      assert.equal(
+        (source.match(/@default/g) ?? []).length,
+        value === undefined ? 0 : 1,
+      );
+      assert.equal(configureControl(source, name, settings), undefined);
+    }
+    if (name === "gain")
+      assert.equal(source.includes("(2 / 4)"), original.includes("(2 / 4)"));
+  }
+});
+
+test("shared defaults are isolated when one comma binding changes", () => {
+  const source = "// @default 0\nconst a = 1, b = 2;";
+  const current = readControlCustomization(source, "a");
+  const settings = {
+    ...current.settings,
+    values: { ...current.settings.values, default: "0.5" },
+  };
+  const edit = configureControl(source, "a", settings);
+  assert(edit);
+  const code = editSource(source, [edit]);
+  assert.equal(readControlCustomization(code, "a").control.defaultValue, 0.5);
+  assert.equal(readControlCustomization(code, "b").control.defaultValue, 0);
+  const reset = changeControl(code, "a", { type: "reset" });
+  assert(reset);
+  const changed = editSource(code, [reset]);
+  assert.equal(readControlCustomization(changed, "b").control.value, 2);
+});
+
+test("default survives changing numeric control types and removing knob bounds", () => {
+  let source = "// @knob min=0 max=10\n// @default 2\nconst gain = 4;";
+  for (const kind of ["slider", "number"]) {
+    const current = readControlCustomization(source, "gain");
+    const settings = initialCustomization(current.control, [], kind);
+    assert.equal(settings.values.default, "2");
+    if (kind === "number") {
+      settings.values.min = "";
+      settings.values.max = "";
+      settings.values.default = "20";
+    }
+    const edit = configureControl(source, "gain", settings);
+    assert(edit);
+    source = editSource(source, [edit]);
+    const after = readControlCustomization(source, "gain");
+    assert.equal(after.control.kind, kind);
+    assert.equal(after.control.value, 4);
+    assert.equal(after.settings.values.default, settings.values.default);
+  }
+});
+
+test("defaults reject incompatible values and expressions without executing them", () => {
+  for (const [source, name, expression] of [
+    ["const gain = 1;", "gain", "Infinity"],
+    ["const gain = 1;", "gain", "(() => { throw new Error('executed') })()"],
+    ["const gain = 1;", "gain", "globalThis.compromised = 1"],
+    ["const gain = 1;", "gain", "true"],
+    ["const enabled = true;", "enabled", "1"],
+    [`${waveCode}\nconst wave = Wave.Sine;`, "wave", "Wave.Unknown"],
+    [
+      `${waveCode}\nconst layers = [Wave.Sine];`,
+      "layers",
+      "[Wave.Sine, Wave.Sine]",
+    ],
+    ["// @slider 0..1\nconst gain = 0.5;", "gain", "2"],
+    ["// @knob min=0 max=10 split=5\nconst gain = 2;", "gain", "3"],
+  ]) {
+    const before = readControlCustomization(source, name);
+    assert.throws(() =>
+      configureControl(source, name, {
+        ...before.settings,
+        values: { ...before.settings.values, default: expression },
+      }),
+    );
+    const result = readControls(
+      `${source} // @default ${expression}\nconst valid = false;`,
+    );
+    assert.equal(result.errors?.length, 1, expression);
+    assert(result.controls.some((control) => control.name === "valid"));
+  }
+  for (const annotation of ["@default", "@default 0\n// @default 1"])
+    assert.equal(
+      readControls(`// ${annotation}\nconst gain = 2;`).errors?.length,
+      1,
+    );
 });

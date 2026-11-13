@@ -1,0 +1,8 @@
+// Low tide · let it breathe
+setcpm(80 / 4)
+
+note("<c2 f2 a1 g1>")
+  .s("sawtooth")
+  .lpf(450)
+  .attack(0.1).release(0.8)
+  .gain(0.2)

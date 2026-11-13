@@ -3,7 +3,6 @@ import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import * as core from "@strudel/core";
 import * as mini from "@strudel/mini";
-import { starterFiles } from "../../main/starter";
 import { changeControl } from "../../shared/controls";
 import type { ModuleGraph } from "../../shared/modules";
 import { editSource } from "../../shared/modules";
@@ -143,8 +142,10 @@ export default note('c3').pan(pan)`,
 });
 
 test("the playable slider example produces numeric Strudel parameters", async () => {
-  const source = await readFile("../examples/sliders.strudel", "utf8");
-  assert.equal(starterFiles["controls-demo.strudel"], source);
+  const source = await readFile(
+    "../examples/default/controls-demo.strudel",
+    "utf8",
+  );
   await core.evalScope({ setcpm: () => {} });
   const pattern = await evaluate({ "main.strudel": source });
   const events = pattern.queryArc(0, 1);
@@ -168,7 +169,10 @@ test("the playable slider example produces numeric Strudel parameters", async ()
 });
 
 test("playground enum edits change the lead and combine selected effects", async () => {
-  const source = await readFile("../examples/sliders.strudel", "utf8");
+  const source = await readFile(
+    "../examples/default/controls-demo.strudel",
+    "utf8",
+  );
   const edit = changeControl(source, "waveform", {
     type: "set",
     value: "sawtooth",

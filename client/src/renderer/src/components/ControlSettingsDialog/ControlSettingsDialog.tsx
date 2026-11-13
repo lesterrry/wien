@@ -45,6 +45,30 @@ function SettingField({
           ))}
         </Select>
       );
+    case "text":
+      return (
+        <input
+          aria-label={field.label}
+          value={value as string}
+          placeholder={field.placeholder}
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      );
+    case "number":
+      return (
+        <NumberInput
+          id={fieldId}
+          label={field.label}
+          value={value as string}
+          min={field.min}
+          max={field.max}
+          integer={field.integer}
+          optional={field.optional}
+          disabled={disabled}
+          onChange={onChange}
+        />
+      );
     case "range":
       return (
         <div className={styles.range}>
@@ -136,10 +160,13 @@ export function ControlSettingsDialog({
   }
   const update = (field: string, value: SettingValue) => {
     setError(null);
-    setSettings((current) => ({
-      ...current,
-      values: { ...current.values, [field]: value },
-    }));
+    setSettings((current) => {
+      const values = { ...current.values, [field]: value };
+      const descriptor = definition.fields.find((item) => item.id === field);
+      if (descriptor?.type === "text" && descriptor.optional && value === "")
+        delete values[field];
+      return { ...current, values };
+    });
   };
   return (
     <Dialog title={`Settings · ${control.name}`} onClose={onClose}>
@@ -170,11 +197,24 @@ export function ControlSettingsDialog({
               disabled={saving}
               onChange={(event) => {
                 setError(null);
-                setSettings(
+                const next =
                   event.target.value === initial.kind
                     ? initial
-                    : initialCustomization(control, [], event.target.value),
-                );
+                    : initialCustomization(control, [], event.target.value);
+                const values = { ...next.values };
+                for (const field of customizationDefinition(control, next.kind)
+                  .fields) {
+                  if (
+                    !definition.fields.some(
+                      (current) => current.id === field.id,
+                    )
+                  )
+                    continue;
+                  if (settings.values[field.id] === undefined)
+                    delete values[field.id];
+                  else values[field.id] = settings.values[field.id];
+                }
+                setSettings({ ...next, values });
               }}
             >
               {definitions.map((item) => (
@@ -190,7 +230,7 @@ export function ControlSettingsDialog({
             <div className={styles.label}>{field.label}</div>
             <SettingField
               field={field}
-              value={settings.values[field.id]}
+              value={settings.values[field.id] ?? field.defaultValue}
               control={control}
               disabled={saving}
               onChange={(value) => update(field.id, value)}

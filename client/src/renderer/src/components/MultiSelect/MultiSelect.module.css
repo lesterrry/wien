@@ -1,5 +1,8 @@
 .card {
-  composes: numberControl from "../NumberKnob/NumberKnob.module.css";
+  composes: controlCard from "../NumberKnob/NumberKnob.module.css";
+  height: auto;
+  max-height: 176px;
+  align-self: start;
 }
 
 .heading {
@@ -10,19 +13,9 @@
   composes: controlName from "../NumberKnob/NumberKnob.module.css";
 }
 
-.iconButton {
-  composes: iconButton from "../../styles/common.module.css";
-}
-
-.heading .iconButton {
-  width: 22px;
-  height: 22px;
-  flex-shrink: 0;
-}
-
 .list {
   position: relative;
-  flex: 1;
+  flex: 0 1 auto;
   min-height: 0;
   overflow-y: auto;
   display: flex;
@@ -129,6 +122,8 @@
 .option:has(input:checked) .check {
   background: var(--color-brand);
   color: var(--color-surface);
+  border-color: var(--color-brand);
+  filter: var(--control-glow);
 }
 
 .preview {

@@ -5,9 +5,17 @@ import {
   customizationNumericValue,
   initialCustomization,
   isControlAnnotation,
+  knobSettings,
   multiSettings,
   sliderSettings,
 } from "./control-customizations";
+import {
+  canResetControl,
+  defaultExpression,
+  isDefaultAnnotation,
+  parseControlDefault,
+} from "./control-defaults";
+import { type KnobSettings, normalizeKnobValue } from "./knob";
 import { bindingNames, type Edit, editSource } from "./modules";
 import { multiAnnotation } from "./multi-annotations";
 import { validateSliderRange } from "./slider";
@@ -17,6 +25,8 @@ interface ControlSource {
   start: number;
   end: number;
   ignoreAt: number;
+  defaultExpression?: string;
+  defaultValue?: ControlValue;
 }
 
 interface NumericControl extends ControlSource {
@@ -29,7 +39,7 @@ interface EnumSource extends ControlSource {
   options: { key: string; value: string | number }[];
 }
 
-export interface NumberControl extends NumericControl {
+export interface NumberControl extends NumericControl, KnobSettings {
   kind: "number";
 }
 
@@ -66,7 +76,8 @@ export type ControlValue =
 
 export type ControlChange =
   | { type: "set"; value: ControlValue }
-  | { type: "reorder"; order: readonly string[] };
+  | { type: "reorder"; order: readonly string[] }
+  | { type: "reset" };
 export type Control =
   | NumberControl
   | BooleanControl
@@ -362,6 +373,7 @@ export function readControls(code: string): {
     });
     const annotationsFor = bindControlAnnotations(code, comments);
     const controls: Control[] = [];
+    const defaults = new Map<number, string[]>();
     const errors: string[] = [];
     const issues: { name: string; message: string }[] = [];
     const candidates: ControlComposition[] = [];
@@ -419,11 +431,15 @@ export function readControls(code: string): {
           item.start,
           item.end,
         );
-        const annotations = annotationComments.map((comment) =>
+        const allAnnotations = annotationComments.map((comment) =>
           comment.value.trim(),
+        );
+        const annotations = allAnnotations.filter(
+          (text) => !isDefaultAnnotation(text),
         );
         if (!item.init || annotations.includes("@ignore")) continue;
         const start = item.init.start;
+        defaults.set(start, allAnnotations.filter(isDefaultAnnotation));
         const end = item.init.end;
         // In a comma declaration, annotate just this binding.
         const ignoreAt =
@@ -469,7 +485,9 @@ export function readControls(code: string): {
           const multi = readMultiControl(
             item.init,
             { name, start, end, ignoreAt },
-            annotationComments,
+            annotationComments.filter(
+              (comment) => !isDefaultAnnotation(comment.value.trim()),
+            ),
             enums,
             declaration.declarations.length > 1 ? statement.start : undefined,
           );
@@ -483,11 +501,32 @@ export function readControls(code: string): {
         }
         if (annotations.length) {
           try {
-            const settings = sliderSettings(annotations);
             if (numeric === undefined || !Number.isFinite(numeric))
               throw new Error(
                 "Control annotations require a finite numeric constant.",
               );
+            if (annotations.some((annotation) => /^@knob\b/.test(annotation))) {
+              const settings = knobSettings(annotations);
+              controls.push({
+                kind: "number",
+                name,
+                value: numeric,
+                start,
+                end,
+                ignoreAt,
+                ...settings,
+                integer:
+                  integer &&
+                  Number.isInteger(settings.step) &&
+                  settings.split === 0 &&
+                  (settings.min === undefined ||
+                    Number.isInteger(settings.min)) &&
+                  (settings.max === undefined ||
+                    Number.isInteger(settings.max)),
+              });
+              continue;
+            }
+            const settings = sliderSettings(annotations);
             validateSliderRange(settings.min, settings.max, numeric);
             controls.push({
               kind: "slider",
@@ -511,6 +550,7 @@ export function readControls(code: string): {
         if (numeric !== undefined && Number.isFinite(numeric)) {
           controls.push({
             kind: "number",
+            ...knobSettings([]),
             integer,
             name,
             value: numeric,
@@ -560,9 +600,32 @@ export function readControls(code: string): {
       if (count > 1)
         issues.push({ name, message: "Multiple declarations use this name." });
     }
-    const available = controls.filter(
-      (control) => names.get(control.name) === 1,
-    );
+    const available = controls
+      .filter((control) => names.get(control.name) === 1)
+      .flatMap((control) => {
+        try {
+          const expression = defaultExpression(
+            defaults.get(control.start) ?? [],
+          );
+          if (expression === undefined) return [control];
+          const value = parseControlDefault(control, expression);
+          return [
+            {
+              ...control,
+              defaultExpression: expression,
+              defaultValue: value,
+              ...((control.kind === "number" || control.kind === "slider") &&
+              typeof value === "number" &&
+              !Number.isInteger(value)
+                ? { integer: false }
+                : {}),
+            },
+          ];
+        } catch (error) {
+          errors.push(`${control.name}: ${(error as Error).message}`);
+          return [];
+        }
+      });
     const compositions: ControlComposition[] = [];
     const grouped = new Set<string>();
     for (const candidate of candidates) {
@@ -611,12 +674,56 @@ export function changeControl(
   name: string,
   change: ControlChange,
 ): Edit | undefined {
-  const value = change.type === "set" ? change.value : undefined;
+  let value = change.type === "set" ? change.value : undefined;
   if (typeof value === "number" && !Number.isFinite(value)) return;
   const control = readControls(code).controls.find(
     (control) => control.name === name,
   );
   if (!control || Object.is(control.value, value)) return;
+  if (change.type === "reset") {
+    if (!canResetControl(control) || control.defaultExpression === undefined)
+      return;
+    let text = control.defaultExpression;
+    if (
+      (control.kind === "number" || control.kind === "slider") &&
+      !control.integer &&
+      typeof control.defaultValue === "number" &&
+      Number.isInteger(control.defaultValue)
+    ) {
+      text = String(control.defaultValue).replace(
+        /e|$/,
+        (suffix) => `.0${suffix}`,
+      );
+    }
+    const edits: Edit[] = [{ start: control.start, end: control.end, text }];
+    if (
+      control.kind === "multi-enum" &&
+      !control.annotation &&
+      Array.isArray(control.defaultValue) &&
+      control.defaultValue.length === 0
+    )
+      edits.push(
+        annotateControl(
+          code,
+          control.ignoreAt,
+          multiAnnotation(control.objectName),
+        ),
+      );
+    const start = Math.min(...edits.map((edit) => edit.start));
+    const end = Math.max(...edits.map((edit) => edit.end));
+    return {
+      start,
+      end,
+      text: editSource(
+        code.slice(start, end),
+        edits.map((edit) => ({
+          ...edit,
+          start: edit.start - start,
+          end: edit.end - start,
+        })),
+      ),
+    };
+  }
   if (control.kind === "multi-enum") {
     const reordering = change.type === "reorder";
     if (!reordering && !Array.isArray(value)) return;
@@ -700,6 +807,8 @@ export function changeControl(
     (control.kind === "number" || control.kind === "slider") &&
     typeof value === "number"
   ) {
+    if (control.kind === "number") value = normalizeKnobValue(value, control);
+    if (Object.is(control.value, value)) return;
     if (control.integer && !Number.isInteger(value)) return;
     if (
       control.kind === "slider" &&
@@ -795,7 +904,12 @@ export function configureControl(
     annotations.map((comment) => comment.value.trim()),
   );
   const annotation = customizationAnnotation(control, settings);
-  if (sameCustomization(current, settings)) return;
+  const numericValue = customizationNumericValue(control, settings);
+  if (
+    sameCustomization(current, settings) &&
+    (numericValue === undefined || Object.is(numericValue, control.value))
+  )
+    return;
   if (expected && !sameCustomization(current, expected))
     throw new Error(
       "Control settings changed in the source. Reopen the settings and try again.",
@@ -803,6 +917,7 @@ export function configureControl(
 
   const replacement =
     annotation &&
+    !annotation.includes("\n") &&
     annotations.length === 1 &&
     (declaration.declarations.length === 1 ||
       annotations[0].start > statement.start)
@@ -843,7 +958,6 @@ export function configureControl(
           edits.push(annotateControl(code, sibling.start, text));
     }
   }
-  const numericValue = customizationNumericValue(control, settings);
   if (numericValue !== undefined && !Object.is(numericValue, control.value)) {
     const integer =
       (control.kind === "number" || control.kind === "slider") &&
@@ -853,7 +967,11 @@ export function configureControl(
       text = text.replace(/e|$/, (suffix) => `.0${suffix}`);
     edits.push({ start: control.start, end: control.end, text });
   }
-  if (control.kind === "multi-enum") {
+  if (
+    control.kind === "multi-enum" &&
+    JSON.stringify(settings.values.order) !==
+      JSON.stringify(current.values.order)
+  ) {
     const selected = (settings.values.order as string[]).flatMap((key) =>
       control.options.filter(
         (option) => option.key === key && control.value.includes(option.value),
@@ -889,7 +1007,7 @@ export function ignoreControl(code: string, name: string): Edit | undefined {
     (control) => control.name === name,
   );
   if (!control) return;
-  return annotateControl(code, control.ignoreAt, "//@ignore");
+  return annotateControl(code, control.ignoreAt, "// @ignore");
 }
 
 function enumMember(objectName: string, key: string) {
@@ -911,7 +1029,7 @@ function annotateControl(
   return {
     start: position,
     end: position,
-    text: `${leading}${annotation}${newline}${indent}`,
+    text: `${leading}${annotation.split(/\r?\n/).join(newline + indent)}${newline}${indent}`,
   };
 }
 
@@ -994,7 +1112,7 @@ function locateControls(code: string): {
   return { located, valid: true };
 }
 
-// Find a `//@ignore` line comment that sits between `boundary` and
+// Find a `// @ignore` line comment that sits between `boundary` and
 // `declaratorStart` with only whitespace/line breaks after it. Returns the
 // start of the comment, so that dragging the binding carries the marker
 // with it, or `declaratorStart` when no marker is present.
@@ -1023,7 +1141,7 @@ function moveWithinStatement(
   const tgtIdx = target.declarationIndex;
   if (srcIdx === tgtIdx) return;
 
-  // Each chunk is the declarator plus any `//@ignore` line attached to it.
+  // Each chunk is the declarator plus any `// @ignore` line attached to it.
   const chunks: DeclaratorRange[] = declarators.map((d, i) => {
     const boundary = i === 0 ? source.statementStart : declarators[i - 1].end;
     return {

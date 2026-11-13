@@ -9,13 +9,13 @@ const projectRoot = path.join(temporary, "project");
 await fs.mkdir(projectRoot);
 const sources = {
   "master.strudel":
-    "import a from './a.strudel';\nimport b from './b.strudel';\nconst gain = 0.5;\nstack(a, b)",
+    "import a from './a.strudel';\nimport b from './b.strudel';\nconst gain = 0.5; // @knob step=0.01\nstack(a, b)",
   "a.strudel":
     "import shared from './shared.strudel';\nconst gain = 0.2;\nexport default shared.pan(-0.5)",
   "b.strudel":
     "import shared from './shared.strudel';\nconst gain = 0.3;\nexport default shared.pan(0.5)",
   "shared.strudel":
-    "const enabled = true;\nconst level = 0.4;\nexport default note('c3*4').s('sine').gain(enabled ? level : 0)",
+    "const enabled = true;\nconst level = 0.4; // @knob step=0.01\nexport default note('c3*4').s('sine').gain(enabled ? level : 0)",
 };
 for (const [file, code] of Object.entries(sources))
   await fs.writeFile(path.join(projectRoot, file), code);

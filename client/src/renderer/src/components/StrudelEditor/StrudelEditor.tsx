@@ -285,8 +285,10 @@ export function StrudelEditor({
         if (!edit) return;
         mirror.editor.dispatch({
           changes: { from: edit.start, to: edit.end, insert: edit.text },
+          annotations:
+            change.type === "reset" ? isolateHistory.of("full") : undefined,
           userEvent:
-            change.type === "reorder" || Array.isArray(change.value)
+            change.type !== "set" || Array.isArray(change.value)
               ? "input.control"
               : undefined,
         });

@@ -1,9 +1,9 @@
-import { starterFiles } from "../main/starter";
 import {
   type PanelPreferences,
   parsePanelPreferences,
   relocatePanelPreferences,
 } from "../shared/control-tree";
+import { defaultExampleFiles } from "../shared/examples";
 import {
   addImport,
   editSource,
@@ -173,7 +173,7 @@ export class BrowserProjects {
     this.queue = operation.catch(() => {});
     return operation;
   }
-  async create(name: string, contents = starterFiles): Promise<Project> {
+  async create(name: string, contents = defaultExampleFiles): Promise<Project> {
     name = name.trim();
     if (!name || name.length > 80)
       throw new Error("Use a project name of 1–80 characters.");

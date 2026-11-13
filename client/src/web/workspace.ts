@@ -3,6 +3,7 @@ import {
   AssistAccessError,
   requestAssistant,
 } from "../shared/assistant-client";
+import { exampleNames, getExampleFiles } from "../shared/examples";
 import { externalWebUrl } from "../shared/links";
 import type { WorkspaceApi } from "../shared/types";
 import { pickProject } from "./ProjectPicker";
@@ -11,10 +12,19 @@ import { BrowserProjects } from "./projects";
 const projects = new BrowserProjects();
 const account = new AccountClient("", null);
 const requests = new Map<string, AbortController>();
-async function choose(create: boolean) {
-  const choice = await pickProject(create ? [] : await projects.list(), create);
+async function choose(create: boolean, example?: string) {
+  const files = getExampleFiles(example ?? "default");
+  const existing = await projects.list();
+  if (
+    create &&
+    example &&
+    !existing.some((project) => project.name === example)
+  ) {
+    return projects.create(example, files);
+  }
+  const choice = await pickProject(existing, create, example);
   if (!choice) return null;
-  if (choice.kind === "create") return projects.create(choice.name);
+  if (choice.kind === "create") return projects.create(choice.name, files);
   if (choice.kind === "import") return projects.import(choice.content);
   return projects.select(choice.id);
 }
@@ -42,7 +52,8 @@ export const workspace: WorkspaceApi = {
   accountChangePassword: (request) => account.changePassword(request),
   current: () => projects.current(),
   open: () => choose(false),
-  create: () => choose(true),
+  examples: async () => [...exampleNames],
+  create: (example) => choose(true, example),
   read: (path) => projects.readFile(path),
   save: (request) => projects.save(request),
   graph: (path, code) => projects.graph(path, code),

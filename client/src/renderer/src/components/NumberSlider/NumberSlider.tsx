@@ -1,11 +1,15 @@
 import classNames from "classnames";
-import { Settings, X } from "lucide-react";
-import { type CSSProperties, useRef } from "react";
+import type { CSSProperties } from "react";
 import type { SliderControl } from "../../../../shared/controls";
 import { clampSliderValue } from "../../../../shared/slider";
-import { useNumericWheel } from "../../hooks/useNumericWheel";
+import { ControlActions } from "../ControlActions/ControlActions";
 import { ControlTitle } from "../ControlTitle/ControlTitle";
 import styles from "./NumberSlider.module.css";
+
+const numberFormat = new Intl.NumberFormat("en-US", {
+  maximumFractionDigits: 5,
+  useGrouping: false,
+});
 
 export function NumberSlider({
   control,
@@ -14,6 +18,7 @@ export function NumberSlider({
   onIgnore,
   onDefinition,
   onConfigure,
+  onReset,
 }: {
   control: SliderControl;
   disabled: boolean;
@@ -21,10 +26,10 @@ export function NumberSlider({
   onIgnore?: (name: string) => void;
   onDefinition?: (name: string) => void;
   onConfigure?: (name: string) => void;
+  onReset?: () => void;
 }) {
   const { name, min, max, value, presentation, integer } = control;
   const vertical = presentation === "vertical";
-  const input = useRef<HTMLInputElement>(null);
   const step = integer ? 1 : (max - min) / 1000;
   const change = (next: number) => {
     if (Number.isFinite(next))
@@ -33,20 +38,14 @@ export function NumberSlider({
         clampSliderValue(min, max, integer ? Math.round(next) : next),
       );
   };
-  useNumericWheel({
-    target: input,
-    value,
-    step,
-    disabled,
-    onChange: change,
-    normalize: (next) =>
-      integer
-        ? Math.min(max, Math.max(min, next))
-        : clampSliderValue(min, max, next),
-  });
 
   return (
-    <div className={styles.sliderControl}>
+    <div
+      className={classNames(styles.sliderControl, {
+        [styles.verticalControl]: vertical,
+      })}
+      data-control-card
+    >
       <div className={styles.controlHeading}>
         <ControlTitle
           className={styles.controlName}
@@ -54,79 +53,71 @@ export function NumberSlider({
           disabled={disabled}
           onDefinition={onDefinition}
         />
-        {onConfigure && (
-          <button
-            type="button"
-            className={styles.iconButton}
-            disabled={disabled}
-            aria-label={`Settings for ${name}`}
-            title="Control settings"
-            onClick={() => onConfigure(name)}
-          >
-            <Settings size={13} />
-          </button>
-        )}
-        {onIgnore && (
-          <button
-            type="button"
-            className={styles.iconButton}
-            disabled={disabled}
-            aria-label={`Hide ${name} control`}
-            title="Hide control · adds //@ignore"
-            onClick={() => onIgnore(name)}
-          >
-            <X size={13} />
-          </button>
-        )}
-      </div>
-      <output className={styles.controlValue} aria-label={`${name} value`}>
-        {String(value)}
-      </output>
-      <div
-        className={classNames(styles.track, { [styles.vertical]: vertical })}
-      >
-        <input
-          ref={input}
-          type="range"
-          min={min}
-          max={max}
-          step={integer ? 1 : "any"}
-          value={value}
+        <ControlActions
+          name={name}
           disabled={disabled}
-          aria-label={`${name} slider`}
-          aria-orientation={vertical ? "vertical" : "horizontal"}
-          style={
-            {
-              "--fill": `${((value - min) / (max - min)) * 100}%`,
-            } as CSSProperties
-          }
-          onChange={(event) => change(event.currentTarget.valueAsNumber)}
-          onKeyDown={(event) => {
-            if (event.key === "Home" || event.key === "End") {
-              event.preventDefault();
-              change(event.key === "Home" ? min : max);
-            } else if (
-              ["ArrowUp", "ArrowRight", "ArrowDown", "ArrowLeft"].includes(
-                event.key,
-              )
-            ) {
-              event.preventDefault();
-              const direction = ["ArrowUp", "ArrowRight"].includes(event.key)
-                ? 1
-                : -1;
-              change(
-                value +
-                  direction *
-                    step *
-                    (event.altKey ? 10 : event.shiftKey && !integer ? 0.1 : 1),
-              );
-            }
-          }}
+          onReset={onReset}
+          onConfigure={onConfigure}
+          onIgnore={onIgnore}
         />
-        <div className={styles.bounds}>
-          <span>{min}</span>
-          <span>{max}</span>
+      </div>
+      <div className={styles.controlBody}>
+        <div
+          className={classNames(styles.track, { [styles.vertical]: vertical })}
+        >
+          <input
+            type="range"
+            min={min}
+            max={max}
+            step={integer ? 1 : "any"}
+            value={value}
+            disabled={disabled}
+            aria-label={`${name} slider`}
+            aria-orientation={vertical ? "vertical" : "horizontal"}
+            style={
+              {
+                "--fill": `${((value - min) / (max - min)) * 100}%`,
+              } as CSSProperties
+            }
+            onChange={(event) => change(event.currentTarget.valueAsNumber)}
+            onKeyDown={(event) => {
+              if (event.key === "Home" || event.key === "End") {
+                event.preventDefault();
+                change(event.key === "Home" ? min : max);
+              } else if (
+                ["ArrowUp", "ArrowRight", "ArrowDown", "ArrowLeft"].includes(
+                  event.key,
+                )
+              ) {
+                event.preventDefault();
+                const direction = ["ArrowUp", "ArrowRight"].includes(event.key)
+                  ? 1
+                  : -1;
+                change(
+                  value +
+                    direction *
+                      step *
+                      (event.altKey
+                        ? 10
+                        : event.shiftKey && !integer
+                          ? 0.1
+                          : 1),
+                );
+              }
+            }}
+          />
+          <div className={styles.bounds}>
+            <span title={String(min)}>{min}</span>
+            <span title={String(max)}>{max}</span>
+          </div>
         </div>
+        <output
+          className={styles.controlValue}
+          aria-label={`${name} value`}
+          title={String(value)}
+        >
+          {numberFormat.format(Number(value.toFixed(5)) || 0)}
+        </output>
       </div>
     </div>
   );

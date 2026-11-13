@@ -1,0 +1,9 @@
+// Glass · a simple bell
+// Exported to first-light.strudel. You can also play this file on its own.
+
+export default note("c5 ~ [g5 e5] ~")
+  .s("sine")
+  .fm(2).fmh(2)
+  .decay(0.3).sustain(0)
+  .delay(0.4)
+  .gain(0.25)

@@ -5,12 +5,20 @@ export function NumberInput({
   id,
   label,
   value,
+  min,
+  max,
+  integer,
+  optional,
   disabled,
   onChange,
 }: {
   id: string;
   label: string;
   value: string;
+  min?: number;
+  max?: number;
+  integer?: boolean;
+  optional?: boolean;
   disabled?: boolean;
   onChange: (value: string) => void;
 }) {
@@ -25,7 +33,13 @@ export function NumberInput({
         (mantissa.split(".")[1]?.length ?? 0) - (Number(exponent) || 0),
       ),
     );
-    const next = current + direction;
+    const next = Math.max(
+      min ?? -Infinity,
+      Math.min(
+        max ?? Infinity,
+        integer ? Math.round(current + direction) : current + direction,
+      ),
+    );
     if (Number.isFinite(next)) onChange(next.toFixed(decimals));
   };
   return (
@@ -37,7 +51,10 @@ export function NumberInput({
         aria-valuenow={
           value.trim() && Number.isFinite(numeric) ? numeric : undefined
         }
-        inputMode="decimal"
+        aria-valuemin={min}
+        aria-valuemax={max}
+        inputMode={integer ? "numeric" : "decimal"}
+        placeholder={optional ? "None" : undefined}
         value={value}
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
@@ -51,7 +68,9 @@ export function NumberInput({
         <button
           type="button"
           aria-label={`Increase ${label.toLowerCase()}`}
-          disabled={disabled}
+          disabled={
+            disabled || (max !== undefined && value !== "" && numeric >= max)
+          }
           onClick={() => step(1)}
         >
           <ChevronUp size={12} />
@@ -59,7 +78,9 @@ export function NumberInput({
         <button
           type="button"
           aria-label={`Decrease ${label.toLowerCase()}`}
-          disabled={disabled}
+          disabled={
+            disabled || (min !== undefined && value !== "" && numeric <= min)
+          }
           onClick={() => step(-1)}
         >
           <ChevronDown size={12} />

@@ -2,6 +2,7 @@ import classNames from "classnames";
 import {
   ChevronDown,
   ChevronRight,
+  Layers,
   Maximize2,
   Minimize2,
   Pin,
@@ -10,6 +11,7 @@ import {
 import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import { primaryModifier } from "../../../../shared/commands";
 import { hasControlCustomizations } from "../../../../shared/control-customizations";
+import { canResetControl } from "../../../../shared/control-defaults";
 import {
   type ControlGroup,
   flatPanelLayout,
@@ -50,6 +52,9 @@ export function ControlInput({
     onIgnore,
     onDefinition,
     onConfigure: hasControlCustomizations(control) ? onConfigure : undefined,
+    onReset: canResetControl(control)
+      ? () => onChange(control.name, { type: "reset" })
+      : undefined,
   };
   const setValue = (name: string, value: ControlValue) =>
     onChange(name, { type: "set", value });
@@ -356,11 +361,9 @@ export function ControlsPanel({
                   item.members.includes(control.name),
                 );
                 if (!composition)
-                  return matches(group.path, control.name) ? (
-                    <div key={control.name} className={styles.ungrouped}>
-                      {renderControl(control, ungrouped)}
-                    </div>
-                  ) : null;
+                  return matches(group.path, control.name)
+                    ? renderControl(control, ungrouped)
+                    : null;
                 const members = composition.members.flatMap((name) =>
                   group.controls.filter((item) => item.name === name),
                 );
@@ -388,7 +391,8 @@ export function ControlsPanel({
                       className={styles.compositionHeading}
                       title={composition.name}
                     >
-                      {composition.name}
+                      <span>{composition.name}</span>
+                      <Layers size={12} aria-hidden="true" />
                     </button>
                     {shown.map((item) => renderControl(item, members))}
                   </section>

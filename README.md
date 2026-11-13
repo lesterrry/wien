@@ -4,6 +4,8 @@
 
 Клиент находится в [client/](client/README.md): Electron, React и TypeScript.
 Все его зависимости, pnpm-скрипты, lockfile и конфигурация изолированы в этой папке.
+Реестр примеров — [examples/](examples/README.md): каждая подпапка является проектом,
+а `examples/default/` задаёт содержимое первого и каждого нового проекта.
 Локальный AI-бэкенд находится в [server/](server/README.md): Rust, axum, OpenAPI,
 AI Tunnel для генерации и embeddings; Codex сохранён как отдельный dev-адаптер.
 

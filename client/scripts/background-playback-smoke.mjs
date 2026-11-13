@@ -33,7 +33,7 @@ try {
     await page.keyboard.insertText(text);
   }
   const low =
-    'const gain = 0.06;\nsetcpm(120);\nfreq(220).s("sine").gain(gain).release(0.01)';
+    'const gain = 0.06; // @knob step=0.01\nsetcpm(120);\nfreq(220).s("sine").gain(gain).release(0.01)';
   const high = 'setcpm(60);\nfreq(1760).s("sine").gain(0.06).release(0.01)';
   await code.waitFor();
   await page

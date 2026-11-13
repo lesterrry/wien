@@ -9,7 +9,7 @@ const root = path.join(temporary, "project");
 await fs.mkdir(path.join(root, "lib"), { recursive: true });
 const settingsRoot = await fs.realpath(root);
 const shared =
-  "const level = 0.2; const broken = 1/0; export default note('c3*4').s('sine').gain(level)";
+  "const level = 0.2; // @knob step=0.01\nconst broken = 1/0; export default note('c3*4').s('sine').gain(level)";
 const sources = {
   "main.strudel":
     "import a from './lib/a.strudel'; import b from './lib/b.strudel'; const gain = 0.5; stack(a,b)",
@@ -306,7 +306,7 @@ try {
     .press("ArrowUp");
   await expect
     .poll(() => fs.readFile(path.join(root, "lib/late.strudel"), "utf8"))
-    .toContain("lateAmount = 0.71");
+    .toContain("lateAmount = 1.7");
   await panel
     .getByRole("button", { name: "Reload source…", exact: true })
     .click();
@@ -366,7 +366,7 @@ try {
     .press("ArrowUp");
   await expect
     .poll(() => fs.readFile(path.join(root, "renamed.strudel"), "utf8"))
-    .toContain("rootAmount = 0.41");
+    .toContain("rootAmount = 1.4");
   await collapse();
   await expand();
   await mode("fullscreen");

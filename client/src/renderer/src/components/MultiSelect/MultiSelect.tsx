@@ -1,9 +1,10 @@
-import { Check, GripVertical, Settings, X } from "lucide-react";
+import { Check, GripVertical } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   ControlChange,
   MultiEnumControl,
 } from "../../../../shared/controls";
+import { ControlActions } from "../ControlActions/ControlActions";
 import { ControlTitle } from "../ControlTitle/ControlTitle";
 import styles from "./MultiSelect.module.css";
 
@@ -21,6 +22,7 @@ export function MultiSelect({
   onIgnore,
   onDefinition,
   onConfigure,
+  onReset,
 }: {
   control: MultiEnumControl;
   disabled: boolean;
@@ -28,6 +30,7 @@ export function MultiSelect({
   onIgnore?: (name: string) => void;
   onDefinition?: (name: string) => void;
   onConfigure?: (name: string) => void;
+  onReset?: () => void;
 }) {
   const group = useRef<HTMLFieldSetElement>(null);
   const pending = useRef<{ key: string; x: number; y: number } | null>(null);
@@ -113,7 +116,7 @@ export function MultiSelect({
   const before = drag ? remaining[drag.index] : undefined;
 
   return (
-    <div className={styles.card}>
+    <div className={styles.card} data-control-card>
       <div className={styles.heading}>
         <ControlTitle
           className={styles.name}
@@ -121,30 +124,13 @@ export function MultiSelect({
           disabled={disabled}
           onDefinition={onDefinition}
         />
-        {onConfigure && (
-          <button
-            type="button"
-            className={styles.iconButton}
-            disabled={disabled}
-            aria-label={`Settings for ${control.name}`}
-            title="Control settings"
-            onClick={() => onConfigure(control.name)}
-          >
-            <Settings size={13} />
-          </button>
-        )}
-        {onIgnore && (
-          <button
-            type="button"
-            className={styles.iconButton}
-            disabled={disabled}
-            aria-label={`Hide ${control.name} control`}
-            title="Hide control · adds //@ignore"
-            onClick={() => onIgnore(control.name)}
-          >
-            <X size={13} />
-          </button>
-        )}
+        <ControlActions
+          name={control.name}
+          disabled={disabled}
+          onReset={onReset}
+          onConfigure={onConfigure}
+          onIgnore={onIgnore}
+        />
       </div>
       <fieldset
         ref={group}
