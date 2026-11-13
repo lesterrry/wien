@@ -32,7 +32,7 @@ import styles from "./StrudelEditor.module.css";
 export interface Player {
   assist(placement?: AssistantPlacement): void;
   play(): Promise<void>;
-  update(): Promise<void>;
+  update(options?: { flash?: boolean }): Promise<void>;
   dependsOn(path: string): boolean;
   revealControl(name: string): void;
   stop(): Promise<void>;
@@ -126,7 +126,7 @@ export function StrudelEditor({
     let alive = true;
     let generation = 0;
     let evaluationGeneration = 0;
-    let requested: boolean | null = null;
+    let requested: { autostart: boolean; flash: boolean } | null = null;
     let evaluating: Promise<void> | undefined;
     let evaluationCode: string | undefined;
     let compiled: ReturnType<typeof compileGraph> | undefined;
@@ -217,12 +217,15 @@ export function StrudelEditor({
     // starting playback again if Stop was pressed during an async evaluation.
     const evaluateMirror = mirror.evaluate.bind(mirror);
     const stopMirror = mirror.stop.bind(mirror);
-    const evaluate = (autostart: boolean): Promise<void> => {
-      requested = requested === true || autostart;
+    const evaluate = (autostart: boolean, flash = true): Promise<void> => {
+      requested = {
+        autostart: Boolean(requested?.autostart) || autostart,
+        flash: Boolean(requested?.flash) || flash,
+      };
       if (evaluating) return evaluating;
       const drain = async () => {
         while (alive && requested !== null) {
-          const start = requested;
+          const { autostart: start, flash } = requested;
           requested = null;
           if (!start && !mirror.repl.state.started) continue;
           const token = generation;
@@ -230,7 +233,8 @@ export function StrudelEditor({
             if (!alive || token !== generation) return;
             evaluationGeneration = token;
             evaluationCode = mirror.code;
-            await evaluateMirror(false);
+            if (flash) await evaluateMirror(false);
+            else await mirror.repl.evaluate(mirror.code, false);
             if (
               alive &&
               token === generation &&
@@ -264,7 +268,7 @@ export function StrudelEditor({
         setAssistantInvocation((value) => value + 1);
       },
       play: () => evaluate(true),
-      update: () => evaluate(false),
+      update: (options) => evaluate(false, options?.flash ?? true),
       dependsOn: (file) => dependencies.has(file),
       revealControl: (name) => {
         const result = readControls(mirror.code);

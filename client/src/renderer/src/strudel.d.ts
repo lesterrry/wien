@@ -24,6 +24,7 @@ declare module "@strudel/codemirror" {
     code: string;
     repl: {
       state: ReplState;
+      evaluate(code: string, autostart: boolean): Promise<unknown>;
       start(): Promise<void>;
       scheduler: { now(): number; cps: number };
     };

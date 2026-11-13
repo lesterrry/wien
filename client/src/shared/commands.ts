@@ -7,6 +7,7 @@ export type CommandId =
   | "exportProject"
   | "save"
   | "closeTab"
+  | `tab${1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9}`
   | "play"
   | "stop"
   | "stopAll"
@@ -104,6 +105,14 @@ export const commandMenus: { label: string; commands: AppCommand[] }[] = [
 // Contextual shortcuts remain available without separate top-level menus.
 export const commands: AppCommand[] = [
   ...commandMenus.flatMap((menu) => menu.commands),
+  ...([1, 2, 3, 4, 5, 6, 7, 8, 9] as const).map(
+    (number): AppCommand => ({
+      id: `tab${number}`,
+      label: number === 9 ? "Last Tab" : `Tab ${number}`,
+      code: `Digit${number}`,
+      key: String(number),
+    }),
+  ),
   { id: "controlUp", label: "Move Control Up", code: "ArrowUp", key: "Up" },
   {
     id: "controlDown",
@@ -170,8 +179,8 @@ export function matchCommand(
       Boolean(command.shift) === event.shiftKey &&
       event.metaKey === (modifier === "Meta") &&
       event.ctrlKey ===
-      (modifier === "Control" ||
-        (modifier === "Alt" && Boolean(command.alt))) &&
+        (modifier === "Control" ||
+          (modifier === "Alt" && Boolean(command.alt))) &&
       event.altKey === (modifier === "Alt" || Boolean(command.alt)),
   );
 }

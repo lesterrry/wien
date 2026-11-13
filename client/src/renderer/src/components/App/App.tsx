@@ -1175,7 +1175,7 @@ export function App() {
           )) {
             const running = players.current.get(session.id);
             if (running && changes.some((file) => running.dependsOn(file)))
-              await running.update();
+              await running.update({ flash: false });
           }
         })
         .catch((error) => setError(message(error)));
@@ -1411,6 +1411,14 @@ export function App() {
       return;
     }
     if (busyRef.current || dialogOpen) return;
+    if (command.startsWith("tab")) {
+      const tabs = window.document.querySelectorAll<HTMLButtonElement>(
+        '[role="tablist"][aria-label="Open snippets"] [role="tab"]',
+      );
+      const number = Number(command.slice(3));
+      tabs[number === 9 ? tabs.length - 1 : number - 1]?.click();
+      return;
+    }
     switch (command) {
       case "play":
         if (!graphActive) play();
