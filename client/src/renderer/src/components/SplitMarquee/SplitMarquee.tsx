@@ -37,6 +37,9 @@ export function SplitMarquee({
     let height = 0;
     let pixelRatio = 1;
     let period = 1;
+    let firstWord = "";
+    let remainder = "";
+    let remainderX = 0;
     let distance = 0;
     let previousTime: number | undefined;
     let frame = 0;
@@ -47,7 +50,7 @@ export function SplitMarquee({
       context.clearRect(0, 0, width, height);
       if (!text.trim()) return;
 
-      const center = width / 2;
+      const center = Math.round((width / 2) * pixelRatio) / pixelRatio;
       const progress = distance % period;
       const phase = REVERSE ? (period - progress) % period : progress;
 
@@ -90,22 +93,23 @@ export function SplitMarquee({
       // Both halves sample -phase at the center. Mirror the drawing axis
       // so the same glyphs meet at the center in either playback direction.
       context.save();
-      context.translate(center, 0);
-      context.scale(-1, 1);
+      context.beginPath();
       for (let x = 0; x < center; x += STRIPE_WIDTH + STRIPE_GAP) {
-        const offset = x / STRETCH - phase;
-        const sourceX = ((offset % period) + period) % period;
-        context.drawImage(
-          texture,
-          sourceX * pixelRatio,
+        const left = Math.max(
           0,
-          (STRIPE_WIDTH / STRETCH) * pixelRatio,
-          texture.height,
-          x,
-          0,
-          STRIPE_WIDTH,
-          height,
+          Math.round((center - x - STRIPE_WIDTH) * pixelRatio) / pixelRatio,
         );
+        const right = Math.round((center - x) * pixelRatio) / pixelRatio;
+        context.rect(left, 0, right - left, height);
+      }
+      context.clip();
+      context.translate(center, 0);
+      context.scale(-STRETCH, 1);
+      // Rasterize glyph outlines at their final stretched size instead of
+      // enlarging subpixel bitmap slices. The mask keeps stripe edges sharp.
+      for (let x = phase - period; x < center / STRETCH; x += period) {
+        context.fillText(firstWord, x, height / 2);
+        context.fillText(remainder, x + remainderX, height / 2);
       }
       context.restore();
     }
@@ -124,13 +128,16 @@ export function SplitMarquee({
 
       const style = getComputedStyle(canvas);
       const font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+      context.font = font;
+      context.fillStyle = style.color;
+      context.textBaseline = "middle";
       source.font = font;
-      const firstWord = text.match(/^\s*\S+/)?.[0] ?? text;
-      const remainder = text.slice(firstWord.length);
+      firstWord = text.match(/^\s*\S+/)?.[0] ?? text;
+      remainder = text.slice(firstWord.length);
       const firstWordWidth = source.measureText(firstWord).width;
       // At rest, keep the next word beyond the right edge. The padding is
       // part of the texture, so starting playback does not change the frame.
-      const remainderX = Math.max(firstWordWidth, width / 2);
+      remainderX = Math.max(firstWordWidth, width / 2);
       const textWidth = remainder
         ? remainderX + source.measureText(remainder).width
         : firstWordWidth;
@@ -138,17 +145,14 @@ export function SplitMarquee({
         1,
         Math.ceil(textWidth + parseFloat(style.fontSize)),
       );
-      // Two copies allow a stripe to straddle the repeat boundary.
-      texture.width = Math.ceil(period * 2 * pixelRatio);
+      texture.width = Math.ceil(period * pixelRatio);
       texture.height = canvas.height;
       source.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
       source.font = font;
       source.fillStyle = style.color;
       source.textBaseline = "middle";
-      for (const x of [0, period]) {
-        source.fillText(firstWord, x, height / 2);
-        source.fillText(remainder, x + remainderX, height / 2);
-      }
+      source.fillText(firstWord, 0, height / 2);
+      source.fillText(remainder, remainderX, height / 2);
       draw();
     }
 
