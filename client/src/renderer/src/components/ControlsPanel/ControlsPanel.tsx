@@ -445,13 +445,15 @@ export function ControlsPanel({
           <Pin size={14} />
         </button>
       </div>
-      <input
-        className={styles.search}
-        aria-label="Search controls"
-        placeholder="Search controls or files…"
-        value={search}
-        onChange={(event) => setSearch(event.target.value)}
-      />
+      {groups.some((group) => group.controls.length > 0) && (
+        <input
+          className={styles.search}
+          aria-label="Search controls"
+          placeholder="Search controls or files…"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+        />
+      )}
       <div
         className={styles.controlsList}
         ref={list}

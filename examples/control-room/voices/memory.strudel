@@ -1,0 +1,33 @@
+// The two-bar melody from the former default/controls-demo, preserved verbatim.
+const Wave = Object.freeze({ Sine: 'sine', Triangle: 'triangle', Saw: 'sawtooth' })
+const Fx = Object.freeze({ Crush: 'crush', Lowpass: 'lowpass', Echo: 'echo', Drive: 'drive' })
+const waveform = Wave.Triangle // @default Wave.Triangle
+// @default [Fx.Lowpass, Fx.Echo]
+const effects = [Fx.Lowpass, Fx.Echo] // @multi Fx order=Lowpass,Echo,Crush,Drive
+// @default 0.18
+const level = 0.18 // @knob step=0.01 min=0 max=0.4
+// @default 1800
+var cutoff = 1800 // @slider 200..8000
+// @default 0
+let pan = 0 // @slider vertical -1..1
+// @default 1
+const rate = 1 // @knob step=0.25 min=0.5 max=2 split=6
+// @default 0
+const phase = 0 // @knob step=0.125 split=8
+const enabled = true // @default true
+const instrument = {waveform, level, rate, enabled}
+const space = {cutoff, pan, phase, effects}
+
+const tune = note("<[~ eb4 g4 ~ bb4 ~ g4 ~] [~ eb4 ~ f4 g4 [~ c5] bb4 ~]>")
+  .s(waveform).fast(rate).late(phase % 1).attack(0.008).decay(0.22).sustain(0).release(0.1)
+  .pan(pan).gain(level).orbit(1)
+const stages = effects.map(effect => {
+  switch (effect) {
+    case Fx.Crush: return crush(4)
+    case Fx.Lowpass: return lpf(cutoff).lpq(0.7)
+    case Fx.Echo: return delay(0.3).delaytime(30 / 112).delayfeedback(0.28)
+    case Fx.Drive: return distort(1.5).distortvol(0.45)
+  }
+})
+// Real serial stages: dragging Crush past Lowpass changes the audio, not just the code.
+export default enabled ? (stages.length ? tune.FX(...stages).fxr(0.8) : tune) : silence

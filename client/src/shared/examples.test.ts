@@ -41,8 +41,8 @@ test("bundled examples preserve complete projects and their local imports", asyn
   for (const id of ["missing", "../default", "__proto__", null]) {
     assert.throws(() => getExampleFiles(id), /Example project not found/);
   }
-  assert(Object.hasOwn(defaultExampleFiles, "controls-demo.strudel"));
-  assert(Object.hasOwn(defaultExampleFiles, "instruments/glass.strudel"));
+  assert(Object.hasOwn(defaultExampleFiles, "glass-nerve.strudel"));
+  assert(Object.hasOwn(defaultExampleFiles, "voices/keys.strudel"));
 
   for (const id of directories) {
     const directory = new URL(`${id}/`, root);

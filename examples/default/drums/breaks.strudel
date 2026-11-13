@@ -1,0 +1,15 @@
+import kick from './kick.strudel'
+import snare, { backbeat, splice, turnaround } from './snare.strudel'
+import detail, { hats, sparks, splinter } from './metal.strudel'
+const enabled = true // @default true
+// These variants reuse the same voices, not independent clocks.
+export const skeleton = enabled ? stack(kick, hats.gain(0.025)) : silence
+export const fracture = enabled ? arrange(
+  [2, stack(kick, snare, detail)],
+  [1, stack(kick, splice, hats)],
+  [1, stack(kick, backbeat, hats, sparks.fast(2))],
+  [2, stack(kick, snare, detail)],
+  [1, stack(kick, splice, hats, sparks.fast(2))],
+  [1, stack(kick.mask("1 1 1 0"), turnaround, hats.mask("1 1 1 0"), splinter)]
+) : silence
+export default enabled ? stack(kick, snare, detail) : silence

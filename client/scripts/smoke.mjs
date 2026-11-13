@@ -3,8 +3,10 @@ import * as fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { _electron as electron, expect } from "@playwright/test";
+import { seedWorkspace } from "./fixtures/workspace.mjs";
 
 const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "wien-smoke-"));
+await seedWorkspace(temporary);
 const environment = { ...process.env, WIEN_USER_DATA: temporary };
 delete environment.ELECTRON_RUN_AS_NODE;
 let app;
@@ -233,7 +235,7 @@ note("c3*8").s("sine").gain(gain).lpf(cutoff).fast(speed)`);
   await expect(
     page.getByRole("spinbutton", { name: "speed knob", exact: true }),
   ).toHaveCount(0);
-  assert.match(await code.textContent(), /\/\/@ignoreconst speed/);
+  assert.match(await code.textContent(), /\/\/\s*@ignoreconst speed/);
   await code.click();
   await code.press(process.platform === "darwin" ? "Meta+z" : "Control+z");
   await page

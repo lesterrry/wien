@@ -58,6 +58,7 @@ export interface WorkspaceApi {
     preferences: PanelPreferences,
   ): Promise<void>;
   current(): Promise<Project>;
+  onProjectChanged(callback: (root: string) => void): () => void;
   open(): Promise<Project | null>;
   examples(): Promise<string[]>;
   create(example?: string): Promise<Project | null>;

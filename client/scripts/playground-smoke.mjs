@@ -3,12 +3,11 @@ import * as fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { _electron as electron, expect } from "@playwright/test";
+import { seedControlGraph } from "./fixtures/control-graph.mjs";
 
 const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "wien-playground-"));
 const root = path.join(temporary, "project");
-await fs.cp(path.resolve("../examples/controls-playground"), root, {
-  recursive: true,
-});
+await seedControlGraph(root);
 await fs.appendFile(
   path.join(root, "playground/kick.strudel"),
   "\nlet overlap = {kickGain, enabled};\nlet nested = {kickVoice, enabled};\n",
@@ -79,9 +78,14 @@ try {
   });
   const longTitle = await longHeading.evaluate((node) => ({
     height: node.getBoundingClientRect().height,
-    truncated: node.scrollWidth > node.clientWidth,
+    truncated:
+      node.querySelector("span").scrollWidth >
+      node.querySelector("span").clientWidth,
   }));
-  assert.equal(longTitle.height, 24);
+  const shortHeading = await composed
+    .getByRole("button", { name: "kickVoice", exact: true })
+    .boundingBox();
+  assert.equal(longTitle.height, shortHeading.height);
   assert.equal(longTitle.truncated, true);
   const geometry = await cells();
   assert.equal(geometry.length, 3);
@@ -94,8 +98,8 @@ try {
     );
   assert.equal(
     rootOffset,
-    36,
-    "Standalone controls reserve the same heading row across files",
+    0,
+    "Standalone controls do not reserve an empty group heading",
   );
   const sharedCell = await card("playground/tone.strudel")
     .getByRole("group", { name: "waveform control", exact: true })
@@ -103,13 +107,18 @@ try {
   const sharedHeader = await card("playground/tone.strudel")
     .getByRole("button", { name: longGroupName, exact: true })
     .boundingBox();
-  assert(Math.abs(sharedCell - sharedHeader.y - 36) < 1);
+  assert(sharedCell >= sharedHeader.y + sharedHeader.height);
 
-  assert(geometry.every((box) => Math.abs(box.height - 176) < 1));
-  assert(geometry.every((box) => Math.abs(box.width - geometry[0].width) < 1));
+  assert(Math.abs(geometry[0].height - 176) < 1);
+  assert(Math.abs(geometry[2].height - 176) < 1);
   assert(
-    Math.abs(geometry[0].y - geometry[1].y) < 1,
-    "Grouped controls stay on the same grid row",
+    geometry[1].height > 80 && geometry[1].height < 176,
+    "Horizontal sliders retain their compact natural height",
+  );
+  assert(Math.abs(geometry[0].width - geometry[1].width) < 1);
+  assert(
+    geometry[1].y >= geometry[0].y + geometry[0].height,
+    "Group members form an ordered column without overlapping",
   );
   const search = panel.getByRole("textbox", { name: "Search controls" });
   await search.fill("kickVoice");
@@ -120,14 +129,13 @@ try {
   await search.fill("");
   await composed
     .getByRole("group", { name: "kickDecay control", exact: true })
-    .press("Alt+ArrowUp");
+    .press(`${process.platform === "darwin" ? "Meta" : "Control"}+ArrowUp`);
   await expect
     .poll(() => fs.readFile(path.join(root, "playground/kick.strudel"), "utf8"))
     .toContain("{kickDecay, kickGain}");
   await composed
     .getByRole("button", { name: "kickVoice", exact: true })
-    .click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Go to declaration" }).click();
+    .click();
   await expect(
     page.getByRole("tab", { name: "playground/kick.strudel", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
@@ -139,12 +147,16 @@ try {
     .getByRole("button", { name: "Close playground/kick.strudel", exact: true })
     .click();
   await expect(panel).toHaveAttribute("data-mode", "fullscreen");
-  await panel
-    .getByRole("button", { name: "Collapse controls", exact: true })
+  await page
+    .getByRole("button", { name: "Close controls view", exact: true })
     .click();
   const sidebar = await cells();
-  assert(sidebar.every((box) => Math.abs(box.height - 176) < 1));
-  assert(sidebar.every((box) => Math.abs(box.width - sidebar[0].width) < 1));
+  assert.deepEqual(
+    sidebar.map((box) => Math.round(box.height)).sort(),
+    geometry.map((box) => Math.round(box.height)).sort(),
+    "Control heights stay consistent between sidebar and full view",
+  );
+  assert(Math.abs(sidebar[0].width - sidebar[1].width) < 1);
   await panel
     .getByRole("button", { name: "Open full controls", exact: true })
     .click();

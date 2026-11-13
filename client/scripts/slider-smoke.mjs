@@ -3,8 +3,10 @@ import * as fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { _electron as electron, expect } from "@playwright/test";
+import { seedWorkspace, workspaceFiles } from "./fixtures/workspace.mjs";
 
 const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "wien-sliders-"));
+await seedWorkspace(temporary);
 const environment = { ...process.env, WIEN_USER_DATA: temporary };
 delete environment.ELECTRON_RUN_AS_NODE;
 let app;
@@ -20,10 +22,7 @@ try {
   page.on("pageerror", (error) => errors.push(error.message));
   const code = page.getByLabel("Strudel code editor");
   await code.waitFor();
-  const example = await fs.readFile(
-    "../examples/default/controls-demo.strudel",
-    "utf8",
-  );
+  const example = workspaceFiles["controls-demo.strudel"];
   const modifier = process.platform === "darwin" ? "Meta" : "Control";
   async function replaceCode(source) {
     await code.click();
@@ -42,14 +41,14 @@ try {
       .getAttribute("aria-selected"),
     "true",
   );
-  await page.getByRole("button", { name: /First session/ }).click();
+  await page.getByRole("button", { name: "Project and account" }).click();
   assert.equal(
     await page
       .getByRole("button", { name: "Open controls demo", exact: true })
       .count(),
     0,
   );
-  await page.getByRole("button", { name: /First session/ }).click();
+  await page.getByRole("button", { name: "Project and account" }).click();
   const cutoff = page.getByRole("slider", {
     name: "cutoff slider",
     exact: true,
@@ -84,7 +83,7 @@ try {
     fullEffects.getByRole("checkbox", { name: "Echo", exact: true }),
   ).toBeChecked();
   await page
-    .getByRole("button", { name: "Close controls", exact: true })
+    .getByRole("button", { name: "Close controls view", exact: true })
     .click();
 
   assert.equal(await triangle.isChecked(), true);

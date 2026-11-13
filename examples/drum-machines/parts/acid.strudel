@@ -1,0 +1,11 @@
+// @default 600
+const cutoff = 600 // @slider 100..4000
+// @default 2.4
+const resonance = 2.4 // @knob step=0.1 min=0.1 max=5
+// @default 0.12
+const level = 0.12 // @slider 0..0.25
+const enabled = true // @default true
+const acid = {cutoff, resonance, level, enabled}
+export default note("<[a1 ~ a2 c3 ~ a2 e2 ~] [a1 ~ g2 a2 ~ e2 c2 ~]>")
+  .s("sawtooth").decay(0.11).sustain(0).lpf(cutoff).lpq(resonance)
+  .lpenv(3).lpattack(0.005).lpdecay(0.12).gain(enabled ? level : 0)

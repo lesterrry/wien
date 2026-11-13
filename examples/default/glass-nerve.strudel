@@ -1,0 +1,41 @@
+// GLASS NERVE · 148 BPM · 96 bars / ~2:36, then loops.
+// Press Play. Fragile keys, muscular broken drums, a weightless middle.
+// Pin this file in Controls; open Graph View to follow the instruments.
+import keys, { answer } from './voices/keys.strudel'
+import chords from './voices/chords.strudel'
+import bass from './voices/bass.strudel'
+import breaks, { fracture, skeleton } from './drums/breaks.strudel'
+import air from './voices/air.strudel'
+
+const Scene = Object.freeze({ Journey: 'journey', Groove: 'groove', Fracture: 'fracture', Weightless: 'weightless' })
+const scene = Scene.Journey // @default Scene.Journey
+// @default 148
+const bpm = 148 // @knob step=1 min=96 max=180
+// @default 0.8
+const volume = 0.8 // @slider 0..1
+const enabled = true // @default true
+const performance = {scene, bpm, volume, enabled}
+setcpm(bpm / 4)
+
+// Both phrases stretch together: the suspended notes keep their harmonic home.
+const weightless = stack(keys.slow(2), chords.slow(2), air)
+const groove = stack(keys, chords, bass, breaks)
+const broken = stack(keys, answer, bass, fracture, air)
+
+// 0–8: the hook is present immediately; 8–24: body; 24–40: splinter.
+// 40–56: weightless; 56–64: heart restarts; 64–88: return; 88–96: afterimage.
+const journey = arrange(
+  [8, stack(keys, chords, skeleton)],
+  [16, groove],
+  [16, broken],
+  [16, weightless],
+  [8, stack(keys, bass, skeleton, air)],
+  [16, stack(groove, answer)],
+  [8, broken],
+  [8, stack(keys.slow(2), chords.slow(2), air)]
+)
+const selected = scene === Scene.Groove ? groove
+  : scene === Scene.Fracture ? broken
+  : scene === Scene.Weightless ? weightless : journey
+
+enabled ? selected.postgain(volume) : silence

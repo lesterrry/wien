@@ -22,7 +22,6 @@ import {
   Pencil,
   Play,
   Plus,
-  RefreshCw,
   Search,
   Sparkles,
   Square,
@@ -218,6 +217,19 @@ export function App() {
   const [modal, setModal] = useState<Modal | null>(null);
   const [value, setValue] = useState("");
   const [modalError, setModalError] = useState<string | null>(null);
+  const modalNameInput = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const input = modalNameInput.current;
+    if (!input || !modal) return;
+    input.focus();
+    const selectionEnd =
+      modal.kind === "create" &&
+      !modal.folder &&
+      input.value.endsWith(".strudel")
+        ? input.value.length - ".strudel".length
+        : input.value.length;
+    input.setSelectionRange(0, selectionEnd);
+  }, [modal]);
   const [workspaceView, setWorkspaceView] = useState<
     "editor" | "controls" | "graph"
   >("editor");
@@ -627,30 +639,99 @@ export function App() {
     setModal(next);
   }
 
-  async function refresh() {
-    await controlQueue.current;
-    setProject(await api.current());
-    for (const session of sessionsRef.current) {
-      if (session.document.code !== session.document.saved) continue;
-      try {
-        const code = await api.read(session.document.path);
-        if (code !== session.document.code)
+  const refresh = useCallback(
+    async (isCurrent: () => boolean = () => true) => {
+      await controlQueue.current;
+      if (!isCurrent()) return;
+      const next = await api.current();
+      if (!isCurrent()) return;
+      setProject(next);
+      setSelection((current) =>
+        current ? (findEntry(next.entries, current.id) ?? null) : null,
+      );
+      for (const session of sessionsRef.current) {
+        if (!isCurrent()) return;
+        if (session.document.code !== session.document.saved) continue;
+        try {
+          const code = await api.read(session.document.path);
+          // A filesystem read may finish after typing, a rename or a switch.
+          // Only replace the exact clean document that was read.
+          if (!isCurrent()) return;
+          if (
+            sessionsRef.current.find((current) => current.id === session.id)
+              ?.document !== session.document ||
+            code === session.document.code
+          )
+            continue;
           players.current.get(session.id)?.replaceCode(code);
-        patchSession(session.id, {
-          document: { ...session.document, code, saved: code },
-        });
-      } catch {
-        /* Missing files are diagnosed by the panel and graph. */
+          patchSession(session.id, {
+            document: { ...session.document, code, saved: code },
+          });
+        } catch {
+          /* Missing files are diagnosed by the panel and graph. */
+        }
       }
-    }
-    if (
-      !sessionsRef.current.some(
-        (session) => session.document.code !== session.document.saved,
+      if (!isCurrent()) return;
+      if (
+        !sessionsRef.current.some(
+          (session) => session.document.code !== session.document.saved,
+        )
       )
-    )
-      setControlErrors({});
-    setTreeVersion((version) => version + 1);
-  }
+        setControlErrors({});
+      setTreeVersion((version) => version + 1);
+    },
+    [patchSession, players, sessionsRef],
+  );
+
+  useEffect(() => {
+    if (!project?.root) return;
+    const root = project.root;
+    let disposed = false;
+    let running = false;
+    let pending = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const schedule = () => {
+      pending = true;
+      clearTimeout(timer);
+      timer = setTimeout(update, 100);
+    };
+    const update = async () => {
+      if (disposed || running) return;
+      if (busyRef.current || controlWrites.current > 0) {
+        schedule();
+        return;
+      }
+      pending = false;
+      running = true;
+      try {
+        await refresh(() => {
+          if (disposed) return false;
+          if (busyRef.current || controlWrites.current > 0) {
+            pending = true;
+            return false;
+          }
+          return true;
+        });
+      } catch (error) {
+        if (!disposed) setError(message(error));
+      } finally {
+        running = false;
+        if (pending && !disposed) schedule();
+      }
+    };
+    const unsubscribe = api.onProjectChanged((changedRoot) => {
+      if (changedRoot === root) schedule();
+    });
+    // Close the initial read/subscription gap and reconcile after app sleep.
+    schedule();
+    window.addEventListener("focus", schedule);
+    return () => {
+      disposed = true;
+      clearTimeout(timer);
+      unsubscribe();
+      window.removeEventListener("focus", schedule);
+    };
+  }, [project?.root, refresh]);
 
   async function syncDocument() {
     for (const session of sessionsRef.current) {
@@ -1721,16 +1802,6 @@ export function App() {
               <button
                 className={styles.iconButton}
                 type="button"
-                title="Refresh files"
-                aria-label="Refresh files"
-                disabled={busy}
-                onClick={() => void run(refresh)}
-              >
-                <RefreshCw size={13} />
-              </button>
-              <button
-                className={styles.iconButton}
-                type="button"
                 title="New snippet"
                 aria-label="New snippet"
                 disabled={busy}
@@ -2179,6 +2250,7 @@ export function App() {
             <GraphView
               key={project.root}
               project={project}
+              sourceRevision={treeVersion}
               active={graphActive}
               focus={graphFocus}
               drafts={graphDrafts}
@@ -2435,15 +2507,7 @@ export function App() {
                   <input
                     id="item-name"
                     value={value}
-                    ref={(input) => {
-                      if (
-                        input &&
-                        window.document.activeElement?.tagName !== "INPUT"
-                      ) {
-                        input.focus();
-                        input.select();
-                      }
-                    }}
+                    ref={modalNameInput}
                     onChange={(event) => setValue(event.target.value)}
                     autoComplete="off"
                   />

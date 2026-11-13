@@ -1,0 +1,9 @@
+// Play independently, leave this tab, then return: it keeps playing.
+const bpm = 102 // @ignore
+// @default 0.25
+const level = 0.25 // @slider 0..0.4
+setcpm(bpm / 4)
+export default stack(
+  s("sbd ~ ~ sbd ~ ~ sbd ~").decay(0.15).gain(level),
+  s("~ pink ~ pink").hpf(3200).decay(0.06).sustain(0).gain(level * 0.25)
+)

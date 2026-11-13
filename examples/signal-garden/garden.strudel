@@ -1,0 +1,12 @@
+// SIGNAL GARDEN · three interlocking lengths, one shared instrument.
+// Graph View shows a diamond: both branches import shared/prism.js.
+import left from './branches/left.strudel'
+import right from './branches/right.strudel'
+import floor from './voices/floor.strudel'
+// @default 84
+const bpm = 84 // @knob step=1 min=50 max=120
+// @default 0.8
+const volume = 0.8 // @slider 0..1
+const enabled = true // @default true
+setcpm(bpm / 4)
+enabled ? stack(left, right, floor).postgain(volume) : silence

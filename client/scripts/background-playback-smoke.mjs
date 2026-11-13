@@ -3,8 +3,10 @@ import * as fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { _electron as electron, expect } from "@playwright/test";
+import { seedWorkspace } from "./fixtures/workspace.mjs";
 
 const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "wien-background-"));
+await seedWorkspace(temporary);
 const environment = { ...process.env, WIEN_USER_DATA: temporary };
 delete environment.ELECTRON_RUN_AS_NODE;
 const mod = process.platform === "darwin" ? "Meta" : "Control";

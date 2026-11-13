@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { test } from "node:test";
 import * as core from "@strudel/core";
 import * as mini from "@strudel/mini";
-import { changeControl } from "../../shared/controls";
+import { changeControl, readControls } from "../../shared/controls";
 import type { ModuleGraph } from "../../shared/modules";
-import { editSource } from "../../shared/modules";
+import { editSource, loadGraph } from "../../shared/modules";
 import { compileGraph as compile } from "./module-compiler";
 
 const transpilerModule = import("@strudel/transpiler");
@@ -19,6 +19,21 @@ async function evaluate(
 ) {
   await core.evalScope(core, mini);
   const compiled = await compileGraph({ entry, sources });
+  if (/^\$:/m.test(sources[entry])) {
+    const repl = core.repl({
+      getTime: () => 0,
+      defaultOutput: () => {},
+      transpiler: () => compiled,
+      onEvalError: (error) => {
+        throw error;
+      },
+    });
+    try {
+      return await repl.evaluate(sources[entry], false);
+    } finally {
+      repl.stop();
+    }
+  }
   return Function(`return (async () => {${compiled.output}})()`)();
 }
 
@@ -141,218 +156,143 @@ export default note('c3').pan(pan)`,
   });
 });
 
-test("the playable slider example produces numeric Strudel parameters", async () => {
-  const source = await readFile(
-    "../examples/default/controls-demo.strudel",
-    "utf8",
-  );
-  await core.evalScope({ setcpm: () => {} });
-  const pattern = await evaluate({ "main.strudel": source });
-  const events = pattern.queryArc(0, 1);
-  assert(
-    events.some(({ value }: { value: { s: string } }) => value.s === "sbd"),
-  );
-  assert(
-    events.some(({ value }: { value: { s: string } }) => value.s === "white"),
-  );
-  const lead = events.filter(
-    ({ value }: { value: { orbit: number } }) => value.orbit === 1,
-  );
-  assert(lead.length > 0);
-  for (const { value } of lead) {
-    assert.equal(value.s, "triangle");
-    assert.equal(value.cutoff, 1200);
-    assert.equal(value.pan, 0);
-    assert.equal(value.delay, 0.38);
-    assert.equal(value.chorus, 0.55);
-  }
-});
-
-test("playground enum edits change the lead and combine selected effects", async () => {
-  const source = await readFile(
-    "../examples/default/controls-demo.strudel",
-    "utf8",
-  );
-  const edit = changeControl(source, "waveform", {
-    type: "set",
-    value: "sawtooth",
-  });
-  assert(edit);
-  const changed = editSource(source, [edit]);
-  assert.match(changed, /const waveform = Wave.Saw/);
-  const effectsEdit = changeControl(changed, "effects", {
-    type: "set",
-    value: ["echo", "crush"],
-  });
-  assert(effectsEdit);
-  const updated = editSource(changed, [effectsEdit]);
-  assert.match(updated, /const effects = \[Fx.Echo, Fx.Crush\]/);
-  const pattern = await evaluate({ "main.strudel": updated });
-  const lead = pattern
-    .queryArc(0, 1)
-    .filter((hap: { value: { orbit: number } }) => hap.value.orbit === 1);
-  assert(lead.length > 0);
-  for (const { value } of lead) {
-    assert.equal(value.s, "sawtooth");
-    assert.equal(value.delay, 0.38);
-    assert.equal(value.crush, 5);
-    assert.equal(value.chorus, undefined);
-  }
-});
-
-test("import playground uses every voice, including deep and shared control sources", async () => {
-  const paths = [
-    "playground.strudel",
-    "playground/rhythm.strudel",
-    "playground/kick.strudel",
-    "playground/hats.strudel",
-    "playground/bass.strudel",
-    "playground/lead.strudel",
-    "playground/tone.strudel",
-  ];
-  const sources = Object.fromEntries(
+async function example(id: string): Promise<Record<string, string>> {
+  const directory = `../examples/${id}`;
+  const files = (await readdir(directory, { recursive: true }))
+    .map((path) => path.replaceAll("\\", "/"))
+    .filter((path) => /\.(strudel|js)$/.test(path));
+  return Object.fromEntries(
     await Promise.all(
-      paths.map(async (path) => [
-        path,
-        await readFile(`../examples/controls-playground/${path}`, "utf8"),
-      ]),
+      files.map(
+        async (path) =>
+          [path, await readFile(`${directory}/${path}`, "utf8")] as const,
+      ),
     ),
   );
+}
+
+test("every example compiles, has valid controls, and produces bounded finite events", async () => {
   await core.evalScope({ setcpm: () => {} });
-  const pattern = await evaluate(sources, "playground.strudel");
-  const events = pattern.queryArc(0, 1);
+  const kinds = new Set<string>();
+  for (const entry of await readdir("../examples", { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const sources = await example(entry.name);
+    for (const [path, code] of Object.entries(sources)) {
+      const parsed = readControls(code);
+      assert(parsed.valid, `${entry.name}/${path}: invalid controls`);
+      assert.deepEqual(parsed.errors ?? [], [], `${entry.name}/${path}`);
+      for (const control of parsed.controls) kinds.add(control.kind);
+      if (!path.endsWith(".strudel")) continue;
+      const graph = await loadGraph(path, async (file) => sources[file]);
+      const pattern = await evaluate(graph.sources, path);
+      assert.equal(
+        typeof pattern?.queryArc,
+        "function",
+        `${entry.name}/${path}`,
+      );
+      const events = pattern.queryArc(0, 96);
+      assert(
+        events.length > 0 && events.length < 12000,
+        `${entry.name}/${path}: event count ${events.length}`,
+      );
+      for (const event of events) {
+        assert(Number.isFinite(Number(event.whole?.begin)));
+        for (const [key, value] of Object.entries(event.value)) {
+          if (typeof value === "number")
+            assert(Number.isFinite(value), `${path}: ${key}`);
+        }
+      }
+    }
+  }
+  assert.deepEqual([...kinds].sort(), [
+    "boolean",
+    "enum",
+    "multi-enum",
+    "number",
+    "slider",
+  ]);
+});
+
+test("Glass Nerve has a drumless contrast, a returning hook, and a complete 96-bar form", async () => {
+  const sources = await example("default");
+  const pattern = await evaluate(sources, "glass-nerve.strudel");
+  const sounds = (start: number, end: number) =>
+    pattern
+      .queryArc(start, end)
+      .map((event: { value: { s: string } }) => event.value.s);
+  assert(sounds(8, 24).includes("sbd"));
+  assert(!sounds(40, 56).includes("sbd"));
+  assert(sounds(64, 80).includes("sbd"));
+  const keys = (start: number) =>
+    pattern
+      .queryArc(start, start + 8)
+      .filter((event: { value: { orbit: number } }) => event.value.orbit === 1)
+      .map((event: { value: { note: string } }) => event.value.note);
+  assert.deepEqual(keys(0), keys(64));
+  assert.deepEqual(keys(0), keys(96));
+});
+
+test("Memory Console retains the melody and changes real serial FX order", async () => {
+  const sources = await example("control-room");
+  const path = "voices/memory.strudel";
   assert(
-    events.some(({ value }: { value: { s: string } }) => value.s === "white"),
-  );
-  assert(
-    events.some(
-      ({ value }: { value: { s: string; gain: number } }) =>
-        value.s === "sbd" && value.gain === 0.28,
+    sources[path].includes(
+      "<[~ eb4 g4 ~ bb4 ~ g4 ~] [~ eb4 ~ f4 g4 [~ c5] bb4 ~]>",
     ),
   );
-  const edit = changeControl(sources["playground/kick.strudel"], "kickGain", {
+  const set = (name: string, value: string | number | string[]) => {
+    const edit = changeControl(sources[path], name, { type: "set", value });
+    assert(edit);
+    sources[path] = editSource(sources[path], [edit]);
+  };
+  set("waveform", "sawtooth");
+  set("effects", ["crush", "lowpass"]);
+  const order = changeControl(sources[path], "effects", {
+    type: "reorder",
+    order: ["Crush", "Lowpass", "Echo", "Drive"],
+  });
+  assert(order);
+  sources[path] = editSource(sources[path], [order]);
+  const pattern = await evaluate(sources, "memory-console.strudel");
+  const voices = pattern
+    .queryArc(0, 2)
+    .filter((event: { value: { orbit: number } }) => event.value.orbit === 1);
+  assert(voices.length > 0);
+  for (const { value } of voices) {
+    assert.equal(value.s, "sawtooth");
+    assert.equal(value.FX[0].crush, 4);
+    assert.equal(value.FX[1].cutoff, 1800);
+  }
+  set("effects", []);
+  const dry = await evaluate(sources, "memory-console.strudel");
+  assert(
+    dry
+      .queryArc(0, 2)
+      .every((event: { value: { FX?: unknown } }) => !event.value.FX),
+  );
+});
+
+test("Signal Garden shares its instrument between named and namespace imports", async () => {
+  const sources = await example("signal-garden");
+  const path = "shared/prism.js";
+  const edit = changeControl(sources[path], "waveform", {
     type: "set",
-    value: 0,
+    value: "triangle",
   });
   assert(edit);
-  sources["playground/kick.strudel"] = editSource(
-    sources["playground/kick.strudel"],
-    [edit],
-  );
-  const updated = await evaluate(sources, "playground.strudel");
-  assert(
-    updated
-      .queryArc(0, 1)
-      .filter(({ value }: { value: { s: string } }) => value.s === "sbd")
-      .every(({ value }: { value: { gain: number } }) => value.gain === 0),
-  );
-  const toneEdit = changeControl(
-    sources["playground/tone.strudel"],
-    "waveform",
-    { type: "set", value: "sawtooth" },
-  );
-  assert(toneEdit);
-  sources["playground/tone.strudel"] = editSource(
-    sources["playground/tone.strudel"],
-    [toneEdit],
-  );
-  const timbre = await evaluate(sources, "playground.strudel");
-  const voices = timbre
-    .queryArc(0, 1)
-    .filter(
-      ({ value }: { value: { note?: string } }) =>
-        value.note && value.note !== "c1",
+  sources[path] = editSource(sources[path], [edit]);
+  const pattern = await evaluate(sources, "garden.strudel");
+  for (const orbit of [1, 2]) {
+    const notes = pattern
+      .queryArc(0, 12)
+      .filter(
+        (event: { value: { orbit: number } }) => event.value.orbit === orbit,
+      );
+    assert(notes.length > 0);
+    assert(
+      notes.every(
+        (event: { value: { s: string } }) => event.value.s === "triangle",
+      ),
     );
-  assert(voices.length > 0);
-  assert(
-    voices.every(
-      ({ value }: { value: { s: string } }) => value.s === "sawtooth",
-    ),
-  );
-  const lead = timbre
-    .queryArc(0, 1)
-    .filter(({ value }: { value: { FX?: unknown[] } }) => value.FX);
-  assert(lead.length > 0);
-  assert.deepEqual(lead[0].value.FX, [
-    { crush: 3 },
-    { cutoff: 900, resonance: 1.2 },
-  ]);
-  const reordered = changeControl(
-    sources["playground/lead.strudel"],
-    "effects",
-    { type: "reorder", order: ["Lowpass", "Crush", "Drive", "Echo"] },
-  );
-  assert(reordered);
-  sources["playground/lead.strudel"] = editSource(
-    sources["playground/lead.strudel"],
-    [reordered],
-  );
-  const orderedPattern = await evaluate(sources, "playground.strudel");
-  assert.deepEqual(
-    orderedPattern
-      .queryArc(0, 1)
-      .find(({ value }: { value: { FX?: unknown[] } }) => value.FX).value.FX,
-    [{ cutoff: 900, resonance: 1.2 }, { crush: 3 }],
-  );
-  const all = changeControl(sources["playground/lead.strudel"], "effects", {
-    type: "set",
-    value: ["lowpass", "crush", "drive", "echo"],
-  });
-  assert(all);
-  sources["playground/lead.strudel"] = editSource(
-    sources["playground/lead.strudel"],
-    [all],
-  );
-  const allPattern = await evaluate(sources, "playground.strudel");
-  assert.deepEqual(
-    allPattern
-      .queryArc(0, 1)
-      .find(({ value }: { value: { FX?: unknown[] } }) => value.FX).value.FX,
-    [
-      { cutoff: 900, resonance: 1.2 },
-      { crush: 3 },
-      { distort: 2, distortvol: 0.5 },
-      { delay: 0.45, delaytime: 0.16, delayfeedback: 0.35 },
-    ],
-  );
-  const dryEdit = changeControl(sources["playground/lead.strudel"], "effects", {
-    type: "set",
-    value: [],
-  });
-  assert(dryEdit);
-  sources["playground/lead.strudel"] = editSource(
-    sources["playground/lead.strudel"],
-    [dryEdit],
-  );
-  const dry = await evaluate(sources, "playground.strudel");
-  assert(
-    dry
-      .queryArc(0, 1)
-      .some(({ value }: { value: { note?: string } }) => value.note === "c4"),
-  );
-  assert(
-    dry
-      .queryArc(0, 1)
-      .every(({ value }: { value: { FX?: unknown[] } }) => !value.FX),
-  );
-  const bank = changeControl(sources["playground/rhythm.strudel"], "drumBank", {
-    type: "set",
-    value: "tr909",
-  });
-  assert(bank);
-  sources["playground/rhythm.strudel"] = editSource(
-    sources["playground/rhythm.strudel"],
-    [bank],
-  );
-  const sampled = await evaluate(sources, "playground.strudel");
-  const drums = sampled
-    .queryArc(0, 1)
-    .filter(({ value }: { value: { bank?: string } }) => value.bank);
-  assert(drums.length > 0);
-  assert(
-    drums.every(
-      ({ value }: { value: { bank: string; s: string } }) =>
-        value.bank === "tr909" && ["bd", "hh"].includes(value.s),
-    ),
-  );
+  }
 });

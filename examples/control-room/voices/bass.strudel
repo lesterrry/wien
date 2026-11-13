@@ -1,0 +1,7 @@
+// Bounded step knob and resettable switch, with a dry, offbeat bass.
+// @default 0.23
+const level = 0.23 // @knob step=0.01 min=0 max=0.4
+const enabled = true // @default true
+const bass = {level, enabled}
+export default note("<[~ c2 ~ g1 ~ bb1 ~ g1] [~ ab1 ~ eb2 ~ g1 ~ bb1]>")
+  .s("triangle").decay(0.16).sustain(0).lpf(550).gain(enabled ? level : 0)

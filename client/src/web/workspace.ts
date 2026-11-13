@@ -51,6 +51,7 @@ export const workspace: WorkspaceApi = {
   accountLogout: () => account.logout(),
   accountChangePassword: (request) => account.changePassword(request),
   current: () => projects.current(),
+  onProjectChanged: (callback) => projects.onChanged(callback),
   open: () => choose(false),
   examples: async () => [...exampleNames],
   create: (example) => choose(true, example),

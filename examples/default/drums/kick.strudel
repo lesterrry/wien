@@ -1,0 +1,9 @@
+// Four bars: a recognisable spine with one displaced pickup.
+// @default 0.42
+const punch = 0.42 // @knob step=0.01 min=0 max=0.65
+// @default 0.16
+const tail = 0.16 // @slider 0.06..0.28
+const kick = {punch, tail}
+export default s("<[sbd ~ ~ ~ ~ ~ sbd ~ ~ ~ sbd ~ ~ ~ ~ ~] [sbd ~ ~ ~ ~ ~ ~ sbd ~ ~ sbd ~ ~ ~ ~ ~] [sbd ~ ~ ~ ~ ~ sbd ~ ~ ~ ~ ~ sbd ~ ~ ~] [sbd ~ ~ sbd ~ ~ ~ ~ ~ ~ sbd ~ ~ ~ ~ sbd]>")
+  .freq(49).pdecay(0.055).attack(0.001).decay(tail).sustain(0).release(0.025)
+  .lpf(1800).gain(punch).orbit(0)

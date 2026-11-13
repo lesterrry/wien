@@ -4,6 +4,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { chromium, _electron as electron, expect } from "@playwright/test";
+import { seedBrowserWorkspace } from "./fixtures/workspace.mjs";
 
 const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "wien-menu-"));
 const output = path.resolve("out-web");
@@ -23,7 +24,7 @@ const server = http.createServer(async (req, res) => {
     res.setHeader(
       "Content-Type",
       { ".html": "text/html", ".js": "text/javascript", ".css": "text/css" }[
-      path.extname(file)
+        path.extname(file)
       ] ?? "application/octet-stream",
     );
     res.end(await fs.readFile(file));
@@ -55,6 +56,7 @@ try {
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
     await page.goto(`http://127.0.0.1:${server.address().port}`);
+    await seedBrowserWorkspace(page);
     const editor = page.locator(
       '[data-active="true"] [aria-label="Strudel code editor"][contenteditable="true"]',
     );
@@ -85,9 +87,7 @@ try {
       .getByRole("navigation", { name: "Application menu" })
       .getByRole("button", { name: "Edit", exact: true })
       .click();
-    await page
-      .getByRole("menuitem", { name: "Select All", exact: true })
-      .click();
+    await page.getByRole("menuitem", { name: /^Select All/ }).click();
     await page.keyboard.insertText(
       "$: note('c3').s('sine')\n$: note('e3').s('sine')",
     );
@@ -101,11 +101,15 @@ try {
     await editor.press(`${modifier}+Enter`);
     await expect(page.getByRole("button", { name: /^Update/ })).toBeVisible();
     await editor.press(`${modifier}+.`);
-    await expect(page.getByRole("button", { name: /^Play/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Play\b/ })).toBeVisible();
     await editor.press(`${modifier}+,`);
-    await expect(page.getByLabel("Ask Assist", { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("textbox", { name: "Ask Assist", exact: true }),
+    ).toBeVisible();
     await editor.press(`${modifier}+,`);
-    await expect(page.getByLabel("Ask Assist", { exact: true })).toHaveCount(0);
+    await expect(
+      page.getByRole("textbox", { name: "Ask Assist", exact: true }),
+    ).toHaveCount(0);
     assert.deepEqual(errors, []);
     console.log(
       `Web menu and ${modifier} shortcuts passed (${platform} simulated in Chromium).`,
@@ -158,12 +162,12 @@ try {
   await page.keyboard.insertText("note('c3').s('sine')");
   if (process.platform === "darwin") {
     await editor.press("Control+Enter");
-    await expect(page.getByRole("button", { name: /^Play/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Play\b/ })).toBeVisible();
   }
   await editor.press(`${modifier}+Enter`);
   await expect(page.getByRole("button", { name: /^Update/ })).toBeVisible();
   await editor.press(`${modifier}+.`);
-  await expect(page.getByRole("button", { name: /^Play/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Play\b/ })).toBeVisible();
   console.log("Electron native menus, modal guards, and shortcuts passed.");
 } finally {
   await app?.close();

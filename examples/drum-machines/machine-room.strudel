@@ -1,0 +1,8 @@
+// MACHINE ROOM · default Synth is offline; other banks download on first use.
+import drums from './parts/drums.strudel'
+import acid from './parts/acid.strudel'
+// @default 126
+const bpm = 126 // @knob step=1 min=90 max=160
+const enabled = true // @default true
+setcpm(bpm / 4)
+enabled ? stack(drums, acid) : silence

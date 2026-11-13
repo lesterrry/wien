@@ -1,8 +1,0 @@
-// Synthesized noise hats; no sample downloads needed.
-const hatGain = 0.045
-const brightness = 7000 // @slider 1500..12000
-const enabled = true
-
-export default s("[~ white]*4")
-  .hpf(brightness).decay(0.035).sustain(0).release(0.015)
-  .gain(enabled ? Math.max(0, hatGain) : 0)

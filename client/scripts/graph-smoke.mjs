@@ -5,13 +5,29 @@ import path from "node:path";
 import { _electron as electron, expect } from "@playwright/test";
 
 const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "wien-graph-"));
-const environment = { ...process.env, WIEN_USER_DATA: temporary };
+const project = path.join(temporary, "project");
+for (const [file, source] of Object.entries({
+  "first-light.strudel":
+    "import glass from './instruments/glass.strudel'; glass",
+  "instruments/glass.strudel": "export default note('c4').s('sine').gain(0.1)",
+  "sketches/low-tide.strudel": "note('c3')",
+  "sketches/soft-steps.strudel": "note('e3')",
+  "controls-demo.strudel": "note('g3')",
+})) {
+  await fs.mkdir(path.dirname(path.join(project, file)), { recursive: true });
+  await fs.writeFile(path.join(project, file), source);
+}
+const environment = {
+  ...process.env,
+  WIEN_USER_DATA: temporary,
+  WIEN_PROJECT: project,
+};
 delete environment.ELECTRON_RUN_AS_NODE;
 const mod = process.platform === "darwin" ? "Meta" : "Control";
 let app;
 try {
   app = await electron.launch({
-    args: ["--mute-audio", "out/main/index.js"],
+    args: ["out/main/index.js", "--mute-audio"],
     env: environment,
   });
   const page = await app.firstWindow();
@@ -28,7 +44,6 @@ try {
     rim(id).evaluate(
       (element) => getComputedStyle(element, "::before").animationPlayState,
     );
-  const project = path.join(temporary, "projects/First session");
   await code.waitFor();
   await page
     .getByRole("button", { name: "first-light.strudel", exact: true })
@@ -132,6 +147,44 @@ try {
     graph
       .locator(".react-flow__node")
       .evaluateAll((nodes) => nodes.map((node) => node.style.transform));
+  // Fit adjusts only the camera; Reset restores manually moved nodes as well.
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await graph.getByRole("button", { name: "Fit all snippets" }).click();
+  await expect(graph.locator(".react-flow__viewport")).toHaveAttribute(
+    "style",
+    /scale\(1\)/,
+  );
+  const originalPositions = await positions();
+  const originalViewport = await graph
+    .locator(".react-flow__viewport")
+    .getAttribute("style");
+  const dragged = node("first-light.strudel");
+  const box = await dragged.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(
+    box.x + box.width / 2 + 110,
+    box.y + box.height / 2 + 80,
+    { steps: 10 },
+  );
+  await page.mouse.up();
+  const movedPositions = await positions();
+  assert.notDeepEqual(movedPositions, originalPositions);
+  await graph.getByRole("button", { name: "Fit all snippets" }).click();
+  assert.deepEqual(await positions(), movedPositions);
+  await graph.getByRole("button", { name: "Reset graph layout" }).click();
+  await expect.poll(positions).toEqual(originalPositions);
+  await expect(graph.locator(".react-flow__viewport")).toHaveAttribute(
+    "style",
+    originalViewport,
+  );
+  await expect(
+    graph.getByRole("button", { name: "Refresh graph" }),
+  ).toHaveCount(0);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  const resetViewport = await graph
+    .locator(".react-flow__viewport")
+    .getAttribute("style");
   const beforeStop = await positions();
   await page.keyboard.press(`${mod}+.`);
   await expect.poll(() => animation("first-light.strudel")).toBe("paused");
@@ -139,7 +192,7 @@ try {
   assert.deepEqual(await positions(), beforeStop);
   assert.equal(
     await graph.locator(".react-flow__viewport").getAttribute("style"),
-    viewport,
+    resetViewport,
   );
   await page
     .getByRole("tab", { name: "first-light.strudel", exact: true })
@@ -195,7 +248,6 @@ try {
     'globalThis.__graphExecuted = true; throw new Error("Must not execute")',
   );
   await fs.writeFile(path.join(project, "broken.js"), 'import "./missing.js";');
-  await graph.getByRole("button", { name: "Refresh graph" }).click();
   await expect(graph.locator(".react-flow__node")).toHaveCount(7);
   await expect(
     node("broken.js").getByRole("img", { name: "Dependency issue" }),
@@ -204,8 +256,16 @@ try {
   await node("broken.js").click();
   await expect(graph).toContainText("Missing snippet: ./missing.js");
   assert.equal(await page.evaluate(() => window.__graphExecuted), undefined);
+  // Editing an existing unopened file also updates its dependencies automatically.
+  await fs.writeFile(
+    path.join(project, "broken.js"),
+    'import "./instruments/bell.strudel";',
+  );
+  await expect(
+    node("broken.js").getByRole("img", { name: "Dependency issue" }),
+  ).toHaveCount(0);
+  await expect(graph.locator(".react-flow__edge")).toHaveCount(2);
   await fs.unlink(path.join(project, "unused.js"));
-  await graph.getByRole("button", { name: "Refresh graph" }).click();
   await expect(graph.locator(".react-flow__node")).toHaveCount(6);
 
   // Cmd+W closes the graph only, keeping snippet tabs and their playback intact.
@@ -220,7 +280,7 @@ try {
   await page.keyboard.press(`${mod}+Shift+.`);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: graph tab, all nodes and imports, isolated files, fit/zoom/focus, viewport persistence, node navigation, rename, refresh, parse-only errors, background playback, live playing borders and reduced motion.",
+    "PASS: graph tab, all nodes and imports, isolated files, fit/zoom/focus, layout reset after dragging, viewport persistence, node navigation, rename, reactive sources, parse-only errors, background playback, live playing borders and reduced motion.",
   );
 } finally {
   if (app) {

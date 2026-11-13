@@ -193,17 +193,14 @@ async function checkExamples(page, desktop) {
   assert.equal(copy.name, "default-copy");
   assert(!roots.has(copy.root));
   assert.equal(
-    await page.evaluate(() => window.workspace.read("controls-demo.strudel")),
+    await page.evaluate(() => window.workspace.read("glass-nerve.strudel")),
     await fs.readFile(
-      path.join(registry, "default/controls-demo.strudel"),
+      path.join(registry, "default/glass-nerve.strudel"),
       "utf8",
     ),
   );
   const saved = desktop
-    ? await fs.readFile(
-        path.join(initial.root, "controls-demo.strudel"),
-        "utf8",
-      )
+    ? await fs.readFile(path.join(initial.root, "glass-nerve.strudel"), "utf8")
     : await page.evaluate(
         (id) =>
           new Promise((resolve, reject) => {
@@ -216,7 +213,7 @@ async function checkExamples(page, desktop) {
                 .objectStore("projects")
                 .get(id);
               project.onsuccess = () => {
-                resolve(project.result.files["controls-demo.strudel"]);
+                resolve(project.result.files["glass-nerve.strudel"]);
                 db.close();
               };
               project.onerror = () => {

@@ -1,0 +1,18 @@
+// Deterministic clockwork. The last bar has a burst, followed by a whole rest beat.
+// @default 0.055
+const ticks = 0.055 // @slider 0..0.12
+// @default 0.12
+const shuffle = 0.12 // @slider 0..0.4
+const detail = {ticks, shuffle}
+export const hats = s("<[white ~ white white ~ white white ~] [white ~ white ~ white white ~ white]>")
+  .hpf(7600).decay(0.022).sustain(0).release(0.01)
+  .gain(ticks).pan("<-0.35 0.25>").swingBy(shuffle, 4)
+const shard = pattern => pattern.s("sine").fm(5).fmh(3.5)
+  .attack(0.001).decay(0.035).sustain(0).release(0.012).hpf(1800)
+  .gain(ticks * 0.75).pan("<0.6 -0.6>").orbit(4)
+export const sparks = shard(cat(
+  note("~ ~ c#6 ~ ~ ~ ~ ~"), note("~ ~ ~ ~ g#5 ~ ~ ~"),
+  note("~ ~ ~ ~ ~ ~ e6 ~"), note("~ [c#6 g#5 c#6] ~ ~")
+))
+export const splinter = shard(note("~ ~ [c#6 g#5 e6 g#5] ~"))
+export default stack(hats, sparks)

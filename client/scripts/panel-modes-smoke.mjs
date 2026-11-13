@@ -35,7 +35,7 @@ let page;
 const errors = [];
 try {
   app = await electron.launch({
-    args: ["--mute-audio", "out/main/index.js"],
+    args: ["out/main/index.js", "--mute-audio"],
     env: environment,
   });
   page = await app.firstWindow();
@@ -199,12 +199,11 @@ try {
   await expect(
     panel.getByRole("alert").filter({ hasText: "broken" }),
   ).toHaveCount(1);
-  // Refresh reads the same live sources in both modes, never a second cache.
+  // External changes update the same live sources in both panel modes.
   await fs.writeFile(
     path.join(root, "lib/shared.strudel"),
     shared.replace("0.2", "0.6"),
   );
-  await page.getByRole("button", { name: "Refresh files" }).click();
   await expect(panel.getByLabel("level value", { exact: true })).toHaveText(
     "0.6",
   );
@@ -223,12 +222,10 @@ try {
     /level = 'changed'/,
   );
 
-  await page.getByRole("button", { name: "Refresh files" }).click();
   await expect(
     panel.getByRole("spinbutton", { name: "level knob" }),
   ).toHaveCount(0);
   await fs.writeFile(path.join(root, "lib/shared.strudel"), shared);
-  await page.getByRole("button", { name: "Refresh files" }).click();
   await expect(
     panel.getByRole("spinbutton", { name: "level knob" }),
   ).toHaveCount(1);
@@ -285,7 +282,6 @@ try {
     path.join(root, "lib/missing.strudel"),
     "const recovered = 0.1; export default note('c3')",
   );
-  await page.getByRole("button", { name: "Refresh files" }).click();
   await expect(panel.getByRole("alert")).toHaveCount(0);
   await expect(
     panel.getByRole("spinbutton", { name: "recovered knob" }),

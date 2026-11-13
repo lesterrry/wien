@@ -39,6 +39,15 @@ declare module "@strudel/codemirror" {
 
 declare module "@strudel/core" {
   export function evalScope(...modules: unknown[]): Promise<unknown>;
+  export function repl(options: {
+    getTime: () => number;
+    defaultOutput: () => void;
+    transpiler: () => { output: string };
+    onEvalError: (error: Error) => never;
+  }): {
+    evaluate(code: string, autostart: boolean): Promise<unknown>;
+    stop(): void;
+  };
 }
 declare module "@strudel/mini";
 declare module "@strudel/tonal";

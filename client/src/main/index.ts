@@ -17,6 +17,7 @@ import { backendConfig } from "./config";
 import { installMenu, updateMenuState } from "./menu";
 import { ProjectFs } from "./project-fs";
 import { ProjectVersions } from "./project-versions";
+import { watchProject } from "./project-watcher";
 
 if (!app.isPackaged && process.env.WIEN_USER_DATA) {
   app.setPath("userData", process.env.WIEN_USER_DATA);
@@ -24,6 +25,7 @@ if (!app.isPackaged && process.env.WIEN_USER_DATA) {
 
 let window: BrowserWindow | null = null;
 let project: ProjectFs;
+let stopWatchingProject: (() => void) | undefined;
 let versions: ProjectVersions;
 let versionUnavailable: string | null = null;
 let closing = false;
@@ -57,6 +59,12 @@ async function selectProject(root: string) {
   const info = await next.project();
   await fs.mkdir(app.getPath("userData"), { recursive: true });
   await fs.writeFile(stateFile(), JSON.stringify({ root: realRoot }));
+  const stopWatching = watchProject(realRoot, () => {
+    if (project === next && !window?.webContents.isDestroyed())
+      window?.webContents.send("project:changed", realRoot);
+  });
+  stopWatchingProject?.();
+  stopWatchingProject = stopWatching;
   project = next;
   versions = nextVersions;
   versionUnavailable = recoveryError;
@@ -390,6 +398,8 @@ void app
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
+
+app.on("will-quit", () => stopWatchingProject?.());
 
 app.on("before-quit", (event) => {
   if (!window || closing || window.webContents.isDestroyed()) return;

@@ -88,6 +88,20 @@ export class BrowserProjects {
   private database: Promise<IDBDatabase>;
   private active: string | null = null;
   private queue: Promise<unknown> = Promise.resolve();
+  private changes = new EventTarget();
+  onChanged(callback: (root: string) => void): () => void {
+    const listener = (event: Event) =>
+      callback((event as CustomEvent<string>).detail);
+    const channel = new BroadcastChannel("wien-project-changes");
+    channel.onmessage = (event: MessageEvent<unknown>) => {
+      if (typeof event.data === "string") callback(event.data);
+    };
+    this.changes.addEventListener("change", listener);
+    return () => {
+      this.changes.removeEventListener("change", listener);
+      channel.close();
+    };
+  }
   constructor(factory: IDBFactory = indexedDB) {
     this.database = new Promise((resolve, reject) => {
       const request = factory.open("wien-projects", 1);
@@ -127,7 +141,15 @@ export class BrowserProjects {
           tx.abort();
         } else store.put({ ...project, revision: (expected ?? -1) + 1 });
       };
-      tx.oncomplete = () => resolve();
+      tx.oncomplete = () => {
+        resolve();
+        this.changes.dispatchEvent(
+          new CustomEvent("change", { detail: project.id }),
+        );
+        const channel = new BroadcastChannel("wien-project-changes");
+        channel.postMessage(project.id);
+        channel.close();
+      };
       tx.onabort = () =>
         reject(
           new Error(

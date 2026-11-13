@@ -4,6 +4,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { _electron as electron, expect } from "@playwright/test";
+import { seedWorkspace } from "./fixtures/workspace.mjs";
 
 const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "wien-assistant-"));
 const calls = [];
@@ -45,6 +46,7 @@ const environment = {
 };
 delete environment.ELECTRON_RUN_AS_NODE;
 const mod = process.platform === "darwin" ? "Meta" : "Control";
+await seedWorkspace(temporary);
 let app;
 try {
   app = await electron.launch({

@@ -1,0 +1,9 @@
+// Save a Version before editing (desktop), or export .wien.json (web).
+// Change this phrase, press Update; then undo. Invalid code leaves old audio running.
+const bpm = 102 // @ignore
+// @default 0.14
+const level = 0.14 // @knob step=0.01 min=0 max=0.3
+setcpm(bpm / 4)
+export default note("<[~ g4 e5 ~ b4 ~ g4 ~] [~ a4 e5 ~ g4 ~ e4 ~]>")
+  .s("sine").fm(1.2).fmh(2).decay(0.18).sustain(0)
+  .delay(0.18).delaytime(0.29).delayfeedback(0.25).orbit(1).gain(level)

@@ -1,0 +1,13 @@
+// MEMORY CONSOLE · the original controls-demo melody in a new arrangement.
+// Pin this master, expand Controls, then change the voices without leaving the song.
+import melody from './voices/memory.strudel'
+import bass from './voices/bass.strudel'
+import rhythm from './voices/rhythm.strudel'
+// @default 112
+const tempo = 112 // @knob step=1 min=80 max=150
+// @default 0.75
+const volume = 0.75 // @slider vertical 0..1
+const enabled = true // @default true
+const console = {tempo, volume, enabled}
+setcpm(tempo / 4)
+enabled ? stack(melody, bass, rhythm).postgain(volume) : silence

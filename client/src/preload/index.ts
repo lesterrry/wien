@@ -31,6 +31,12 @@ const api: WorkspaceApi = {
   saveControlPreferences: (root, preferences) =>
     ipcRenderer.invoke("project:controls:save", root, preferences),
   current: () => ipcRenderer.invoke("project:current"),
+  onProjectChanged: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, root: string) =>
+      callback(root);
+    ipcRenderer.on("project:changed", listener);
+    return () => ipcRenderer.removeListener("project:changed", listener);
+  },
   open: () => ipcRenderer.invoke("project:open"),
   examples: () => ipcRenderer.invoke("project:examples"),
   create: (example) => ipcRenderer.invoke("project:create", example),

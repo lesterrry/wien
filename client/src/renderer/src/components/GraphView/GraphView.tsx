@@ -20,7 +20,7 @@ import {
   Loader2,
   Network,
   Package,
-  RefreshCw,
+  RotateCcw,
   Scan,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -89,6 +89,7 @@ const duration = () =>
 
 export function GraphView({
   project,
+  sourceRevision,
   active,
   focus,
   drafts,
@@ -96,6 +97,7 @@ export function GraphView({
   onOpen,
 }: {
   project: Project;
+  sourceRevision: number;
   active: boolean;
   focus: { path: string | null; revision: number };
   drafts: Record<string, string>;
@@ -109,9 +111,9 @@ export function GraphView({
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [revision, setRevision] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const fitted = useRef(false);
+  const resetPending = useRef(false);
   const handledFocus = useRef(-1);
   const openRef = useRef(onOpen);
   openRef.current = onOpen;
@@ -124,9 +126,9 @@ export function GraphView({
     setLoading(true);
     setError(null);
     const load = async () => {
-      // Re-read the directory on entry/refresh, including files changed outside Wien.
+      // Re-read on entry and workspace changes, including external source edits.
       void filesKey;
-      void revision;
+      void sourceRevision;
       const current = await window.workspace.current();
       if (current.root !== project.root || cancelled) return;
       const paths = snippetPaths(current.entries);
@@ -164,7 +166,7 @@ export function GraphView({
     return () => {
       cancelled = true;
     };
-  }, [active, project.root, filesKey, draftsKey, revision]);
+  }, [active, project.root, filesKey, draftsKey, sourceRevision]);
 
   useEffect(() => {
     const positions = layoutGraph(model);
@@ -189,6 +191,27 @@ export function GraphView({
     setSelected(null);
     void flow?.fitView({ padding: 0.22, maxZoom: 1, duration: duration() });
   }, [flow]);
+
+  const resetLayout = () => {
+    const positions = layoutGraph(model);
+    resetPending.current = true;
+    setNodes((current) =>
+      current.map((node) => ({
+        ...node,
+        position: positions.get(node.id) ?? node.position,
+      })),
+    );
+  };
+
+  useEffect(() => {
+    if (!resetPending.current || !flow || !nodes.length) return;
+    // Fit after React Flow has received the restored node positions.
+    const frame = requestAnimationFrame(() => {
+      resetPending.current = false;
+      fitAll();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [nodes, flow, fitAll]);
 
   useEffect(() => {
     if (!active || loading || !flow || !nodes.length) return;
@@ -275,12 +298,12 @@ export function GraphView({
         <button
           type="button"
           className={styles.iconButton}
-          title="Refresh graph"
-          aria-label="Refresh graph"
-          onClick={() => setRevision((value) => value + 1)}
-          disabled={loading}
+          title="Reset graph layout"
+          aria-label="Reset graph layout"
+          onClick={resetLayout}
+          disabled={loading || !nodes.length}
         >
-          <RefreshCw size={16} />
+          <RotateCcw size={16} />
         </button>
       </header>
       <div className={styles.canvas}>

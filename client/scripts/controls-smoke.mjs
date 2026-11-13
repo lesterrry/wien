@@ -28,7 +28,7 @@ delete environment.ELECTRON_RUN_AS_NODE;
 let app;
 try {
   app = await electron.launch({
-    args: ["--mute-audio", "out/main/index.js"],
+    args: ["out/main/index.js", "--mute-audio"],
     env: environment,
   });
   const page = await app.firstWindow();
@@ -166,7 +166,6 @@ try {
     path.join(projectRoot, "shared.strudel"),
     "\nconst broken = 1 / 0;",
   );
-  await page.getByRole("button", { name: "Refresh files" }).click();
   await expect(
     panel.getByRole("alert").filter({ hasText: "broken" }),
   ).toHaveCount(1);

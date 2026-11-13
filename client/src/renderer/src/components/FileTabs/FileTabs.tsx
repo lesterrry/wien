@@ -125,13 +125,12 @@ export function FileTabs({
                     : "/"}
                 </span>
               )}
-              {tab.dirty && (
-                <span
-                  className={styles.unsavedDot}
-                  role="img"
-                  aria-label="Unsaved changes"
-                />
-              )}
+              <span
+                className={styles.unsavedDot}
+                role="img"
+                aria-label="Unsaved changes"
+                aria-hidden={!tab.dirty}
+              />
             </button>
             <button
               type="button"

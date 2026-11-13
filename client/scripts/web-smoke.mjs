@@ -4,6 +4,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
+import { seedBrowserWorkspace } from "./fixtures/workspace.mjs";
 
 const output = path.resolve("out-web");
 const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "wien-web-"));
@@ -129,6 +130,7 @@ try {
     console.error("Browser error:", error.message);
   });
   await page.goto(origin);
+  await seedBrowserWorkspace(page);
   await page.getByLabel("Strudel code editor", { exact: true }).waitFor();
   await expect(
     page.getByRole("button", { name: "Versions", exact: true }),
@@ -187,7 +189,7 @@ try {
       page.evaluate(() => window.workspace.read("first-light.strudel")),
     )
     .toBe(code);
-  await page.getByRole("button", { name: /^Play/ }).click();
+  await page.getByRole("button", { name: /^Play\b/ }).click();
   await page.getByRole("button", { name: /^Update/ }).waitFor();
   const peak = await page.evaluate(async () => {
     const meter = window.getAudioContext().createAnalyser();
@@ -219,6 +221,26 @@ try {
   const second = await context.newPage();
   await second.goto(origin);
   await second.getByLabel("Strudel code editor", { exact: true }).waitFor();
+  // File changes propagate between tabs without a refresh or navigation.
+  await page.evaluate(() =>
+    window.workspace.add("", "reactive.strudel", false),
+  );
+  await expect(
+    second.getByRole("button", { name: "reactive.strudel", exact: true }),
+  ).toBeVisible();
+  await page.evaluate(() =>
+    window.workspace.move("reactive.strudel", "renamed.strudel"),
+  );
+  await expect(
+    second.getByRole("button", { name: "reactive.strudel", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    second.getByRole("button", { name: "renamed.strudel", exact: true }),
+  ).toBeVisible();
+  await page.evaluate(() => window.workspace.trash("renamed.strudel"));
+  await expect(
+    second.getByRole("button", { name: "renamed.strudel", exact: true }),
+  ).toHaveCount(0);
   const stale = await second.evaluate(() =>
     window.workspace.read("first-light.strudel"),
   );
