@@ -39,6 +39,7 @@ import {
   primaryModifier,
   shortcutLabel,
 } from "../../../../shared/commands";
+import type { ControlCustomization } from "../../../../shared/control-customizations";
 import {
   type ControlGroup,
   type PanelPreferences,
@@ -50,8 +51,10 @@ import {
   type Control,
   type ControlChange,
   changeControl,
+  configureControl,
   ignoreControl,
   moveControl,
+  readControlCustomization,
   readControls,
 } from "../../../../shared/controls";
 import { type Edit, editSource, hasExports } from "../../../../shared/modules";
@@ -71,6 +74,7 @@ import {
 } from "../../hooks/useSnippetSessions";
 import { useAccount } from "../Account/Account";
 import { AppMenu } from "../AppMenu/AppMenu";
+import { ControlSettingsDialog } from "../ControlSettingsDialog/ControlSettingsDialog";
 import { ControlsPanel } from "../ControlsPanel/ControlsPanel";
 import { Dialog } from "../Dialog/Dialog";
 import { Explorer } from "../Explorer/Explorer";
@@ -202,6 +206,11 @@ export function App() {
     entry: Entry;
     x: number;
     y: number;
+  } | null>(null);
+  const [controlSettings, setControlSettings] = useState<{
+    path: string;
+    control: Control;
+    initial: ControlCustomization;
   } | null>(null);
   const [modal, setModal] = useState<Modal | null>(null);
   const [value, setValue] = useState("");
@@ -1152,6 +1161,67 @@ export function App() {
     });
   }
 
+  function openControlSettings(path: string, name: string) {
+    void run(async () => {
+      await controlQueue.current;
+      const open = sessionsRef.current.find(
+        (session) => session.document.path === path,
+      );
+      const source = open ? open.document.code : await api.read(path);
+      const { control, settings } = readControlCustomization(source, name);
+      setControlSettings({ path, control, initial: settings });
+    });
+  }
+
+  async function saveControlSettings(settings: ControlCustomization) {
+    if (!controlSettings || busyRef.current)
+      throw new Error("The workspace is busy. Try again.");
+    const {
+      path,
+      control: { name },
+      initial,
+    } = controlSettings;
+    busyRef.current = true;
+    setBusy(true);
+    controlWrites.current += 1;
+    const work = controlQueue.current.then(async () => {
+      const open = sessionsRef.current.find(
+        (session) => session.document.path === path,
+      );
+      const source = open ? open.document.code : await api.read(path);
+      const edit = configureControl(source, name, settings, initial);
+      if (open) {
+        if (edit) {
+          const editor = players.current.get(open.id);
+          if (!editor)
+            throw new Error("The source editor is not ready. Try again.");
+          editor.configureControl(name, settings, initial);
+        }
+        await flush();
+      } else if (edit)
+        await api.save({
+          path,
+          content: editSource(source, [edit]),
+          expected: source,
+        });
+      setControlErrors((current) => {
+        const next = { ...current };
+        delete next[JSON.stringify([path, name])];
+        return next;
+      });
+      if (edit) scheduleLiveUpdate(path);
+    });
+    controlQueue.current = work.catch(() => {});
+    try {
+      await work;
+    } finally {
+      controlWrites.current -= 1;
+      setTreeVersion((version) => version + 1);
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }
+
   function goToControl(path: string, name: string) {
     void run(async () => {
       await controlQueue.current;
@@ -2000,6 +2070,7 @@ export function App() {
           onChange={editPanelControl}
           onIgnore={(path, name) => editPanelControl(path, name)}
           onDefinition={goToControl}
+          onConfigure={openControlSettings}
           onMove={movePanelControl}
           onOpenController={toggleController}
           onReloadSource={(path) => {
@@ -2206,6 +2277,15 @@ export function App() {
         </div>
       )}
 
+      {controlSettings && (
+        <ControlSettingsDialog
+          control={controlSettings.control}
+          path={controlSettings.path}
+          initial={controlSettings.initial}
+          onSave={saveControlSettings}
+          onClose={() => setControlSettings(null)}
+        />
+      )}
       {modal && (
         <Dialog
           title={

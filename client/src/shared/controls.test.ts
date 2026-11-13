@@ -1,9 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  customizationsFor,
+  hasControlCustomizations,
+  initialCustomization,
+  sliderFields,
+} from "./control-customizations";
+import {
   changeControl,
+  configureControl,
   ignoreControl,
   moveControl,
+  readControlCustomization,
   readControls,
 } from "./controls";
 import { editSource } from "./modules";
@@ -161,20 +169,29 @@ const plain = 3;
   );
 });
 
-test("slider defaults to 0..1 and reserves its argument for a style name", () => {
-  for (const annotation of ["@slider", "@slider fire", "@slider warm-glow"]) {
+test("slider defaults to 0..1 and rejects unsupported tokens", () => {
+  for (const annotation of [
+    "@slider",
+    "@slider horizontal",
+    "@slider vertical",
+    "@slider default",
+  ]) {
     const result = readControls(`//${annotation}\nconst amount = 0.5;`);
     assert.equal(result.errors, undefined);
     const control = result.controls[0];
     assert.equal(control.kind, "slider");
-    if (control.kind === "slider") {
-      assert.equal(control.min, 0);
-      assert.equal(control.max, 1);
-      assert.equal(
-        control.style,
-        annotation.startsWith("@slider ") ? annotation.slice(8) : undefined,
-      );
-    }
+    if (control.kind === "slider")
+      assert.deepEqual([control.min, control.max], [0, 1]);
+  }
+  for (const token of ["fire", "warm-glow", "style=fire", "random-option"]) {
+    const result = readControls(
+      `// @slider ${token}\nconst amount = 0.5;\nconst valid = true;`,
+    );
+    assert.match(result.errors?.[0] ?? "", /Unknown slider setting/);
+    assert.deepEqual(
+      result.controls.map((control) => control.name),
+      ["valid"],
+    );
   }
 });
 
@@ -185,8 +202,7 @@ test("annotation groups honor ignore in any order, comma bindings, CRLF and scop
       [],
     );
   }
-  const code =
-    "export const a = 1,\r\n//@slider fire vertical\r\nb = 0.5, c = 2;";
+  const code = "export const a = 1,\r\n//@slider vertical\r\nb = 0.5, c = 2;";
   const ignored = ignoreControl(code, "b");
   assert(ignored);
   assert.deepEqual(
@@ -270,14 +286,7 @@ test("slider clamping supports fractional, tiny and negative ranges", () => {
 });
 
 test("inline sliders accept every argument order without leaking to the next binding", () => {
-  for (const args of [
-    "100..8000 fire vertical",
-    "100..8000 vertical fire",
-    "fire 100..8000 vertical",
-    "fire vertical 100..8000",
-    "vertical fire 100..8000",
-    "vertical 100..8000 fire",
-  ]) {
+  for (const args of ["100..8000 vertical", "vertical 100..8000"]) {
     for (const code of [
       `const cutoff = 1200; // @slider ${args}\nconst next = 3`,
       `// @slider ${args}\nconst cutoff = 1200;\nconst next = 3`,
@@ -288,8 +297,8 @@ test("inline sliders accept every argument order without leaking to the next bin
       assert.equal(control.kind, "slider");
       if (control.kind === "slider")
         assert.deepEqual(
-          [control.min, control.max, control.style, control.presentation],
-          [100, 8000, "fire", "vertical"],
+          [control.min, control.max, control.presentation],
+          [100, 8000, "vertical"],
         );
       assert.equal(result.controls[1].kind, "number");
       const edit = changeControl(code, "cutoff", { type: "set", value: 2000 });
@@ -304,7 +313,7 @@ test("inline sliders accept every argument order without leaking to the next bin
     }
   }
   const code =
-    "const a = 0.5, // @slider\nb = 3;\r\nconst c = 0.2; // @slider fire\r\nconst d = 4";
+    "const a = 0.5, // @slider\nb = 3;\r\nconst c = 0.2; // @slider\r\nconst d = 4";
   assert.deepEqual(
     readControls(code).controls.map((c) => [c.name, c.kind]),
     [
@@ -331,9 +340,7 @@ test("all names use the same default range, and explicit ranges override it", ()
     if (next.kind === "slider")
       assert.deepEqual([next.min, next.max], [min, max]);
   }
-  const result = readControls(
-    "const cutoff = 0; // @slider default fire -1..1",
-  );
+  const result = readControls("const cutoff = 0; // @slider default -1..1");
   assert.equal(result.errors, undefined);
   assert.deepEqual(
     result.controls.map(
@@ -961,5 +968,287 @@ test("reordering group members edits object references, preserves comments and r
   assert.deepEqual(
     readControls(hidden).controls.map((control) => control.name),
     ["b", "c", "d"],
+  );
+});
+
+test("customization edits round trip slider metadata without changing expressions or prose", () => {
+  const source =
+    "// voice\r\n  export const cutoff = (600 * 2); // brightness\r\nnote('c3').lpf(cutoff)";
+  const before = readControlCustomization(source, "cutoff");
+  const settings = initialCustomization(before.control, [], "slider");
+  settings.values = {
+    presentation: "vertical",
+    range: ["100.0", "8000"],
+  };
+  const edit = configureControl(source, "cutoff", settings, before.settings);
+  assert(edit);
+  const changed = editSource(source, [edit]);
+  assert(changed.includes("export const cutoff = (600 * 2); // brightness"));
+  assert(changed.includes("// voice\r\n"));
+  assert(!/(?<!\r)\n/.test(changed));
+  assert.deepEqual(
+    readControlCustomization(changed, "cutoff").settings,
+    settings,
+  );
+  const control = readControls(changed).controls[0];
+  assert.equal(control.kind, "slider");
+  assert(control.kind === "slider");
+  assert.equal(control.integer, false);
+  assert.equal(configureControl(changed, "cutoff", settings), undefined);
+  const plain = configureControl(changed, "cutoff", {
+    kind: "number",
+    values: {},
+  });
+  assert(plain);
+  const restored = editSource(changed, [plain]);
+  assert(!restored.includes("@slider"));
+  assert(restored.includes("export const cutoff = (600 * 2); // brightness"));
+  assert.equal(readControls(restored).controls[0].kind, "number");
+});
+
+test("customizations replace leading and trailing annotations without accumulating markers", () => {
+  for (const source of [
+    "// @slider default 0.0..2\nconst gain = 1; // voice",
+    "const gain = 1; // @slider 0.0..2\n// voice",
+  ]) {
+    const { control, settings } = readControlCustomization(source, "gain");
+    assert.equal(settings.values.range[0], "0.0");
+    const next = {
+      ...settings,
+      values: { ...settings.values, presentation: "vertical" },
+    };
+    const edit = configureControl(source, "gain", next);
+    assert(edit);
+    const code = editSource(source, [edit]);
+    assert.equal((code.match(/@slider/g) ?? []).length, 1);
+    assert.equal(code.split("\n").length, source.split("\n").length);
+    assert(code.includes("// voice"));
+    assert.deepEqual(readControlCustomization(code, "gain").settings, next);
+    assert.equal(readControls(code).controls[0].value, control.value);
+  }
+});
+
+test("editing each comma binding preserves shared settings and neighboring declarations", () => {
+  for (const prefix of ["", "// @slider vertical 0..4\n"]) {
+    for (const name of ["a", "b", "c"]) {
+      const source = `${prefix}export const a = 1, /* neighbor */ b = 2, c = 3;\nconst next = true;`;
+      const original = readControls(source).controls;
+      for (const kind of ["number", "slider"] as const) {
+        const current = readControlCustomization(source, name);
+        const settings = initialCustomization(current.control, [], kind);
+        if (kind === "slider")
+          settings.values = {
+            presentation: "horizontal",
+            range: ["0.0", "10"],
+          };
+        const edit = configureControl(source, name, settings);
+        const code = edit ? editSource(source, [edit]) : source;
+        assert.equal(readControls(code).valid, true);
+        assert.equal(readControls(code).errors, undefined);
+        assert(code.includes("/* neighbor */"));
+        assert(code.includes("const next = true;"));
+        for (const sibling of original.filter(
+          (control) => control.name !== name,
+        )) {
+          const updated = readControlCustomization(code, sibling.name);
+          assert.equal(updated.control.value, sibling.value);
+          assert.deepEqual(
+            updated.settings,
+            readControlCustomization(source, sibling.name).settings,
+          );
+        }
+        assert.deepEqual(
+          readControlCustomization(code, name).settings,
+          settings,
+        );
+      }
+    }
+  }
+});
+
+test("binding-local annotations are not applied to comma siblings", () => {
+  for (const source of [
+    "const a = 0.5, // @slider vertical\nb = 2, c = 3;",
+    "export const a = 2,\n// @slider vertical\nb = 0.5, c = 3;",
+    "const a = 2, b = 3, c = 0.5; // @slider vertical",
+  ]) {
+    const before = readControls(source).controls;
+    const target = before.find((control) => control.kind === "slider");
+    assert(target);
+    const edit = configureControl(source, target.name, {
+      kind: "number",
+      values: {},
+    });
+    assert(edit);
+    const after = readControls(editSource(source, [edit]));
+    assert.equal(after.errors, undefined);
+    assert.deepEqual(
+      after.controls.map((control) => [
+        control.name,
+        control.kind,
+        control.value,
+      ]),
+      before.map((control) => [control.name, "number", control.value]),
+    );
+  }
+});
+
+test("settings reject invalid ranges, unsupported fields and stale source metadata", () => {
+  const source = "const gain = 0.5; // @slider 0..1";
+  const { settings } = readControlCustomization(source, "gain");
+  for (const range of [
+    ["1", "0"],
+    ["NaN", "1"],
+    ["0", "Infinity"],
+    ["", "1"],
+  ]) {
+    assert.throws(() =>
+      configureControl(source, "gain", {
+        ...settings,
+        values: { ...settings.values, range },
+      }),
+    );
+  }
+  assert.throws(() =>
+    configureControl(source, "gain", {
+      ...settings,
+      values: {
+        ...settings.values,
+        presentation: "vertical\nconst injected = 1",
+      },
+    }),
+  );
+  assert.throws(() =>
+    configureControl(source, "gain", {
+      ...settings,
+      values: { ...settings.values, bogus: "x" },
+    }),
+  );
+  assert.throws(() => configureControl("const flag = true", "flag", settings));
+  const next = {
+    ...settings,
+    values: { ...settings.values, presentation: "vertical" },
+  };
+  assert.throws(
+    () =>
+      configureControl(source.replace("0..1", "-1..1"), "gain", next, settings),
+    /changed in the source/,
+  );
+  assert.throws(
+    () => configureControl("const gain =", "gain", next),
+    /changed/,
+  );
+  assert.throws(
+    () => configureControl(source.replace("0.5", "2"), "gain", next),
+    /changed/,
+  );
+});
+
+test("multiple choice settings reorder selected and unselected keys and retain quoted names", () => {
+  const source =
+    'const FX = Object.freeze({ Echo: "echo", "Soft chorus": "chorus", Crush: "crush" });\nlet layers = [FX.Echo, FX.Crush]; // voice';
+  const { settings } = readControlCustomization(source, "layers");
+  settings.values.order = ["Crush", "Soft chorus", "Echo"];
+  const edit = configureControl(source, "layers", settings);
+  assert(edit);
+  const code = editSource(source, [edit]);
+  assert(code.includes('order=Crush,"Soft chorus",Echo'));
+  assert(code.includes("[FX.Crush, FX.Echo]; // voice"));
+  assert.deepEqual(readControlCustomization(code, "layers").settings, settings);
+  assert.deepEqual(readControls(code).controls[0].value, ["crush", "echo"]);
+  assert.throws(() =>
+    configureControl(source, "layers", {
+      ...settings,
+      values: { order: ["Echo", "Echo", "Crush"] },
+    }),
+  );
+});
+
+test("new descriptor fields are parsed, validated and serialized through the shared registry", () => {
+  const field = {
+    id: "testVariant",
+    label: "Test variant",
+    type: "select" as const,
+    defaultValue: "variant-a",
+    options: [
+      { value: "variant-a", label: "A" },
+      { value: "variant-b", label: "B" },
+    ],
+    accepts: (token: string) => token.startsWith("variant-"),
+    parse: (token: string) => token,
+    token: (value: string | string[]) => String(value),
+  };
+  // The dialog uses this same fields array.
+  sliderFields.push(field);
+  try {
+    const source = "const gain = 0.5; // @slider variant-a";
+    const { control, settings } = readControlCustomization(source, "gain");
+    assert(
+      customizationsFor(control)
+        .find((item) => item.id === "slider")
+        ?.fields.includes(field),
+    );
+    assert.equal(settings.values.testVariant, "variant-a");
+    const next = {
+      ...settings,
+      values: { ...settings.values, testVariant: "variant-b" },
+    };
+    const edit = configureControl(source, "gain", next);
+    assert(edit);
+    assert.deepEqual(
+      readControlCustomization(editSource(source, [edit]), "gain").settings,
+      next,
+    );
+  } finally {
+    sliderFields.splice(sliderFields.indexOf(field), 1);
+  }
+});
+
+test("narrowing slider bounds clamps the source value in the same edit as its settings", () => {
+  for (const [source, range, value] of [
+    ["const gain = 0.5; // @slider 0..1", ["0", "0.2"], 0.2],
+    ["const gain = (1 / 2); // @slider 0..1", ["0.7", "1"], 0.7],
+    ["const gain = -50; // voice", ["-20", "-10"], -20],
+    ["const gain = 100.5; // @slider 0..200", ["0", "80"], 80],
+  ] as const) {
+    const before = readControlCustomization(source, "gain");
+    const settings = initialCustomization(before.control, [], "slider");
+    settings.values.range = [...range];
+    const edit = configureControl(source, "gain", settings, before.settings);
+    assert(edit);
+    const code = editSource(source, [edit]);
+    const updated = readControlCustomization(code, "gain");
+    assert.equal(updated.control.value, value);
+    assert.deepEqual(updated.settings, settings);
+    assert.equal(readControls(code).errors, undefined);
+    if (source.includes("// voice")) assert(code.includes("// voice"));
+    if (source.includes("100.5")) {
+      assert(code.includes("80.0"));
+      assert(updated.control.kind === "slider");
+      assert.equal(updated.control.integer, false);
+    }
+  }
+  const source = "const gain = (1 / 2); // @slider 0..1";
+  const before = readControlCustomization(source, "gain");
+  before.settings.values.range = ["0.1", "0.9"];
+  const edit = configureControl(source, "gain", before.settings);
+  assert(edit);
+  assert(editSource(source, [edit]).includes("(1 / 2)"));
+});
+
+test("settings are offered only for controls with working customization choices", () => {
+  const source = `${waveCode}\nconst count = 2;\nconst amount = 0.5; // @slider\nconst enabled = true;\nconst wave = Wave.Sine;\nconst layers = [Wave.Sine];`;
+  assert.deepEqual(
+    readControls(source).controls.map((control) => [
+      control.kind,
+      hasControlCustomizations(control),
+    ]),
+    [
+      ["number", true],
+      ["slider", true],
+      ["boolean", false],
+      ["enum", false],
+      ["multi-enum", true],
+    ],
   );
 });

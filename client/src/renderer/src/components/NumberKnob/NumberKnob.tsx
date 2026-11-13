@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { Settings, X } from "lucide-react";
 import { useRef } from "react";
 import type { NumberControl } from "../../../../shared/controls";
 import { useNumericWheel } from "../../hooks/useNumericWheel";
@@ -16,12 +16,14 @@ export function NumberKnob({
   onChange,
   onIgnore,
   onDefinition,
+  onConfigure,
 }: {
   control: NumberControl;
   disabled: boolean;
   onChange: (name: string, value: number) => void;
   onIgnore?: (name: string) => void;
   onDefinition?: (name: string) => void;
+  onConfigure?: (name: string) => void;
 }) {
   const { name, value, integer } = control;
   const step = integer ? 1 : 0.01;
@@ -52,6 +54,18 @@ export function NumberKnob({
           disabled={disabled}
           onDefinition={onDefinition}
         />
+        {onConfigure && (
+          <button
+            type="button"
+            className={styles.iconButton}
+            disabled={disabled}
+            aria-label={`Settings for ${name}`}
+            title="Control settings"
+            onClick={() => onConfigure(name)}
+          >
+            <Settings size={13} />
+          </button>
+        )}
         {onIgnore && (
           <button
             type="button"

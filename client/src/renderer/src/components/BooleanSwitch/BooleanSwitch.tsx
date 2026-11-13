@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { Settings, X } from "lucide-react";
 import type { BooleanControl } from "../../../../shared/controls";
 import { ControlTitle } from "../ControlTitle/ControlTitle";
 import styles from "./BooleanSwitch.module.css";
@@ -9,12 +9,14 @@ export function BooleanSwitch({
   onChange,
   onIgnore,
   onDefinition,
+  onConfigure,
 }: {
   control: BooleanControl;
   disabled: boolean;
   onChange: (name: string, value: boolean) => void;
   onIgnore?: (name: string) => void;
   onDefinition?: (name: string) => void;
+  onConfigure?: (name: string) => void;
 }) {
   const { name, value } = control;
   return (
@@ -26,6 +28,18 @@ export function BooleanSwitch({
           disabled={disabled}
           onDefinition={onDefinition}
         />
+        {onConfigure && (
+          <button
+            type="button"
+            className={styles.iconButton}
+            disabled={disabled}
+            aria-label={`Settings for ${name}`}
+            title="Control settings"
+            onClick={() => onConfigure(name)}
+          >
+            <Settings size={13} />
+          </button>
+        )}
         {onIgnore && (
           <button
             type="button"

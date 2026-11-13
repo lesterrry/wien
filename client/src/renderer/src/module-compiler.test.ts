@@ -131,7 +131,7 @@ test("annotated variables are ordinary JavaScript in roots and dependencies", as
 const gain = 0.25;
 if (typeof gain !== 'number' || gain !== 0.25 || !Number.isFinite(gain)) throw new Error('not a primitive');
 voice.gain(gain)`,
-    "voice.strudel": `//@slider fire vertical -1..1
+    "voice.strudel": `//@slider vertical -1..1
 const pan = 0.5;
 export default note('c3').pan(pan)`,
   });

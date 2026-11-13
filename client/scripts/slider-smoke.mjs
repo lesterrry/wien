@@ -109,10 +109,6 @@ try {
   await page.screenshot({ path: path.join(temporary, "enum.png") });
   assert.equal(await cutoff.getAttribute("min"), "20");
   assert.equal(await cutoff.getAttribute("max"), "20000");
-  assert.equal(
-    await cutoff.locator("xpath=../..").getAttribute("data-control-style"),
-    "fire",
-  );
   await cutoff.press("ArrowRight");
   assert.equal(await cutoff.inputValue(), "1201");
   await cutoff.press("Shift+ArrowRight");
@@ -276,10 +272,7 @@ try {
     await page.evaluate(() => Boolean(window.getIsStarted())),
     false,
   );
-  assert.match(
-    await code.textContent(),
-    /const cutoff = [\d.]+ \/\/ @slider fire/,
-  );
+  assert.match(await code.textContent(), /const cutoff = [\d.]+ \/\/ @slider/);
   assert.match(
     await code.textContent(),
     /const pan = 1\s*\/\/ @slider vertical/,
@@ -352,7 +345,7 @@ try {
   const saved = await fs.readFile(demoFile, "utf8");
   assert.match(saved, /const waveform = Wave.Sine/);
   assert.match(saved, /@multi Fx order=Echo,Crush,Chorus/);
-  assert.match(saved, /const cutoff = 20 \/\/ @slider fire/);
+  assert.match(saved, /const cutoff = 20 \/\/ @slider/);
 
   await page
     .getByRole("button", { name: "first-light.strudel", exact: true })

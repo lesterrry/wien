@@ -1,8 +1,13 @@
-export function validateSliderRange(start: number, end: number, value: number) {
-  if (![start, end, value].every(Number.isFinite))
+export function validateSliderBounds(start: number, end: number) {
+  if (![start, end].every(Number.isFinite))
     throw new Error("Slider expects finite numbers: min, max, value.");
   if (start >= end || !Number.isFinite(end - start))
     throw new Error("Slider min must be less than max, with a finite span.");
+}
+
+export function validateSliderRange(start: number, end: number, value: number) {
+  validateSliderBounds(start, end);
+  if (!Number.isFinite(value)) throw new Error("Slider value must be finite.");
   if (value < start || value > end)
     throw new Error("Slider value must be within min and max.");
 }

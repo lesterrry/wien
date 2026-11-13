@@ -1,3 +1,4 @@
+import { isolateHistory } from "@codemirror/commands";
 import { Compartment, EditorState, Prec, StateEffect } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { type ReplState, StrudelMirror } from "@strudel/codemirror";
@@ -10,9 +11,11 @@ import { getAudioContext, initAudio, webaudioOutput } from "@strudel/webaudio";
 import classNames from "classnames";
 import { useEffect, useRef, useState } from "react";
 import { useDrop } from "react-dnd";
+import type { ControlCustomization } from "../../../../shared/control-customizations";
 import {
   type ControlChange,
   changeControl,
+  configureControl,
   ignoreControl,
   moveControl,
   readControls,
@@ -35,6 +38,11 @@ export interface Player {
   stop(): Promise<void>;
   replaceCode(code: string): void;
   changeControl(name: string, value: ControlChange): void;
+  configureControl(
+    name: string,
+    settings: ControlCustomization,
+    expected: ControlCustomization,
+  ): void;
   ignoreControl(name: string): void;
   moveControl(
     name: string,
@@ -282,6 +290,15 @@ export function StrudelEditor({
               ? "input.control"
               : undefined,
         });
+      },
+      configureControl: (name, settings, expected) => {
+        const edit = configureControl(mirror.code, name, settings, expected);
+        if (edit)
+          mirror.editor.dispatch({
+            changes: { from: edit.start, to: edit.end, insert: edit.text },
+            userEvent: "input.control.settings",
+            annotations: isolateHistory.of("full"),
+          });
       },
       ignoreControl: (name) => {
         const edit = ignoreControl(mirror.code, name);

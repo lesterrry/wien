@@ -1,0 +1,69 @@
+.iconButton {
+  composes: iconButton from "../../styles/common.module.css";
+}
+.primaryButton {
+  composes: primaryButton from "../../styles/common.module.css";
+}
+.secondaryButton {
+  composes: secondaryButton from "../../styles/common.module.css";
+}
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.form p,
+.form label {
+  margin: 0;
+}
+.form input {
+  font-size: 12px;
+}
+.form label > input {
+  margin-top: 6px;
+}
+.label {
+  color: var(--color-secondary);
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+.range {
+  display: flex;
+  gap: 10px;
+}
+.range > div {
+  flex: 1;
+  min-width: 0;
+}
+.path {
+  overflow-wrap: anywhere;
+}
+.order {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow: auto;
+}
+.order li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.order li > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.form .error {
+  color: var(--color-danger);
+}

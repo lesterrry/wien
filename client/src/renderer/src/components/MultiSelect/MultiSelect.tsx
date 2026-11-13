@@ -1,4 +1,4 @@
-import { Check, GripVertical, X } from "lucide-react";
+import { Check, GripVertical, Settings, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   ControlChange,
@@ -20,12 +20,14 @@ export function MultiSelect({
   onChange,
   onIgnore,
   onDefinition,
+  onConfigure,
 }: {
   control: MultiEnumControl;
   disabled: boolean;
   onChange: (name: string, value: ControlChange) => void;
   onIgnore?: (name: string) => void;
   onDefinition?: (name: string) => void;
+  onConfigure?: (name: string) => void;
 }) {
   const group = useRef<HTMLFieldSetElement>(null);
   const pending = useRef<{ key: string; x: number; y: number } | null>(null);
@@ -119,6 +121,18 @@ export function MultiSelect({
           disabled={disabled}
           onDefinition={onDefinition}
         />
+        {onConfigure && (
+          <button
+            type="button"
+            className={styles.iconButton}
+            disabled={disabled}
+            aria-label={`Settings for ${control.name}`}
+            title="Control settings"
+            onClick={() => onConfigure(control.name)}
+          >
+            <Settings size={13} />
+          </button>
+        )}
         {onIgnore && (
           <button
             type="button"

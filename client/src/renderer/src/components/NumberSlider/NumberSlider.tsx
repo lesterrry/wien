@@ -1,5 +1,5 @@
 import classNames from "classnames";
-import { X } from "lucide-react";
+import { Settings, X } from "lucide-react";
 import { type CSSProperties, useRef } from "react";
 import type { SliderControl } from "../../../../shared/controls";
 import { clampSliderValue } from "../../../../shared/slider";
@@ -13,12 +13,14 @@ export function NumberSlider({
   onChange,
   onIgnore,
   onDefinition,
+  onConfigure,
 }: {
   control: SliderControl;
   disabled: boolean;
   onChange: (name: string, value: number) => void;
   onIgnore?: (name: string) => void;
   onDefinition?: (name: string) => void;
+  onConfigure?: (name: string) => void;
 }) {
   const { name, min, max, value, presentation, integer } = control;
   const vertical = presentation === "vertical";
@@ -44,7 +46,7 @@ export function NumberSlider({
   });
 
   return (
-    <div className={styles.sliderControl} data-control-style={control.style}>
+    <div className={styles.sliderControl}>
       <div className={styles.controlHeading}>
         <ControlTitle
           className={styles.controlName}
@@ -52,6 +54,18 @@ export function NumberSlider({
           disabled={disabled}
           onDefinition={onDefinition}
         />
+        {onConfigure && (
+          <button
+            type="button"
+            className={styles.iconButton}
+            disabled={disabled}
+            aria-label={`Settings for ${name}`}
+            title="Control settings"
+            onClick={() => onConfigure(name)}
+          >
+            <Settings size={13} />
+          </button>
+        )}
         {onIgnore && (
           <button
             type="button"

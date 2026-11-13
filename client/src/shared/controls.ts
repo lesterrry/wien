@@ -1,7 +1,15 @@
 import { type Comment, type Expression, parse } from "acorn";
-import { isControlAnnotation, sliderSettings } from "./control-annotations";
+import {
+  type ControlCustomization,
+  customizationAnnotation,
+  customizationNumericValue,
+  initialCustomization,
+  isControlAnnotation,
+  multiSettings,
+  sliderSettings,
+} from "./control-customizations";
 import { bindingNames, type Edit, editSource } from "./modules";
-import { multiAnnotation, multiSettings } from "./multi-annotations";
+import { multiAnnotation } from "./multi-annotations";
 import { validateSliderRange } from "./slider";
 
 interface ControlSource {
@@ -35,7 +43,6 @@ export interface SliderControl extends NumericControl {
   presentation: "horizontal" | "vertical";
   min: number;
   max: number;
-  style?: string;
 }
 
 export interface EnumControl extends EnumSource {
@@ -711,6 +718,170 @@ export function changeControl(
       end: control.end,
       text: String(value),
     };
+}
+
+function customizationSource(code: string, name: string) {
+  const control = readControls(code).controls.find(
+    (item) => item.name === name,
+  );
+  if (!control)
+    throw new Error("This control has changed. Reopen its settings.");
+  const comments: Comment[] = [];
+  const ast = parse(code, {
+    ecmaVersion: 2022,
+    sourceType: "module",
+    allowAwaitOutsideFunction: true,
+    preserveParens: true,
+    onComment: comments,
+  });
+  const annotationsFor = bindControlAnnotations(code, comments);
+  for (const statement of ast.body) {
+    const declaration =
+      statement.type === "ExportNamedDeclaration"
+        ? statement.declaration
+        : statement;
+    if (declaration?.type !== "VariableDeclaration") continue;
+    const binding = declaration.declarations.find(
+      (item) => item.id.type === "Identifier" && item.id.name === name,
+    );
+    if (!binding) continue;
+    const annotations = [
+      ...new Map(
+        annotationsFor(statement.start, binding.start, binding.end).map(
+          (comment) => [comment.start, comment],
+        ),
+      ).values(),
+    ];
+    return { control, statement, declaration, binding, annotations };
+  }
+  throw new Error("Control declaration not found.");
+}
+
+export function readControlCustomization(code: string, name: string) {
+  const { control, annotations } = customizationSource(code, name);
+  return {
+    control,
+    settings: initialCustomization(
+      control,
+      annotations.map((comment) => comment.value.trim()),
+    ),
+  };
+}
+
+function sameCustomization(
+  left: ControlCustomization,
+  right: ControlCustomization,
+) {
+  return (
+    left.kind === right.kind &&
+    Object.keys(left.values).length === Object.keys(right.values).length &&
+    Object.keys(left.values).every(
+      (key) =>
+        JSON.stringify(left.values[key]) === JSON.stringify(right.values[key]),
+    )
+  );
+}
+
+export function configureControl(
+  code: string,
+  name: string,
+  settings: ControlCustomization,
+  expected?: ControlCustomization,
+): Edit | undefined {
+  const { control, statement, declaration, binding, annotations } =
+    customizationSource(code, name);
+  const current = initialCustomization(
+    control,
+    annotations.map((comment) => comment.value.trim()),
+  );
+  const annotation = customizationAnnotation(control, settings);
+  if (sameCustomization(current, settings)) return;
+  if (expected && !sameCustomization(current, expected))
+    throw new Error(
+      "Control settings changed in the source. Reopen the settings and try again.",
+    );
+
+  const replacement =
+    annotation &&
+    annotations.length === 1 &&
+    (declaration.declarations.length === 1 ||
+      annotations[0].start > statement.start)
+      ? annotations[0]
+      : undefined;
+  const edits: Edit[] = annotations.map((comment) => {
+    if (comment === replacement)
+      return {
+        start: comment.start,
+        end: comment.end,
+        text: annotation as string,
+      };
+    const lineStart = code.lastIndexOf("\n", comment.start - 1) + 1;
+    const nextLine = code.indexOf("\n", comment.end);
+    const lineEnd = nextLine < 0 ? code.length : nextLine + 1;
+    const standalone =
+      /^[\t ]*$/.test(code.slice(lineStart, comment.start)) &&
+      /^\s*$/.test(code.slice(comment.end, lineEnd));
+    return {
+      start: standalone ? lineStart : comment.start,
+      end: standalone ? lineEnd : comment.end,
+      text: "",
+    };
+  });
+  if (declaration.declarations.length > 1) {
+    // A leading annotation belongs to every comma binding. Localize it for the
+    // untouched siblings before replacing/removing it for the selected one.
+    const shared = annotations.filter(
+      (comment) => comment.end <= statement.start,
+    );
+    if (shared.length) {
+      const newline = code.includes("\r\n") ? "\r\n" : "\n";
+      const text = shared
+        .map((comment) => code.slice(comment.start, comment.end))
+        .join(newline);
+      for (const sibling of declaration.declarations)
+        if (sibling !== binding)
+          edits.push(annotateControl(code, sibling.start, text));
+    }
+  }
+  const numericValue = customizationNumericValue(control, settings);
+  if (numericValue !== undefined && !Object.is(numericValue, control.value)) {
+    const integer =
+      (control.kind === "number" || control.kind === "slider") &&
+      control.integer;
+    let text = Object.is(numericValue, -0) ? "-0" : String(numericValue);
+    if (!integer && Number.isInteger(numericValue) && !text.includes("."))
+      text = text.replace(/e|$/, (suffix) => `.0${suffix}`);
+    edits.push({ start: control.start, end: control.end, text });
+  }
+  if (control.kind === "multi-enum") {
+    const selected = (settings.values.order as string[]).flatMap((key) =>
+      control.options.filter(
+        (option) => option.key === key && control.value.includes(option.value),
+      ),
+    );
+    const text = `[${selected.map((option) => enumMember(control.objectName, option.key)).join(", ")}]`;
+    if (code.slice(control.start, control.end) !== text)
+      edits.push({ start: control.start, end: control.end, text });
+  }
+  if (annotation && !replacement)
+    edits.push(annotateControl(code, control.ignoreAt, annotation));
+  if (!edits.length) return;
+  const start = Math.min(...edits.map((edit) => edit.start));
+  const end = Math.max(...edits.map((edit) => edit.end));
+  const text = editSource(
+    code.slice(start, end),
+    edits.map((edit) => ({
+      ...edit,
+      start: edit.start - start,
+      end: edit.end - start,
+    })),
+  );
+  const result = code.slice(0, start) + text + code.slice(end);
+  const parsed = readControls(result);
+  const updated = parsed.controls.find((item) => item.name === name);
+  if (!parsed.valid || !updated || updated.kind !== settings.kind)
+    throw new Error("Could not safely update this control's annotations.");
+  return { start, end, text };
 }
 
 export function ignoreControl(code: string, name: string): Edit | undefined {

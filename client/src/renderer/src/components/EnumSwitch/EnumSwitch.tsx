@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { Settings, X } from "lucide-react";
 import { useId, useRef } from "react";
 import type { EnumControl } from "../../../../shared/controls";
 import { ControlTitle } from "../ControlTitle/ControlTitle";
@@ -10,12 +10,14 @@ export function EnumSwitch({
   onChange,
   onIgnore,
   onDefinition,
+  onConfigure,
 }: {
   control: EnumControl;
   disabled: boolean;
   onChange: (name: string, value: string | number) => void;
   onIgnore?: (name: string) => void;
   onDefinition?: (name: string) => void;
+  onConfigure?: (name: string) => void;
 }) {
   const groupId = useId();
   const rail = useRef<HTMLDivElement>(null);
@@ -55,6 +57,18 @@ export function EnumSwitch({
           disabled={disabled}
           onDefinition={onDefinition}
         />
+        {onConfigure && (
+          <button
+            type="button"
+            className={styles.iconButton}
+            disabled={disabled}
+            aria-label={`Settings for ${control.name}`}
+            title="Control settings"
+            onClick={() => onConfigure(control.name)}
+          >
+            <Settings size={13} />
+          </button>
+        )}
         {onIgnore && (
           <button
             type="button"

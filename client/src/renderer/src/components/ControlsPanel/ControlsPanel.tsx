@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import { primaryModifier } from "../../../../shared/commands";
+import { hasControlCustomizations } from "../../../../shared/control-customizations";
 import {
   type ControlGroup,
   flatPanelLayout,
@@ -33,6 +34,7 @@ interface ControlCallbacks {
   onChange: (name: string, change: ControlChange) => void;
   onIgnore?: (name: string) => void;
   onDefinition?: (name: string) => void;
+  onConfigure?: (name: string) => void;
 }
 
 export function ControlInput({
@@ -41,8 +43,14 @@ export function ControlInput({
   onChange,
   onIgnore,
   onDefinition,
+  onConfigure,
 }: ControlCallbacks & { control: Control }) {
-  const props = { disabled, onIgnore, onDefinition };
+  const props = {
+    disabled,
+    onIgnore,
+    onDefinition,
+    onConfigure: hasControlCustomizations(control) ? onConfigure : undefined,
+  };
   const setValue = (name: string, value: ControlValue) =>
     onChange(name, { type: "set", value });
   switch (control.kind) {
@@ -76,6 +84,7 @@ export function ControlsPanel({
   onChange,
   onIgnore,
   onDefinition,
+  onConfigure,
   onMove,
   onOpenController,
   onReloadSource,
@@ -98,6 +107,7 @@ export function ControlsPanel({
   onChange: (path: string, name: string, change: ControlChange) => void;
   onIgnore: (path: string, name: string) => void;
   onDefinition: (path: string, name: string) => void;
+  onConfigure: (path: string, name: string) => void;
   onMove: (
     path: string,
     name: string,
@@ -262,6 +272,7 @@ export function ControlsPanel({
             onChange={(name, change) => onChange(group.path, name, change)}
             onIgnore={(name) => onIgnore(group.path, name)}
             onDefinition={(name) => onDefinition(group.path, name)}
+            onConfigure={(name) => onConfigure(group.path, name)}
           />
           {error && (
             <p role="alert" className={styles.issue}>
