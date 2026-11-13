@@ -81,8 +81,8 @@ try {
   );
   await menu.click();
   async function submit() {
-    await page.getByRole("button", { name: /^Ask Wien/ }).click();
-    const input = page.getByRole("textbox", { name: "Ask Wien", exact: true });
+    await page.getByRole("button", { name: /^Ask Assist/ }).click();
+    const input = page.getByRole("textbox", { name: "Ask Assist", exact: true });
     await input.fill("A soft bass");
     await input.press("Enter");
   }

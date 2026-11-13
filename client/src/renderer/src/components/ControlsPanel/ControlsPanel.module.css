@@ -20,7 +20,9 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 16px var(--panel-inset) 12px;
+  flex-shrink: 0;
+  height: 54px;
+  padding: 0 12px;
   font-size: 12px;
   color: var(--color-secondary);
 }
@@ -122,27 +124,31 @@
   width: 100%;
   padding: 4px 2px;
   border: 0;
-  color: var(--color-secondary);
+  color: var(--color-primary);
   background: transparent;
   text-align: left;
   font-size: 11px;
   cursor: pointer;
 }
 .groupHeading > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .groupHeading small {
   margin-left: auto;
   color: var(--color-muted);
   font-size: 9px;
 }
+.groupHeading > svg {
+  flex-shrink: 0;
+}
+.parentPath {
+  color: var(--color-secondary);
+}
 .groupBody {
   min-width: 0;
 }
 .groupBody:has(.groupControls:not(:empty)) {
-  border-top: 1px solid var(--color-border);
-  margin-top: var(--control-gap);
   padding-top: var(--control-gap);
 }
 .issue {
@@ -152,48 +158,6 @@
   padding: 8px;
   border-left: 2px solid var(--color-brand);
   overflow-wrap: anywhere;
-}
-.hiddenGroups {
-  padding: 8px var(--panel-inset);
-  max-height: 150px;
-  overflow: auto;
-  border-top: 1px solid var(--color-border);
-}
-.hiddenGroups button {
-  display: block;
-  width: 100%;
-  padding: 6px 0;
-  border: 0;
-  background: transparent;
-  color: var(--color-secondary);
-  text-align: left;
-  font-size: 11px;
-  overflow-wrap: anywhere;
-  cursor: pointer;
-}
-.menu {
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border);
-  border-radius: var(--control-radius);
-  padding: 5px;
-  min-width: 190px;
-  box-shadow: 0 8px 25px #0006;
-  position: fixed;
-  z-index: 100;
-}
-
-.menu button {
-  display: block;
-  width: 100%;
-  padding: 9px;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--color-primary);
-  text-align: left;
-  font-size: 12px;
-}
-.menu button:hover:not(:disabled) {
-  background: var(--color-hover);
 }
 .control {
   min-width: 0;
@@ -205,6 +169,7 @@
 .controllerButton {
   display: grid;
   place-items: center;
+  flex-shrink: 0;
   width: 22px;
   height: 22px;
   padding: 0;

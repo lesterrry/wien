@@ -4,6 +4,7 @@ import type {
   ControlChange,
   MultiEnumControl,
 } from "../../../../shared/controls";
+import { ControlTitle } from "../ControlTitle/ControlTitle";
 import styles from "./MultiSelect.module.css";
 
 interface Drag {
@@ -18,11 +19,13 @@ export function MultiSelect({
   disabled,
   onChange,
   onIgnore,
+  onDefinition,
 }: {
   control: MultiEnumControl;
   disabled: boolean;
   onChange: (name: string, value: ControlChange) => void;
   onIgnore?: (name: string) => void;
+  onDefinition?: (name: string) => void;
 }) {
   const group = useRef<HTMLFieldSetElement>(null);
   const pending = useRef<{ key: string; x: number; y: number } | null>(null);
@@ -110,9 +113,12 @@ export function MultiSelect({
   return (
     <div className={styles.card}>
       <div className={styles.heading}>
-        <span className={styles.name} title={control.name}>
-          {control.name}
-        </span>
+        <ControlTitle
+          className={styles.name}
+          name={control.name}
+          disabled={disabled}
+          onDefinition={onDefinition}
+        />
         {onIgnore && (
           <button
             type="button"

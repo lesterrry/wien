@@ -3,6 +3,15 @@ import type { WorkspaceApi } from "../shared/types";
 
 const api: WorkspaceApi = {
   platform: "desktop",
+  onMenuCommand: (callback) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      command: Parameters<typeof callback>[0],
+    ) => callback(command);
+    ipcRenderer.on("menu:command", listener);
+    return () => ipcRenderer.removeListener("menu:command", listener);
+  },
+  updateMenuState: (state) => ipcRenderer.send("menu:state", state),
   accountCurrent: () => ipcRenderer.invoke("account:current"),
   accountLogin: (credentials) =>
     ipcRenderer.invoke("account:login", credentials),

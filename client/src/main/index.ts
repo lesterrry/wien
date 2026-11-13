@@ -1,13 +1,15 @@
 import * as fs from "node:fs/promises";
 import path from "node:path";
-import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import type { AssistRequest } from "../shared/assistant";
+import { matchCommand } from "../shared/commands";
 import { externalWebUrl } from "../shared/links";
 import type { SaveRequest } from "../shared/types";
 import { AccountClient } from "./account";
 import { AccountStorage } from "./account-storage";
 import { AssistAccessError, askAssistant } from "./assistant";
 import { backendConfig } from "./config";
+import { installMenu, updateMenuState } from "./menu";
 import { ProjectFs } from "./project-fs";
 import { ProjectVersions } from "./project-versions";
 import { starterFiles } from "./starter";
@@ -299,6 +301,34 @@ function createWindow() {
       }
     }
   });
+  window.webContents.on("before-input-event", (_event, input) => {
+    // macOS always registers menu accelerators. Route our commands only through
+    // the renderer; keep native Edit/View/Window shortcuts working normally.
+    window?.webContents.setIgnoreMenuShortcuts(
+      Boolean(
+        matchCommand(
+          {
+            code: input.code,
+            metaKey: input.meta,
+            ctrlKey: input.control,
+            altKey: input.alt,
+            shiftKey: input.shift,
+            isComposing: input.isComposing,
+            getModifierState: () => false,
+          },
+          {
+            platform: "desktop",
+            os:
+              process.platform === "darwin"
+                ? "mac"
+                : process.platform === "win32"
+                  ? "windows"
+                  : "linux",
+          },
+        ),
+      ),
+    );
+  });
   window.on("closed", () => {
     assistantRequest?.controller.abort();
     assistantRequest = null;
@@ -319,17 +349,15 @@ void app
       app.dock?.setIcon(icon);
     await initializeProject();
     registerIpc();
-    Menu.setApplicationMenu(
-      Menu.buildFromTemplate([
-        ...(process.platform === "darwin"
-          ? [{ role: "appMenu" as const }]
-          : []),
-        { label: "File", submenu: [{ role: "close" }] },
-        { role: "editMenu" },
-        { role: "viewMenu" },
-        { role: "windowMenu" },
-      ]),
-    );
+    installMenu();
+    ipcMain.on("menu:state", (event, state) => {
+      if (
+        event.sender === window?.webContents &&
+        state &&
+        typeof state === "object"
+      )
+        updateMenuState(state);
+    });
     createWindow();
     app.on("activate", () => {
       if (!BrowserWindow.getAllWindows().length) createWindow();

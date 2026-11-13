@@ -4,6 +4,7 @@ import { type CSSProperties, useRef } from "react";
 import type { SliderControl } from "../../../../shared/controls";
 import { clampSliderValue } from "../../../../shared/slider";
 import { useNumericWheel } from "../../hooks/useNumericWheel";
+import { ControlTitle } from "../ControlTitle/ControlTitle";
 import styles from "./NumberSlider.module.css";
 
 export function NumberSlider({
@@ -11,11 +12,13 @@ export function NumberSlider({
   disabled,
   onChange,
   onIgnore,
+  onDefinition,
 }: {
   control: SliderControl;
   disabled: boolean;
   onChange: (name: string, value: number) => void;
   onIgnore?: (name: string) => void;
+  onDefinition?: (name: string) => void;
 }) {
   const { name, min, max, value, presentation, integer } = control;
   const vertical = presentation === "vertical";
@@ -43,9 +46,12 @@ export function NumberSlider({
   return (
     <div className={styles.sliderControl} data-control-style={control.style}>
       <div className={styles.controlHeading}>
-        <span className={styles.controlName} title={name}>
-          {name}
-        </span>
+        <ControlTitle
+          className={styles.controlName}
+          name={name}
+          disabled={disabled}
+          onDefinition={onDefinition}
+        />
         {onIgnore && (
           <button
             type="button"

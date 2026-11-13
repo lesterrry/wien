@@ -1,4 +1,4 @@
-import { Compartment, EditorState, StateEffect } from "@codemirror/state";
+import { Compartment, EditorState, Prec, StateEffect } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { type ReplState, StrudelMirror } from "@strudel/codemirror";
 import * as core from "@strudel/core";
@@ -177,6 +177,21 @@ export function StrudelEditor({
     mirror.setLineWrappingEnabled(true);
     mirror.editor.dispatch({
       effects: StateEffect.appendConfig.of([
+        // Wien owns playback shortcuts. Keep Strudel's legacy bindings from
+        // bypassing the platform modifier policy; allow normal text input.
+        Prec.highest(
+          EditorView.domEventHandlers({
+            keydown: (event) =>
+              !event.metaKey &&
+              !event.shiftKey &&
+              ((event.ctrlKey &&
+                !event.altKey &&
+                ["Enter", "Period"].includes(event.code)) ||
+                (event.altKey &&
+                  !event.ctrlKey &&
+                  ["Enter", "Period", "KeyQ", "KeyW"].includes(event.code))),
+          }),
+        ),
         readOnly.current.of([]),
         EditorView.updateListener.of((update) => {
           if (update.docChanged)

@@ -23,7 +23,6 @@ import {
   Plus,
   RefreshCw,
   Search,
-  SlidersHorizontal,
   Sparkles,
   Square,
   SquareX,
@@ -32,6 +31,14 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  type CommandId,
+  type CommandState,
+  commands,
+  matchCommand,
+  primaryModifier,
+  shortcutLabel,
+} from "../../../../shared/commands";
 import {
   type ControlGroup,
   type PanelPreferences,
@@ -48,6 +55,7 @@ import {
   readControls,
 } from "../../../../shared/controls";
 import { type Edit, editSource, hasExports } from "../../../../shared/modules";
+import { nextUntitledName } from "../../../../shared/snippet-names";
 import {
   type Entry,
   isWithin,
@@ -56,11 +64,13 @@ import {
   parentPath,
   type VersionEntry,
 } from "../../../../shared/types";
+import { executeEditingCommand, shortcutEnvironment } from "../../commands";
 import {
   type Document,
   useSnippetSessions,
 } from "../../hooks/useSnippetSessions";
 import { useAccount } from "../Account/Account";
+import { AppMenu } from "../AppMenu/AppMenu";
 import { ControlsPanel } from "../ControlsPanel/ControlsPanel";
 import { Dialog } from "../Dialog/Dialog";
 import { Explorer } from "../Explorer/Explorer";
@@ -567,74 +577,6 @@ export function App() {
   }, [player]);
 
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey)) return;
-      if (event.key === "," || event.code === "Comma") {
-        event.preventDefault();
-        event.stopPropagation();
-        if (
-          !event.repeat &&
-          !busyRef.current &&
-          !modal &&
-          !controllerOpen &&
-          !graphActive
-        ) {
-          setWorkspaceView("editor");
-          player.current?.assist();
-        }
-        return;
-      }
-      if (
-        event.target instanceof Element &&
-        event.target.closest("[data-assistant]") &&
-        event.key === "Enter"
-      )
-        return;
-      if (event.key === "w") {
-        event.preventDefault();
-        event.stopPropagation();
-        if (graphActive) closeGraph();
-        else if (controllerOpen) setWorkspaceView("editor");
-        else if (documentRef.current) void closeTab(documentRef.current.path);
-        else api.close();
-      }
-      if (event.key === "s") {
-        event.preventDefault();
-        void flush().catch((error) => setError(message(error)));
-      }
-      if (event.key === "Enter") {
-        event.preventDefault();
-        event.stopPropagation();
-        if (!graphActive) play();
-      }
-      if (event.key === "." || event.code === "Period") {
-        event.preventDefault();
-        event.stopPropagation();
-        if (event.shiftKey || graphActive) void stopAll();
-        else stop();
-      }
-      if (event.key === "b") {
-        event.preventDefault();
-        setSidebar((value) => !value);
-      }
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [
-    closeTab,
-    closeGraph,
-    graphActive,
-    controllerOpen,
-    flush,
-    play,
-    stop,
-    stopAll,
-    modal,
-    player,
-    documentRef,
-  ]);
-
-  useEffect(() => {
     if (!context && !projectMenu) return;
     const close = () => {
       setContext(null);
@@ -941,13 +883,59 @@ export function App() {
     : selection
       ? parentPath(selection.id)
       : "";
+  async function createUntitledSnippet() {
+    if (!project || selectedVersion || recoveryBlocked) return;
+    await run(async () => {
+      await controlQueue.current;
+      await flush();
+      const current = await api.current();
+      const siblings = destination
+        ? (findEntry(current.entries, destination)?.children ?? [])
+        : current.entries;
+      const path = await api.add(
+        destination,
+        nextUntitledName(siblings),
+        false,
+      );
+      await refresh();
+      const code = await api.read(path);
+      setWorkspaceView("editor");
+      setDefinitionContext(null);
+      updateDocument({ path, code, saved: code });
+      setSelection({ id: path, name: path.split("/").at(-1) ?? path });
+      setSavedStatus("Saved locally");
+    });
+  }
+
+  function renameActiveSnippet() {
+    const current = documentRef.current;
+    if (
+      !current ||
+      busyRef.current ||
+      selectedVersion ||
+      recoveryBlocked ||
+      graphActive ||
+      controllerOpen
+    )
+      return;
+    showModal({
+      kind: "rename",
+      entry: {
+        id: current.path,
+        name: current.path.split("/").at(-1) ?? current.path,
+      },
+    });
+  }
+
   const filename = document?.path.split("/").at(-1);
   const dirty = document?.code !== document?.saved;
   const folders = (entries: Entry[]): Entry[] =>
     entries.flatMap((entry) =>
       entry.children ? [entry, ...folders(entry.children)] : [],
     );
-  const shortcut = navigator.platform.includes("Mac") ? "⌘" : "Ctrl";
+  const modifier = primaryModifier(shortcutEnvironment);
+  const shortcut =
+    modifier === "Meta" ? "⌘" : modifier === "Control" ? "Ctrl" : "Alt";
   const panelRoot =
     preferences.pinned ??
     (definitionContext?.fullscreen ? definitionContext.root : null) ??
@@ -1219,6 +1207,197 @@ export function App() {
     }
   }, [definitionTarget, document?.path, players, sessionsRef]);
 
+  const [menuState, setMenuState] = useState<CommandState>({});
+  const lastMenuState = useRef("");
+  const commandHandler = useRef<(command: CommandId) => void>(() => {});
+  commandHandler.current = (command) => {
+    const dialogOpen = Boolean(window.document.querySelector("dialog[open]"));
+    if (command === "stopAll") {
+      void stopAll();
+      return;
+    }
+    if (busyRef.current || dialogOpen) return;
+    switch (command) {
+      case "play":
+        if (!graphActive) play();
+        break;
+      case "stop":
+        stop();
+        break;
+      case "assist":
+        if (!controllerOpen && !graphActive) player.current?.assist();
+        break;
+      case "save":
+        void flush().catch((error) => setError(message(error)));
+        break;
+      case "closeTab":
+        if (graphActive) closeGraph();
+        else if (controllerOpen) setWorkspaceView("editor");
+        else if (documentRef.current) void closeTab(documentRef.current.path);
+        break;
+      case "sidebar":
+        setSidebar((value) => !value);
+        break;
+      case "controls":
+        if (controllerOpen) {
+          setControllerOpen(false);
+          setControlsVisible(true);
+        } else if (!graphActive) setControlsVisible((value) => !value);
+        break;
+      case "graph":
+        openGraph();
+        break;
+      case "newProject":
+        void switchProject(true);
+        break;
+      case "openProject":
+        void switchProject(false);
+        break;
+      case "newFile":
+        void createUntitledSnippet();
+        break;
+      case "renameFile":
+        renameActiveSnippet();
+        break;
+      case "newFolder":
+        if (selectedVersion || recoveryBlocked) break;
+        setValue("");
+        setModalError(null);
+        setModal({
+          kind: "create",
+          parent: destination,
+          folder: true,
+        });
+        break;
+      case "exportProject":
+        void run(async () => {
+          await flush();
+          await api.exportProject?.();
+        });
+        break;
+      case "help":
+        setModal({ kind: "help" });
+        break;
+      case "controlUp":
+      case "controlDown": {
+        const control = window.document.activeElement?.closest<HTMLElement>(
+          "[data-control-move]",
+        );
+        control?.dispatchEvent(
+          new CustomEvent("wien:move-control", {
+            detail: command === "controlUp" ? "up" : "down",
+          }),
+        );
+        break;
+      }
+      default:
+        void Promise.resolve(executeEditingCommand(command)).catch((error) =>
+          setError(message(error)),
+        );
+    }
+  };
+  useEffect(
+    () => api.onMenuCommand?.((command) => commandHandler.current(command)),
+    [],
+  );
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const command = matchCommand(event, shortcutEnvironment);
+      if (!command) return;
+      if (
+        (command.id === "controlUp" || command.id === "controlDown") &&
+        (!(event.target instanceof HTMLElement) ||
+          !event.target.matches("[data-control-move]"))
+      )
+        return;
+      // Enter in the assistant composer belongs to its form.
+      if (
+        command.id === "play" &&
+        event.target instanceof Element &&
+        event.target.closest("[data-assistant]")
+      )
+        return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (!event.repeat) commandHandler.current(command.id);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, []);
+  useEffect(() => {
+    const syncMenu = () => {
+      if (
+        window.document.activeElement?.closest(
+          '[aria-label="Application menu"]',
+        )
+      )
+        return;
+      const available =
+        !busyRef.current && !window.document.querySelector("dialog[open]");
+      const state: CommandState = Object.fromEntries(
+        commands.map((command) => [command.id, available]),
+      );
+      state.play = available && !graphActive && Boolean(player.current);
+      state.assist = state.play && !controllerOpen;
+      state.stop = available && Boolean(player.current);
+      state.stopAll = true;
+      state.save =
+        available &&
+        Boolean(documentRef.current) &&
+        !selectedVersion &&
+        !recoveryBlocked;
+      state.closeTab =
+        available &&
+        Boolean(documentRef.current || graphActive || controllerOpen);
+      state.newFile = state.newFolder =
+        available && Boolean(project) && !selectedVersion && !recoveryBlocked;
+      state.renameFile =
+        available &&
+        Boolean(documentRef.current) &&
+        !selectedVersion &&
+        !recoveryBlocked &&
+        !graphActive &&
+        !controllerOpen;
+      state.controls = available && !graphActive;
+      const control = window.document.activeElement?.closest<HTMLElement>(
+        "[data-control-move]",
+      );
+      state.controlUp = available && control?.dataset.moveUp === "true";
+      state.controlDown = available && control?.dataset.moveDown === "true";
+      const serialized = JSON.stringify(state);
+      if (lastMenuState.current === serialized) return;
+      lastMenuState.current = serialized;
+      api.updateMenuState?.(state);
+      setMenuState(state);
+    };
+    syncMenu();
+    window.addEventListener("focusin", syncMenu);
+    const observer = new MutationObserver((mutations) => {
+      if (
+        mutations.some(
+          (mutation) =>
+            mutation.type === "attributes" ||
+            [...mutation.addedNodes, ...mutation.removedNodes].some(
+              (node) =>
+                node instanceof Element &&
+                (node.matches("dialog") || node.querySelector("dialog")),
+            ),
+        )
+      )
+        syncMenu();
+    });
+    observer.observe(window.document.body, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["open"],
+    });
+    return () => {
+      window.removeEventListener("focusin", syncMenu);
+      observer.disconnect();
+    };
+  });
+
   return (
     <div
       className={classNames(styles.app, {
@@ -1228,6 +1407,12 @@ export function App() {
           !controlsVisible || controllerOpen || graphActive,
       })}
     >
+      {api.platform === "web" && (
+        <AppMenu
+          state={menuState}
+          onCommand={(command) => commandHandler.current(command)}
+        />
+      )}
       <div className={styles.titlebar}>
         <div className={styles.titlebarSidebar}>
           <span className={styles.appName}>
@@ -1287,7 +1472,7 @@ export function App() {
           <button
             type="button"
             className={styles.iconButton}
-            title="Toggle controls"
+            title={`Toggle controls (${shortcutLabel(commands.find((command) => command.id === "controls") ?? { id: "controls", label: "Toggle Controls" }, shortcutEnvironment)})`}
             aria-label="Toggle controls"
             aria-expanded={controlsVisible && !controllerOpen && !graphActive}
             disabled={graphActive}
@@ -1587,32 +1772,39 @@ export function App() {
         }
         aria-label={graphActive || document ? undefined : "Snippet editor"}
       >
-        {!graphActive && (
+        {!graphActive && !controllerOpen && (
           <header
             className={styles.editorToolbar}
             role="toolbar"
             aria-label="Snippet toolbar"
           >
             <div className={styles.fileHeading}>
-              {controllerOpen && panelRoot ? (
+              {document ? (
                 <>
-                  <SlidersHorizontal size={17} />
-                  <div>
-                    <strong>{panelRoot.split("/").at(-1)}</strong>
-                    <span title={panelRoot}>Controls · {panelRoot}</span>
-                  </div>
-                </>
-              ) : document ? (
-                <>
-                  {controllerOpen ? (
-                    <SlidersHorizontal size={17} />
-                  ) : hasExports(document.code) ? (
+                  {hasExports(document.code) ? (
                     <Package size={17} />
                   ) : (
                     <FileCode2 size={17} />
                   )}
                   <div>
-                    <strong>{filename}</strong>
+                    <button
+                      type="button"
+                      className={styles.fileName}
+                      title={`Double-click to rename (${shortcut} R)`}
+                      aria-label={`Rename ${filename}`}
+                      disabled={
+                        busy || Boolean(selectedVersion) || recoveryBlocked
+                      }
+                      onDoubleClick={renameActiveSnippet}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          renameActiveSnippet();
+                        }
+                      }}
+                    >
+                      {filename}
+                    </button>
                     <span>
                       {project?.name}
                       {parentPath(document.path)
@@ -1646,10 +1838,10 @@ export function App() {
               <button
                 type="button"
                 className={styles.iconButton}
-                aria-label="Ask Wien"
+                aria-label="Ask Assist"
                 data-assistant-trigger
-                title={`Ask Wien (${shortcut} ,)`}
-                disabled={!document || busy || controllerOpen}
+                title={`Ask Assist (${shortcut} ,)`}
+                disabled={!document || busy}
                 onClick={() => player.current?.assist("bottom")}
               >
                 <Sparkles size={16} />
@@ -1695,49 +1887,32 @@ export function App() {
                 ) : (
                   <Play size={13} fill="currentColor" />
                 )}
-                <span>
-                  {playback.started ? "Update" : "Play"}
-                  {controllerOpen &&
-                    document &&
-                    ` ${document.path.split("/").at(-1)}`}
-                </span>
+                <span>{playback.started ? "Update" : "Play"}</span>
                 <kbd>{shortcut} ↵</kbd>
               </button>
-              {controllerOpen ? (
-                <button
-                  type="button"
-                  className={styles.closeButton}
-                  title="Close controls"
-                  aria-label="Close controls"
-                  onClick={() => setControllerOpen(false)}
-                >
-                  <X size={15} />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className={styles.iconButton}
-                  title="Snippet actions"
-                  aria-label="Snippet actions"
-                  disabled={!document || busy}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    if (!document) return;
-                    const rect = event.currentTarget.getBoundingClientRect();
-                    setContext({
-                      entry: {
-                        id: document.path,
-                        name: filename ?? document.path,
-                        exported: hasExports(document.code),
-                      },
-                      x: rect.right - 220,
-                      y: rect.bottom + 8,
-                    });
-                  }}
-                >
-                  <MoreHorizontal size={18} />
-                </button>
-              )}
+              <button
+                type="button"
+                className={styles.iconButton}
+                title="Snippet actions"
+                aria-label="Snippet actions"
+                disabled={!document || busy}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (!document) return;
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  setContext({
+                    entry: {
+                      id: document.path,
+                      name: filename ?? document.path,
+                      exported: hasExports(document.code),
+                    },
+                    x: rect.right - 220,
+                    y: rect.bottom + 8,
+                  });
+                }}
+              >
+                <MoreHorizontal size={18} />
+              </button>
             </div>
           </header>
         )}
@@ -1766,6 +1941,41 @@ export function App() {
         <ControlsPanel
           key={`${project?.root}/${panelRoot}`}
           fullscreen={controllerOpen}
+          headerActions={
+            controllerOpen ? (
+              <div className={styles.transport}>
+                <button
+                  type="button"
+                  className={classNames(styles.iconButton, styles.stopButton)}
+                  title={`Stop (${shortcut} .)`}
+                  aria-label="Stop playback"
+                  disabled={!playback.started}
+                  onClick={stop}
+                >
+                  <Square size={14} fill="currentColor" />
+                </button>
+                <button
+                  type="button"
+                  className={styles.playButton}
+                  disabled={!document || playback.pending || busy}
+                  title={
+                    document
+                      ? `Play / update ${document.path}`
+                      : "Open a file to play"
+                  }
+                  onClick={play}
+                >
+                  {playback.pending ? (
+                    <Loader2 size={14} className={styles.spin} />
+                  ) : (
+                    <Play size={13} fill="currentColor" />
+                  )}
+                  <span>{playback.started ? "Update" : "Play"}</span>
+                  <kbd>{shortcut} ↵</kbd>
+                </button>
+              </div>
+            ) : undefined
+          }
           visible={!graphActive && (controlsVisible || controllerOpen)}
           tree={controlTree?.path === panelRoot ? controlTree : null}
           root={panelRoot}
@@ -2027,26 +2237,14 @@ export function App() {
                   ? "Your projects are saved in this browser. Export a project to keep a backup or move it to another browser."
                   : "Your snippets are plain files on your computer."}
               </p>
-              <div>
-                <span>Play / update code</span>
-                <kbd>{shortcut} Enter</kbd>
-              </div>
-              <div>
-                <span>Stop playback</span>
-                <kbd>{shortcut} .</kbd>
-              </div>
-              <div>
-                <span>Ask Wien</span>
-                <kbd>{shortcut} ,</kbd>
-              </div>
-              <div>
-                <span>Save now</span>
-                <kbd>{shortcut} S</kbd>
-              </div>
-              <div>
-                <span>Toggle sidebar</span>
-                <kbd>{shortcut} B</kbd>
-              </div>
+              {commands
+                .filter((command) => command.key)
+                .map((command) => (
+                  <div key={command.id}>
+                    <span>{command.label}</span>
+                    <kbd>{shortcutLabel(command, shortcutEnvironment)}</kbd>
+                  </div>
+                ))}
               <p className={styles.muted}>
                 Drag snippets into folders to organize them. Starter sounds use
                 built-in synthesizers and work offline. Playback continues while

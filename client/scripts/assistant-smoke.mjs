@@ -82,9 +82,9 @@ try {
   );
   await expect(code).toHaveText(original.replaceAll("\n", ""));
   const dialog = page.getByRole("dialog", { name: "Wien assistant" });
-  const input = page.getByRole("textbox", { name: "Ask Wien" });
+  const input = page.getByRole("textbox", { name: "Ask Assist" });
 
-  const trigger = page.getByRole("button", { name: /^Ask Wien/ });
+  const trigger = page.getByRole("button", { name: /^Ask Assist/ });
   await trigger.click();
   await expect(input).toBeFocused();
   await input.fill("Toolbar draft");

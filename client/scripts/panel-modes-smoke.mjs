@@ -49,27 +49,13 @@ try {
       .getByRole("button", { name: "Open full controls", exact: true })
       .click();
   const collapse = () =>
+    page.getByRole("button", { name: "Exit fullscreen", exact: true }).click();
+  const definition = () =>
+    panel.getByRole("button", { name: "level", exact: true }).click();
+  const toggleGroup = (file) =>
     panel
-      .getByRole("button", { name: "Collapse controls", exact: true })
-      .click();
-  const definition = async () => {
-    await panel
-      .getByRole("spinbutton", { name: "level knob", exact: true })
-      .first()
-      .click({ button: "right" });
-    await page
-      .getByRole("menuitem", { name: "Go to declaration", exact: true })
-      .click();
-  };
-  const hide = async (file) => {
-    await panel
       .getByRole("button", { name: `Toggle ${file} group`, exact: true })
-      .first()
-      .click({ button: "right" });
-    await page
-      .getByRole("menuitem", { name: "Hide group", exact: true })
       .click();
-  };
   await page.getByLabel("Strudel code editor").waitFor();
   await panel
     .getByRole("spinbutton", { name: "level knob", exact: true })
@@ -132,8 +118,8 @@ try {
     panel.getByRole("spinbutton", { name: "level knob" }),
   ).toHaveCount(1);
   await expect(
-    page.getByRole("button", { name: "Ask Wien", exact: true }),
-  ).toBeDisabled();
+    page.getByRole("button", { name: "Ask Assist", exact: true }),
+  ).toHaveCount(0);
   await page.keyboard.press(
     process.platform === "darwin" ? "Meta+," : "Control+,",
   );
@@ -162,9 +148,7 @@ try {
   await expect(
     page.getByRole("button", { name: "Stop playback" }),
   ).toBeEnabled();
-  await expect(
-    page.getByRole("button", { name: /^Update main.strudel/ }),
-  ).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Update/ })).toBeVisible();
   await panel
     .getByRole("spinbutton", { name: "level knob" })
     .last()
@@ -177,7 +161,7 @@ try {
   );
   await page.getByRole("button", { name: "Stop playback" }).click();
   await search.fill("");
-  await hide("lib/a.strudel");
+  await toggleGroup("lib/a.strudel");
   await expect(
     panel.getByRole("spinbutton", { name: "level knob", exact: true }),
   ).toHaveCount(1);
@@ -197,19 +181,21 @@ try {
   );
 
   await expect(
-    panel.getByRole("region", { name: "lib/a.strudel controls", exact: true }),
-  ).toHaveCount(0);
+    panel.getByRole("button", {
+      name: "Toggle lib/a.strudel group",
+      exact: true,
+    }),
+  ).toHaveAttribute("aria-expanded", "false");
   await collapse();
   await mode("sidebar");
   await expect(
-    panel.getByRole("region", { name: "lib/a.strudel controls", exact: true }),
-  ).toHaveCount(0);
+    panel.getByRole("button", {
+      name: "Toggle lib/a.strudel group",
+      exact: true,
+    }),
+  ).toHaveAttribute("aria-expanded", "false");
   await expand();
-  await expect(
-    panel.getByRole("button", { name: "Hidden groups (1)" }),
-  ).toBeVisible();
-  await panel.getByRole("button", { name: "Hidden groups (1)" }).click();
-  await panel.getByRole("button", { name: /^Restore/ }).click();
+  await toggleGroup("lib/a.strudel");
   await expect(
     panel.getByRole("alert").filter({ hasText: "broken" }),
   ).toHaveCount(1);
@@ -251,7 +237,7 @@ try {
   await expand();
   await expect(
     page.getByRole("button", {
-      name: /^Play lib\/shared.strudel|^Play shared.strudel/,
+      name: /^Play/,
     }),
   ).toBeVisible();
   await definition();
@@ -332,7 +318,7 @@ try {
   await panel
     .getByRole("button", { name: "Pin as master", exact: true })
     .click();
-  await hide("lib/late.strudel");
+  await toggleGroup("lib/late.strudel");
   await page
     .getByRole("button", { name: "missing-master.strudel", exact: true })
     .click({ button: "right" });
@@ -349,11 +335,11 @@ try {
     "renamed.strudel",
   );
   await expect(
-    panel.getByRole("region", {
-      name: "lib/late.strudel controls",
+    panel.getByRole("button", {
+      name: "Toggle lib/late.strudel group",
       exact: true,
     }),
-  ).toHaveCount(0);
+  ).toHaveAttribute("aria-expanded", "false");
   await expect
     .poll(
       async () =>
@@ -385,14 +371,9 @@ try {
   await expand();
   await mode("fullscreen");
   await expect(
-    page.getByRole("button", { name: "Close controls", exact: true }),
+    page.getByRole("button", { name: "Exit fullscreen", exact: true }),
   ).toBeVisible();
-  await panel
-    .getByRole("spinbutton", { name: "rootAmount knob" })
-    .click({ button: "right" });
-  await page
-    .getByRole("menuitem", { name: "Go to declaration", exact: true })
-    .click();
+  await panel.getByRole("button", { name: "rootAmount", exact: true }).click();
   await mode("sidebar");
   await page
     .getByRole("button", { name: "Close renamed.strudel", exact: true })

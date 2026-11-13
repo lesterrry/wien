@@ -2,6 +2,7 @@ import { X } from "lucide-react";
 import { useRef } from "react";
 import type { NumberControl } from "../../../../shared/controls";
 import { useNumericWheel } from "../../hooks/useNumericWheel";
+import { ControlTitle } from "../ControlTitle/ControlTitle";
 import styles from "./NumberKnob.module.css";
 
 const numberFormat = new Intl.NumberFormat("en-US", {
@@ -14,11 +15,13 @@ export function NumberKnob({
   disabled,
   onChange,
   onIgnore,
+  onDefinition,
 }: {
   control: NumberControl;
   disabled: boolean;
   onChange: (name: string, value: number) => void;
   onIgnore?: (name: string) => void;
+  onDefinition?: (name: string) => void;
 }) {
   const { name, value, integer } = control;
   const step = integer ? 1 : 0.01;
@@ -43,9 +46,12 @@ export function NumberKnob({
   return (
     <div className={styles.numberControl}>
       <div className={styles.controlHeading}>
-        <span className={styles.controlName} title={name}>
-          {name}
-        </span>
+        <ControlTitle
+          className={styles.controlName}
+          name={name}
+          disabled={disabled}
+          onDefinition={onDefinition}
+        />
         {onIgnore && (
           <button
             type="button"

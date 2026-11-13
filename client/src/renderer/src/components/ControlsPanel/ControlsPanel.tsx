@@ -7,7 +7,8 @@ import {
   Pin,
   SlidersHorizontal,
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
+import { primaryModifier } from "../../../../shared/commands";
 import {
   type ControlGroup,
   flatPanelLayout,
@@ -19,6 +20,7 @@ import type {
   ControlChange,
   ControlValue,
 } from "../../../../shared/controls";
+import { shortcutEnvironment } from "../../commands";
 import { BooleanSwitch } from "../BooleanSwitch/BooleanSwitch";
 import { EnumSwitch } from "../EnumSwitch/EnumSwitch";
 import { MultiSelect } from "../MultiSelect/MultiSelect";
@@ -30,6 +32,7 @@ interface ControlCallbacks {
   disabled: boolean;
   onChange: (name: string, change: ControlChange) => void;
   onIgnore?: (name: string) => void;
+  onDefinition?: (name: string) => void;
 }
 
 export function ControlInput({
@@ -37,8 +40,9 @@ export function ControlInput({
   disabled,
   onChange,
   onIgnore,
+  onDefinition,
 }: ControlCallbacks & { control: Control }) {
-  const props = { disabled, onIgnore };
+  const props = { disabled, onIgnore, onDefinition };
   const setValue = (name: string, value: ControlValue) =>
     onChange(name, { type: "set", value });
   switch (control.kind) {
@@ -59,12 +63,6 @@ export function ControlInput({
   }
 }
 
-type Menu = { x: number; y: number } & (
-  | { kind: "control"; path: string; control: Control }
-  | { kind: "composition"; path: string; name: string }
-  | { kind: "group"; group: ControlGroup }
-);
-
 export function ControlsPanel({
   tree,
   root,
@@ -82,9 +80,11 @@ export function ControlsPanel({
   onOpenController,
   onReloadSource,
   fullscreen,
+  headerActions,
   visible,
 }: {
   fullscreen: boolean;
+  headerActions?: ReactNode;
   visible: boolean;
   tree: ControlGroup | null;
   root: string | null;
@@ -121,36 +121,17 @@ export function ControlsPanel({
       list.current.scrollTop =
         scrollPositions.current[fullscreen ? "fullscreen" : "sidebar"];
   }, [fullscreen]);
-  const shortcut = navigator.platform.includes("Mac") ? "⌥" : "Alt";
+  const modifier = primaryModifier(shortcutEnvironment);
+  const shortcut =
+    modifier === "Meta" ? "⌘" : modifier === "Control" ? "Ctrl" : "Alt";
   const [search, setSearch] = useState("");
-  const [menu, setMenu] = useState<Menu | null>(null);
-  const [showHidden, setShowHidden] = useState(false);
-  useEffect(() => {
-    if (!menu) return;
-    const close = () => setMenu(null);
-    const key = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
-    };
-    window.addEventListener("click", close);
-    window.addEventListener("blur", close);
-    window.addEventListener("keydown", key);
-    return () => {
-      window.removeEventListener("click", close);
-      window.removeEventListener("blur", close);
-      window.removeEventListener("keydown", key);
-    };
-  }, [menu]);
-  useEffect(() => {
-    if (!visible) setMenu(null);
-  }, [visible]);
   const query = search.trim().toLocaleLowerCase();
   const groups = tree ? flattenControlGroups(tree) : [];
   const layout = flatPanelLayout(savedLayout, groups);
-  const hidden = groups.filter((group) => layout.hidden[group.id]);
   const matches = (path: string, name: string) =>
     `${path} ${name}`.toLocaleLowerCase().includes(query);
   function contains(group: ControlGroup): boolean {
-    if (layout.hidden[group.id]) return false;
+    if (!group.controls.length) return false;
     return (
       !query ||
       matches(group.path, "") ||
@@ -159,8 +140,7 @@ export function ControlsPanel({
         group.compositions?.some((composition) =>
           matches(group.path, composition.name),
         ),
-      ) ||
-      Boolean(group.issues?.some((issue) => matches(group.path, issue.name)))
+      )
     );
   }
   const matchingGroups = groups.filter(contains);
@@ -214,27 +194,31 @@ export function ControlsPanel({
             });
           }}
           onDragEnd={() => setDrag(null)}
-          onKeyDown={(event) => {
-            if (event.target !== event.currentTarget) return;
-            if (disabled || !event.altKey) return;
-            if (event.key === "ArrowUp" && index > 0) {
-              event.preventDefault();
-              onMove(
-                group.path,
-                control.name,
-                siblings[index - 1].name,
-                "before",
-              );
-            }
-            if (event.key === "ArrowDown" && index < siblings.length - 1) {
-              event.preventDefault();
-              onMove(
-                group.path,
-                control.name,
-                siblings[index + 1].name,
-                "after",
-              );
-            }
+          data-control-move=""
+          data-move-up={!disabled && index > 0}
+          data-move-down={!disabled && index < siblings.length - 1}
+          ref={(node) => {
+            if (!node) return;
+            const move = (event: Event) => {
+              if (disabled) return;
+              const direction = (event as CustomEvent<string>).detail;
+              if (direction === "up" && index > 0)
+                onMove(
+                  group.path,
+                  control.name,
+                  siblings[index - 1].name,
+                  "before",
+                );
+              if (direction === "down" && index < siblings.length - 1)
+                onMove(
+                  group.path,
+                  control.name,
+                  siblings[index + 1].name,
+                  "after",
+                );
+            };
+            node.addEventListener("wien:move-control", move);
+            return () => node.removeEventListener("wien:move-control", move);
           }}
           onDragOver={(event) => {
             if (
@@ -271,22 +255,13 @@ export function ControlsPanel({
             onMove(group.path, drag.name, control.name, side);
             setDrag(null);
           }}
-          onContextMenu={(event) => {
-            event.preventDefault();
-            setMenu({
-              kind: "control",
-              path: group.path,
-              control,
-              x: Math.min(event.clientX, window.innerWidth - 210),
-              y: Math.min(event.clientY, window.innerHeight - 90),
-            });
-          }}
         >
           <ControlInput
             control={control}
             disabled={disabled}
             onChange={(name, change) => onChange(group.path, name, change)}
             onIgnore={(name) => onIgnore(group.path, name)}
+            onDefinition={(name) => onDefinition(group.path, name)}
           />
           {error && (
             <p role="alert" className={styles.issue}>
@@ -321,18 +296,14 @@ export function ControlsPanel({
               collapsed: { ...layout.collapsed, [group.id]: !collapsed },
             })
           }
-          onContextMenu={(event) => {
-            event.preventDefault();
-            setMenu({
-              kind: "group",
-              group,
-              x: Math.min(event.clientX, window.innerWidth - 210),
-              y: Math.min(event.clientY, window.innerHeight - 90),
-            });
-          }}
         >
           {collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
-          <span>{group.path.split("/").at(-1)}</span>
+          <span>
+            <span className={styles.parentPath}>
+              {group.path.slice(0, group.path.lastIndexOf("/") + 1)}
+            </span>
+            {group.path.split("/").at(-1)}
+          </span>
         </button>
         {!collapsed && (
           <div className={styles.groupBody}>
@@ -405,16 +376,6 @@ export function ControlsPanel({
                       onClick={() => onDefinition(group.path, composition.name)}
                       className={styles.compositionHeading}
                       title={composition.name}
-                      onContextMenu={(event) => {
-                        event.preventDefault();
-                        setMenu({
-                          kind: "composition",
-                          path: group.path,
-                          name: composition.name,
-                          x: Math.min(event.clientX, window.innerWidth - 210),
-                          y: Math.min(event.clientY, window.innerHeight - 90),
-                        });
-                      }}
                     >
                       {composition.name}
                     </button>
@@ -423,13 +384,6 @@ export function ControlsPanel({
                 );
               })}
             </div>
-            {!group.controls.length &&
-              !group.error &&
-              !group.issues?.length && (
-                <p className={styles.controlsEmpty}>
-                  No controls in this file.
-                </p>
-              )}
           </div>
         )}
       </section>
@@ -448,12 +402,13 @@ export function ControlsPanel({
         <SlidersHorizontal size={14} />
         <span>Controls</span>
         {loading && <small>Updating…</small>}
+        {headerActions}
         <button
           type="button"
           className={styles.controllerButton}
-          title={fullscreen ? "Collapse controls" : "Open full controls"}
-          aria-label={fullscreen ? "Collapse controls" : "Open full controls"}
-          disabled={!root || disabled}
+          title={fullscreen ? "Exit fullscreen" : "Open full controls"}
+          aria-label={fullscreen ? "Exit fullscreen" : "Open full controls"}
+          disabled={!fullscreen && (!root || disabled)}
           onClick={onOpenController}
         >
           {fullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
@@ -499,80 +454,34 @@ export function ControlsPanel({
               : "Open a snippet to see its controls."}
           </p>
         )}
-        {tree && !groups.some(contains) && (
-          <p className={styles.controlsEmpty}>No matching controls.</p>
+        {groups
+          .filter(
+            (group) =>
+              !group.controls.length && (group.error || group.issues?.length),
+          )
+          .map((group) => (
+            <div key={group.id}>
+              {group.error && (
+                <p role="alert" className={styles.issue}>
+                  {group.path}: {group.error}
+                </p>
+              )}
+              {group.issues?.map((issue) => (
+                <p key={issue.name} role="alert" className={styles.issue}>
+                  {group.path} · <strong>{issue.name}</strong>: {issue.message}
+                </p>
+              ))}
+            </div>
+          ))}
+        {tree && !matchingGroups.length && (
+          <p className={styles.controlsEmpty}>
+            {query ? "No matching controls." : "No controls in these files."}
+          </p>
         )}
       </div>
-      {hidden.length > 0 && (
-        <div className={styles.hiddenGroups}>
-          <button
-            type="button"
-            aria-expanded={showHidden}
-            onClick={() => setShowHidden(!showHidden)}
-          >
-            Hidden groups ({hidden.length})
-          </button>
-          {showHidden &&
-            hidden.map((group) => (
-              <button
-                key={group.id}
-                type="button"
-                title={JSON.parse(group.id).join(" → ")}
-                onClick={() =>
-                  onLayout({
-                    ...layout,
-                    hidden: { ...layout.hidden, [group.id]: false },
-                  })
-                }
-              >
-                Restore {JSON.parse(group.id).join(" → ")}
-              </button>
-            ))}
-        </div>
-      )}
       <div className={styles.controlsHint}>
-        Right-click a control to go to its declaration.
-        <br />
-        Changes are saved in the source file.
+        Click control title to go to its declaration
       </div>
-      {menu && (
-        <div
-          role="menu"
-          className={styles.menu}
-          style={{ left: menu.x, top: menu.y }}
-        >
-          {menu.kind !== "group" ? (
-            <button
-              type="button"
-              role="menuitem"
-              disabled={disabled}
-              onClick={() => {
-                onDefinition(
-                  menu.path,
-                  menu.kind === "control" ? menu.control.name : menu.name,
-                );
-                setMenu(null);
-              }}
-            >
-              Go to declaration
-            </button>
-          ) : (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                onLayout({
-                  ...layout,
-                  hidden: { ...layout.hidden, [menu.group.id]: true },
-                });
-                setMenu(null);
-              }}
-            >
-              Hide group
-            </button>
-          )}
-        </div>
-      )}
     </aside>
   );
 }

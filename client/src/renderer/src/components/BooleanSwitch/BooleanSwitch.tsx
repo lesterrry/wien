@@ -1,5 +1,6 @@
 import { X } from "lucide-react";
 import type { BooleanControl } from "../../../../shared/controls";
+import { ControlTitle } from "../ControlTitle/ControlTitle";
 import styles from "./BooleanSwitch.module.css";
 
 export function BooleanSwitch({
@@ -7,19 +8,24 @@ export function BooleanSwitch({
   disabled,
   onChange,
   onIgnore,
+  onDefinition,
 }: {
   control: BooleanControl;
   disabled: boolean;
   onChange: (name: string, value: boolean) => void;
   onIgnore?: (name: string) => void;
+  onDefinition?: (name: string) => void;
 }) {
   const { name, value } = control;
   return (
     <div className={styles.booleanControl}>
       <div className={styles.controlHeading}>
-        <span className={styles.controlName} title={name}>
-          {name}
-        </span>
+        <ControlTitle
+          className={styles.controlName}
+          name={name}
+          disabled={disabled}
+          onDefinition={onDefinition}
+        />
         {onIgnore && (
           <button
             type="button"

@@ -65,7 +65,7 @@ stack(drums, bass, effectedLead)
 `,
   "first-light.strudel": `// First light
 // A composition made from reusable snippets.
-// Press ⌘ Enter to play or update. ⌘ . to stop.
+// Use Playback > Play / Update to start, and Playback > Stop Current to stop.
 
 import glass from './instruments/glass.strudel'
 
