@@ -1,5 +1,6 @@
-import { X } from "lucide-react";
 import type { BooleanControl } from "../../../../shared/controls";
+import { ControlActions } from "../ControlActions/ControlActions";
+import { ControlTitle } from "../ControlTitle/ControlTitle";
 import styles from "./BooleanSwitch.module.css";
 
 export function BooleanSwitch({
@@ -7,31 +8,35 @@ export function BooleanSwitch({
   disabled,
   onChange,
   onIgnore,
+  onDefinition,
+  onConfigure,
+  onReset,
 }: {
   control: BooleanControl;
   disabled: boolean;
   onChange: (name: string, value: boolean) => void;
   onIgnore?: (name: string) => void;
+  onDefinition?: (name: string) => void;
+  onConfigure?: (name: string) => void;
+  onReset?: () => void;
 }) {
   const { name, value } = control;
   return (
-    <div className={styles.booleanControl}>
+    <div className={styles.booleanControl} data-control-card>
       <div className={styles.controlHeading}>
-        <span className={styles.controlName} title={name}>
-          {name}
-        </span>
-        {onIgnore && (
-          <button
-            type="button"
-            className={styles.iconButton}
-            disabled={disabled}
-            aria-label={`Hide ${name} control`}
-            title="Hide control · adds //@ignore"
-            onClick={() => onIgnore(name)}
-          >
-            <X size={13} />
-          </button>
-        )}
+        <ControlTitle
+          className={styles.controlName}
+          name={name}
+          disabled={disabled}
+          onDefinition={onDefinition}
+        />
+        <ControlActions
+          name={name}
+          disabled={disabled}
+          onReset={onReset}
+          onConfigure={onConfigure}
+          onIgnore={onIgnore}
+        />
       </div>
       <div className={styles.controlBody}>
         <button

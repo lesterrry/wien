@@ -1,9 +1,11 @@
-import { Check, GripVertical, X } from "lucide-react";
+import { Check, GripVertical } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   ControlChange,
   MultiEnumControl,
 } from "../../../../shared/controls";
+import { ControlActions } from "../ControlActions/ControlActions";
+import { ControlTitle } from "../ControlTitle/ControlTitle";
 import styles from "./MultiSelect.module.css";
 
 interface Drag {
@@ -18,11 +20,17 @@ export function MultiSelect({
   disabled,
   onChange,
   onIgnore,
+  onDefinition,
+  onConfigure,
+  onReset,
 }: {
   control: MultiEnumControl;
   disabled: boolean;
   onChange: (name: string, value: ControlChange) => void;
   onIgnore?: (name: string) => void;
+  onDefinition?: (name: string) => void;
+  onConfigure?: (name: string) => void;
+  onReset?: () => void;
 }) {
   const group = useRef<HTMLFieldSetElement>(null);
   const pending = useRef<{ key: string; x: number; y: number } | null>(null);
@@ -108,23 +116,21 @@ export function MultiSelect({
   const before = drag ? remaining[drag.index] : undefined;
 
   return (
-    <div className={styles.card}>
+    <div className={styles.card} data-control-card>
       <div className={styles.heading}>
-        <span className={styles.name} title={control.name}>
-          {control.name}
-        </span>
-        {onIgnore && (
-          <button
-            type="button"
-            className={styles.iconButton}
-            disabled={disabled}
-            aria-label={`Hide ${control.name} control`}
-            title="Hide control · adds //@ignore"
-            onClick={() => onIgnore(control.name)}
-          >
-            <X size={13} />
-          </button>
-        )}
+        <ControlTitle
+          className={styles.name}
+          name={control.name}
+          disabled={disabled}
+          onDefinition={onDefinition}
+        />
+        <ControlActions
+          name={control.name}
+          disabled={disabled}
+          onReset={onReset}
+          onConfigure={onConfigure}
+          onIgnore={onIgnore}
+        />
       </div>
       <fieldset
         ref={group}

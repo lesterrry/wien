@@ -1,0 +1,23 @@
+const Bank = Object.freeze({ Synth: 'synth', TR808: 'RolandTR808', TR909: 'RolandTR909', Linn: 'AkaiLinn' })
+const drumBank = Bank.Synth // @default Bank.Synth
+// @default 0.32
+const kickLevel = 0.32 // @knob step=0.01 min=0 max=0.5
+// @default 0.14
+const snareLevel = 0.14 // @slider 0..0.3
+// @default 0.055
+const hatLevel = 0.055 // @slider vertical 0..0.12
+// @default 0.16
+const swing = 0.16 // @slider 0..0.4
+const mixer = {drumBank, kickLevel, snareLevel, hatLevel, swing}
+
+const synth = stack(
+  s("sbd*4").decay(0.15).gain(kickLevel),
+  s("~ white ~ white").bpf(1800).decay(0.08).gain(snareLevel),
+  s("~ white ~ white ~ white [white white] white").hpf(7500).decay(0.025).gain(hatLevel)
+).sustain(0)
+const sampled = stack(
+  s("bd*4").gain(kickLevel),
+  s("~ sd ~ sd").gain(snareLevel),
+  s("~ hh ~ hh ~ hh [hh hh] oh").gain(hatLevel)
+).bank(drumBank)
+export default (drumBank === Bank.Synth ? synth : sampled).swingBy(swing, 4)

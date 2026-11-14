@@ -1,4 +1,5 @@
-import { Compartment, EditorState, StateEffect } from "@codemirror/state";
+import { isolateHistory } from "@codemirror/commands";
+import { Compartment, EditorState, Prec, StateEffect } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { type ReplState, StrudelMirror } from "@strudel/codemirror";
 import * as core from "@strudel/core";
@@ -10,9 +11,11 @@ import { getAudioContext, initAudio, webaudioOutput } from "@strudel/webaudio";
 import classNames from "classnames";
 import { useEffect, useRef, useState } from "react";
 import { useDrop } from "react-dnd";
+import type { ControlCustomization } from "../../../../shared/control-customizations";
 import {
   type ControlChange,
   changeControl,
+  configureControl,
   ignoreControl,
   moveControl,
   readControls,
@@ -29,12 +32,17 @@ import styles from "./StrudelEditor.module.css";
 export interface Player {
   assist(placement?: AssistantPlacement): void;
   play(): Promise<void>;
-  update(): Promise<void>;
+  update(options?: { flash?: boolean }): Promise<void>;
   dependsOn(path: string): boolean;
   revealControl(name: string): void;
   stop(): Promise<void>;
   replaceCode(code: string): void;
   changeControl(name: string, value: ControlChange): void;
+  configureControl(
+    name: string,
+    settings: ControlCustomization,
+    expected: ControlCustomization,
+  ): void;
   ignoreControl(name: string): void;
   moveControl(
     name: string,
@@ -118,7 +126,7 @@ export function StrudelEditor({
     let alive = true;
     let generation = 0;
     let evaluationGeneration = 0;
-    let requested: boolean | null = null;
+    let requested: { autostart: boolean; flash: boolean } | null = null;
     let evaluating: Promise<void> | undefined;
     let evaluationCode: string | undefined;
     let compiled: ReturnType<typeof compileGraph> | undefined;
@@ -177,6 +185,21 @@ export function StrudelEditor({
     mirror.setLineWrappingEnabled(true);
     mirror.editor.dispatch({
       effects: StateEffect.appendConfig.of([
+        // Wien owns playback shortcuts. Keep Strudel's legacy bindings from
+        // bypassing the platform modifier policy; allow normal text input.
+        Prec.highest(
+          EditorView.domEventHandlers({
+            keydown: (event) =>
+              !event.metaKey &&
+              !event.shiftKey &&
+              ((event.ctrlKey &&
+                !event.altKey &&
+                ["Enter", "Period"].includes(event.code)) ||
+                (event.altKey &&
+                  !event.ctrlKey &&
+                  ["Enter", "Period", "KeyQ", "KeyW"].includes(event.code))),
+          }),
+        ),
         readOnly.current.of([]),
         EditorView.updateListener.of((update) => {
           if (update.docChanged)
@@ -194,12 +217,15 @@ export function StrudelEditor({
     // starting playback again if Stop was pressed during an async evaluation.
     const evaluateMirror = mirror.evaluate.bind(mirror);
     const stopMirror = mirror.stop.bind(mirror);
-    const evaluate = (autostart: boolean): Promise<void> => {
-      requested = requested === true || autostart;
+    const evaluate = (autostart: boolean, flash = true): Promise<void> => {
+      requested = {
+        autostart: Boolean(requested?.autostart) || autostart,
+        flash: Boolean(requested?.flash) || flash,
+      };
       if (evaluating) return evaluating;
       const drain = async () => {
         while (alive && requested !== null) {
-          const start = requested;
+          const { autostart: start, flash } = requested;
           requested = null;
           if (!start && !mirror.repl.state.started) continue;
           const token = generation;
@@ -207,7 +233,8 @@ export function StrudelEditor({
             if (!alive || token !== generation) return;
             evaluationGeneration = token;
             evaluationCode = mirror.code;
-            await evaluateMirror(false);
+            if (flash) await evaluateMirror(false);
+            else await mirror.repl.evaluate(mirror.code, false);
             if (
               alive &&
               token === generation &&
@@ -241,7 +268,7 @@ export function StrudelEditor({
         setAssistantInvocation((value) => value + 1);
       },
       play: () => evaluate(true),
-      update: () => evaluate(false),
+      update: (options) => evaluate(false, options?.flash ?? true),
       dependsOn: (file) => dependencies.has(file),
       revealControl: (name) => {
         const result = readControls(mirror.code);
@@ -262,11 +289,22 @@ export function StrudelEditor({
         if (!edit) return;
         mirror.editor.dispatch({
           changes: { from: edit.start, to: edit.end, insert: edit.text },
+          annotations:
+            change.type === "reset" ? isolateHistory.of("full") : undefined,
           userEvent:
-            change.type === "reorder" || Array.isArray(change.value)
+            change.type !== "set" || Array.isArray(change.value)
               ? "input.control"
               : undefined,
         });
+      },
+      configureControl: (name, settings, expected) => {
+        const edit = configureControl(mirror.code, name, settings, expected);
+        if (edit)
+          mirror.editor.dispatch({
+            changes: { from: edit.start, to: edit.end, insert: edit.text },
+            userEvent: "input.control.settings",
+            annotations: isolateHistory.of("full"),
+          });
       },
       ignoreControl: (name) => {
         const edit = ignoreControl(mirror.code, name);

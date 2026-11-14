@@ -3,8 +3,10 @@ import * as fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { _electron as electron, expect } from "@playwright/test";
+import { seedWorkspace } from "./fixtures/workspace.mjs";
 
 const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "wien-background-"));
+await seedWorkspace(temporary);
 const environment = { ...process.env, WIEN_USER_DATA: temporary };
 delete environment.ELECTRON_RUN_AS_NODE;
 const mod = process.platform === "darwin" ? "Meta" : "Control";
@@ -33,7 +35,7 @@ try {
     await page.keyboard.insertText(text);
   }
   const low =
-    'const gain = 0.06;\nsetcpm(120);\nfreq(220).s("sine").gain(gain).release(0.01)';
+    'const gain = 0.06; // @knob step=0.01\nsetcpm(120);\nfreq(220).s("sine").gain(gain).release(0.01)';
   const high = 'setcpm(60);\nfreq(1760).s("sine").gain(0.06).release(0.01)';
   await code.waitFor();
   await page

@@ -39,6 +39,7 @@
   );
   --color-primary-hover: color-mix(in srgb, var(--color-primary) 90%, white);
   --color-brand-glow: color-mix(in srgb, var(--color-brand) 25%, transparent);
+  --control-glow: drop-shadow(0 0 3px var(--color-brand));
   --color-active-line: color-mix(in srgb, var(--color-primary) 2%, transparent);
   --color-danger-subtle: color-mix(
     in srgb,

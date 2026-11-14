@@ -5,6 +5,7 @@ import type {
   UserProfile,
 } from "./account";
 import type { AssistRequest, AssistResult } from "./assistant";
+import type { CommandId, CommandState } from "./commands";
 import type { PanelPreferences } from "./control-tree";
 import type { ModuleGraph } from "./modules";
 
@@ -35,7 +36,10 @@ export interface VersionEntry {
 
 export interface WorkspaceApi {
   platform: "desktop" | "web";
+  onMenuCommand?(callback: (command: CommandId) => void): () => void;
+  updateMenuState?(state: CommandState): void;
   exportProject?(): Promise<void>;
+  saveAudio(name: string, data: ArrayBuffer): Promise<boolean>;
   accountCurrent(): Promise<UserProfile | null>;
   accountRegister?(credentials: Registration): Promise<UserProfile>;
   accountLogin(credentials: Credentials): Promise<UserProfile>;
@@ -55,8 +59,10 @@ export interface WorkspaceApi {
     preferences: PanelPreferences,
   ): Promise<void>;
   current(): Promise<Project>;
+  onProjectChanged(callback: (root: string) => void): () => void;
   open(): Promise<Project | null>;
-  create(): Promise<Project | null>;
+  examples(): Promise<string[]>;
+  create(example?: string): Promise<Project | null>;
   read(path: string): Promise<string>;
   save(request: SaveRequest): Promise<void>;
   graph(path: string, code: string): Promise<ModuleGraph>;

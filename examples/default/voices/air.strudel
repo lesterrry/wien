@@ -1,0 +1,6 @@
+// A barely audible breath between mechanical phrases.
+// @default 0.012
+const level = 0.012 // @slider 0..0.04
+export default s("pink ~ ~ ~").slow(4).attack(0.6).decay(1.2).sustain(0).release(0.5)
+  .bpf(sine.range(1200, 4000).slow(16)).bpq(1.5).hpf(600)
+  .pan(sine.range(-0.7, 0.7).slow(13)).room(0.45).roomsize(4).orbit(5).gain(level)

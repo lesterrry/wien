@@ -3,6 +3,16 @@ import type { WorkspaceApi } from "../shared/types";
 
 const api: WorkspaceApi = {
   platform: "desktop",
+  saveAudio: (name, data) => ipcRenderer.invoke("audio:save", name, data),
+  onMenuCommand: (callback) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      command: Parameters<typeof callback>[0],
+    ) => callback(command);
+    ipcRenderer.on("menu:command", listener);
+    return () => ipcRenderer.removeListener("menu:command", listener);
+  },
+  updateMenuState: (state) => ipcRenderer.send("menu:state", state),
   accountCurrent: () => ipcRenderer.invoke("account:current"),
   accountLogin: (credentials) =>
     ipcRenderer.invoke("account:login", credentials),
@@ -22,8 +32,15 @@ const api: WorkspaceApi = {
   saveControlPreferences: (root, preferences) =>
     ipcRenderer.invoke("project:controls:save", root, preferences),
   current: () => ipcRenderer.invoke("project:current"),
+  onProjectChanged: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, root: string) =>
+      callback(root);
+    ipcRenderer.on("project:changed", listener);
+    return () => ipcRenderer.removeListener("project:changed", listener);
+  },
   open: () => ipcRenderer.invoke("project:open"),
-  create: () => ipcRenderer.invoke("project:create"),
+  examples: () => ipcRenderer.invoke("project:examples"),
+  create: (example) => ipcRenderer.invoke("project:create", example),
   read: (path) => ipcRenderer.invoke("project:read", path),
   save: (request) => ipcRenderer.invoke("project:save", request),
   graph: (path, code) => ipcRenderer.invoke("project:graph", path, code),

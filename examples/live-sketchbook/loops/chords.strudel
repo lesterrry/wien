@@ -1,0 +1,9 @@
+// Importable AND independently playable; imported tempo calls are ignored.
+// Try Assist: "Make only the chord voicing more suspended, keep the controls."
+const bpm = 102 // @ignore
+// @default 0.09
+const level = 0.09 // @slider 0..0.2
+setcpm(bpm / 4)
+export default note("<[c4,e4,b4] [a3,c4,g4] [f3,a3,e4] [g3,b3,d4]>")
+  .s("triangle").attack(0.02).decay(0.55).sustain(0).release(0.15)
+  .lpf(1900).room(0.15).orbit(2).gain(level)

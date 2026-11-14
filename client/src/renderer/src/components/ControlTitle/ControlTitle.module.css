@@ -1,0 +1,14 @@
+.title {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.title:hover:not(:disabled) {
+  text-decoration: underline;
+}

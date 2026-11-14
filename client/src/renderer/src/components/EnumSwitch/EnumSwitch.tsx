@@ -1,6 +1,7 @@
-import { X } from "lucide-react";
 import { useId, useRef } from "react";
 import type { EnumControl } from "../../../../shared/controls";
+import { ControlActions } from "../ControlActions/ControlActions";
+import { ControlTitle } from "../ControlTitle/ControlTitle";
 import styles from "./EnumSwitch.module.css";
 
 export function EnumSwitch({
@@ -8,11 +9,17 @@ export function EnumSwitch({
   disabled,
   onChange,
   onIgnore,
+  onDefinition,
+  onConfigure,
+  onReset,
 }: {
   control: EnumControl;
   disabled: boolean;
   onChange: (name: string, value: string | number) => void;
   onIgnore?: (name: string) => void;
+  onDefinition?: (name: string) => void;
+  onConfigure?: (name: string) => void;
+  onReset?: () => void;
 }) {
   const groupId = useId();
   const rail = useRef<HTMLDivElement>(null);
@@ -44,23 +51,21 @@ export function EnumSwitch({
     select(closest);
   };
   return (
-    <div className={styles.enumControl}>
+    <div className={styles.enumControl} data-control-card>
       <div className={styles.controlHeading}>
-        <span className={styles.controlName} title={control.name}>
-          {control.name}
-        </span>
-        {onIgnore && (
-          <button
-            type="button"
-            className={styles.iconButton}
-            disabled={disabled}
-            aria-label={`Hide ${control.name} control`}
-            title="Hide control · adds //@ignore"
-            onClick={() => onIgnore(control.name)}
-          >
-            <X size={13} />
-          </button>
-        )}
+        <ControlTitle
+          className={styles.controlName}
+          name={control.name}
+          disabled={disabled}
+          onDefinition={onDefinition}
+        />
+        <ControlActions
+          name={control.name}
+          disabled={disabled}
+          onReset={onReset}
+          onConfigure={onConfigure}
+          onIgnore={onIgnore}
+        />
       </div>
       <div className={styles.scroll}>
         <div

@@ -1,0 +1,14 @@
+// Sub attacks sit in the kick's gaps; short tails keep the break intelligible.
+// @default 0.25
+const level = 0.25 // @knob step=0.01 min=0 max=0.4
+// @default 560
+const bite = 560 // @slider 100..1800
+const lowEnd = {level, bite}
+
+export default cat(
+  note("~ f#1 ~ ~ c#2 ~ f#1 ~"), note("f#1 ~ ~ e2 ~ c#2 ~ ~"),
+  note("~ d2 ~ ~ a1 ~ d2 ~"), note("d2 ~ ~ c#2 ~ a1 ~ ~"),
+  note("~ a1 ~ ~ e2 ~ a1 ~"), note("a1 ~ ~ g#1 ~ e2 ~ ~"),
+  note("~ e2 ~ ~ b1 ~ e2 ~"), note("e2 ~ b1 ~ ~ c#2 ~ ~")
+).s("triangle").attack(0.003).decay(0.22).sustain(0).release(0.04)
+  .lpf(bite).hpf(28).gain(level).orbit(0)

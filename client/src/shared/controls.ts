@@ -1,7 +1,23 @@
 import { type Comment, type Expression, parse } from "acorn";
-import { isControlAnnotation, sliderSettings } from "./control-annotations";
+import {
+  type ControlCustomization,
+  customizationAnnotation,
+  customizationNumericValue,
+  initialCustomization,
+  isControlAnnotation,
+  knobSettings,
+  multiSettings,
+  sliderSettings,
+} from "./control-customizations";
+import {
+  canResetControl,
+  defaultExpression,
+  isDefaultAnnotation,
+  parseControlDefault,
+} from "./control-defaults";
+import { type KnobSettings, normalizeKnobValue } from "./knob";
 import { bindingNames, type Edit, editSource } from "./modules";
-import { multiAnnotation, multiSettings } from "./multi-annotations";
+import { multiAnnotation } from "./multi-annotations";
 import { validateSliderRange } from "./slider";
 
 interface ControlSource {
@@ -9,6 +25,8 @@ interface ControlSource {
   start: number;
   end: number;
   ignoreAt: number;
+  defaultExpression?: string;
+  defaultValue?: ControlValue;
 }
 
 interface NumericControl extends ControlSource {
@@ -21,7 +39,7 @@ interface EnumSource extends ControlSource {
   options: { key: string; value: string | number }[];
 }
 
-export interface NumberControl extends NumericControl {
+export interface NumberControl extends NumericControl, KnobSettings {
   kind: "number";
 }
 
@@ -35,7 +53,6 @@ export interface SliderControl extends NumericControl {
   presentation: "horizontal" | "vertical";
   min: number;
   max: number;
-  style?: string;
 }
 
 export interface EnumControl extends EnumSource {
@@ -59,7 +76,8 @@ export type ControlValue =
 
 export type ControlChange =
   | { type: "set"; value: ControlValue }
-  | { type: "reorder"; order: readonly string[] };
+  | { type: "reorder"; order: readonly string[] }
+  | { type: "reset" };
 export type Control =
   | NumberControl
   | BooleanControl
@@ -355,6 +373,7 @@ export function readControls(code: string): {
     });
     const annotationsFor = bindControlAnnotations(code, comments);
     const controls: Control[] = [];
+    const defaults = new Map<number, string[]>();
     const errors: string[] = [];
     const issues: { name: string; message: string }[] = [];
     const candidates: ControlComposition[] = [];
@@ -412,11 +431,15 @@ export function readControls(code: string): {
           item.start,
           item.end,
         );
-        const annotations = annotationComments.map((comment) =>
+        const allAnnotations = annotationComments.map((comment) =>
           comment.value.trim(),
+        );
+        const annotations = allAnnotations.filter(
+          (text) => !isDefaultAnnotation(text),
         );
         if (!item.init || annotations.includes("@ignore")) continue;
         const start = item.init.start;
+        defaults.set(start, allAnnotations.filter(isDefaultAnnotation));
         const end = item.init.end;
         // In a comma declaration, annotate just this binding.
         const ignoreAt =
@@ -462,7 +485,9 @@ export function readControls(code: string): {
           const multi = readMultiControl(
             item.init,
             { name, start, end, ignoreAt },
-            annotationComments,
+            annotationComments.filter(
+              (comment) => !isDefaultAnnotation(comment.value.trim()),
+            ),
             enums,
             declaration.declarations.length > 1 ? statement.start : undefined,
           );
@@ -476,11 +501,32 @@ export function readControls(code: string): {
         }
         if (annotations.length) {
           try {
-            const settings = sliderSettings(annotations);
             if (numeric === undefined || !Number.isFinite(numeric))
               throw new Error(
                 "Control annotations require a finite numeric constant.",
               );
+            if (annotations.some((annotation) => /^@knob\b/.test(annotation))) {
+              const settings = knobSettings(annotations);
+              controls.push({
+                kind: "number",
+                name,
+                value: numeric,
+                start,
+                end,
+                ignoreAt,
+                ...settings,
+                integer:
+                  integer &&
+                  Number.isInteger(settings.step) &&
+                  settings.split === 0 &&
+                  (settings.min === undefined ||
+                    Number.isInteger(settings.min)) &&
+                  (settings.max === undefined ||
+                    Number.isInteger(settings.max)),
+              });
+              continue;
+            }
+            const settings = sliderSettings(annotations);
             validateSliderRange(settings.min, settings.max, numeric);
             controls.push({
               kind: "slider",
@@ -504,6 +550,7 @@ export function readControls(code: string): {
         if (numeric !== undefined && Number.isFinite(numeric)) {
           controls.push({
             kind: "number",
+            ...knobSettings([]),
             integer,
             name,
             value: numeric,
@@ -553,9 +600,32 @@ export function readControls(code: string): {
       if (count > 1)
         issues.push({ name, message: "Multiple declarations use this name." });
     }
-    const available = controls.filter(
-      (control) => names.get(control.name) === 1,
-    );
+    const available = controls
+      .filter((control) => names.get(control.name) === 1)
+      .flatMap((control) => {
+        try {
+          const expression = defaultExpression(
+            defaults.get(control.start) ?? [],
+          );
+          if (expression === undefined) return [control];
+          const value = parseControlDefault(control, expression);
+          return [
+            {
+              ...control,
+              defaultExpression: expression,
+              defaultValue: value,
+              ...((control.kind === "number" || control.kind === "slider") &&
+              typeof value === "number" &&
+              !Number.isInteger(value)
+                ? { integer: false }
+                : {}),
+            },
+          ];
+        } catch (error) {
+          errors.push(`${control.name}: ${(error as Error).message}`);
+          return [];
+        }
+      });
     const compositions: ControlComposition[] = [];
     const grouped = new Set<string>();
     for (const candidate of candidates) {
@@ -604,12 +674,56 @@ export function changeControl(
   name: string,
   change: ControlChange,
 ): Edit | undefined {
-  const value = change.type === "set" ? change.value : undefined;
+  let value = change.type === "set" ? change.value : undefined;
   if (typeof value === "number" && !Number.isFinite(value)) return;
   const control = readControls(code).controls.find(
     (control) => control.name === name,
   );
   if (!control || Object.is(control.value, value)) return;
+  if (change.type === "reset") {
+    if (!canResetControl(control) || control.defaultExpression === undefined)
+      return;
+    let text = control.defaultExpression;
+    if (
+      (control.kind === "number" || control.kind === "slider") &&
+      !control.integer &&
+      typeof control.defaultValue === "number" &&
+      Number.isInteger(control.defaultValue)
+    ) {
+      text = String(control.defaultValue).replace(
+        /e|$/,
+        (suffix) => `.0${suffix}`,
+      );
+    }
+    const edits: Edit[] = [{ start: control.start, end: control.end, text }];
+    if (
+      control.kind === "multi-enum" &&
+      !control.annotation &&
+      Array.isArray(control.defaultValue) &&
+      control.defaultValue.length === 0
+    )
+      edits.push(
+        annotateControl(
+          code,
+          control.ignoreAt,
+          multiAnnotation(control.objectName),
+        ),
+      );
+    const start = Math.min(...edits.map((edit) => edit.start));
+    const end = Math.max(...edits.map((edit) => edit.end));
+    return {
+      start,
+      end,
+      text: editSource(
+        code.slice(start, end),
+        edits.map((edit) => ({
+          ...edit,
+          start: edit.start - start,
+          end: edit.end - start,
+        })),
+      ),
+    };
+  }
   if (control.kind === "multi-enum") {
     const reordering = change.type === "reorder";
     if (!reordering && !Array.isArray(value)) return;
@@ -693,6 +807,8 @@ export function changeControl(
     (control.kind === "number" || control.kind === "slider") &&
     typeof value === "number"
   ) {
+    if (control.kind === "number") value = normalizeKnobValue(value, control);
+    if (Object.is(control.value, value)) return;
     if (control.integer && !Number.isInteger(value)) return;
     if (
       control.kind === "slider" &&
@@ -713,12 +829,185 @@ export function changeControl(
     };
 }
 
+function customizationSource(code: string, name: string) {
+  const control = readControls(code).controls.find(
+    (item) => item.name === name,
+  );
+  if (!control)
+    throw new Error("This control has changed. Reopen its settings.");
+  const comments: Comment[] = [];
+  const ast = parse(code, {
+    ecmaVersion: 2022,
+    sourceType: "module",
+    allowAwaitOutsideFunction: true,
+    preserveParens: true,
+    onComment: comments,
+  });
+  const annotationsFor = bindControlAnnotations(code, comments);
+  for (const statement of ast.body) {
+    const declaration =
+      statement.type === "ExportNamedDeclaration"
+        ? statement.declaration
+        : statement;
+    if (declaration?.type !== "VariableDeclaration") continue;
+    const binding = declaration.declarations.find(
+      (item) => item.id.type === "Identifier" && item.id.name === name,
+    );
+    if (!binding) continue;
+    const annotations = [
+      ...new Map(
+        annotationsFor(statement.start, binding.start, binding.end).map(
+          (comment) => [comment.start, comment],
+        ),
+      ).values(),
+    ];
+    return { control, statement, declaration, binding, annotations };
+  }
+  throw new Error("Control declaration not found.");
+}
+
+export function readControlCustomization(code: string, name: string) {
+  const { control, annotations } = customizationSource(code, name);
+  return {
+    control,
+    settings: initialCustomization(
+      control,
+      annotations.map((comment) => comment.value.trim()),
+    ),
+  };
+}
+
+function sameCustomization(
+  left: ControlCustomization,
+  right: ControlCustomization,
+) {
+  return (
+    left.kind === right.kind &&
+    Object.keys(left.values).length === Object.keys(right.values).length &&
+    Object.keys(left.values).every(
+      (key) =>
+        JSON.stringify(left.values[key]) === JSON.stringify(right.values[key]),
+    )
+  );
+}
+
+export function configureControl(
+  code: string,
+  name: string,
+  settings: ControlCustomization,
+  expected?: ControlCustomization,
+): Edit | undefined {
+  const { control, statement, declaration, binding, annotations } =
+    customizationSource(code, name);
+  const current = initialCustomization(
+    control,
+    annotations.map((comment) => comment.value.trim()),
+  );
+  const annotation = customizationAnnotation(control, settings);
+  const numericValue = customizationNumericValue(control, settings);
+  if (
+    sameCustomization(current, settings) &&
+    (numericValue === undefined || Object.is(numericValue, control.value))
+  )
+    return;
+  if (expected && !sameCustomization(current, expected))
+    throw new Error(
+      "Control settings changed in the source. Reopen the settings and try again.",
+    );
+
+  const replacement =
+    annotation &&
+    !annotation.includes("\n") &&
+    annotations.length === 1 &&
+    (declaration.declarations.length === 1 ||
+      annotations[0].start > statement.start)
+      ? annotations[0]
+      : undefined;
+  const edits: Edit[] = annotations.map((comment) => {
+    if (comment === replacement)
+      return {
+        start: comment.start,
+        end: comment.end,
+        text: annotation as string,
+      };
+    const lineStart = code.lastIndexOf("\n", comment.start - 1) + 1;
+    const nextLine = code.indexOf("\n", comment.end);
+    const lineEnd = nextLine < 0 ? code.length : nextLine + 1;
+    const standalone =
+      /^[\t ]*$/.test(code.slice(lineStart, comment.start)) &&
+      /^\s*$/.test(code.slice(comment.end, lineEnd));
+    return {
+      start: standalone ? lineStart : comment.start,
+      end: standalone ? lineEnd : comment.end,
+      text: "",
+    };
+  });
+  if (declaration.declarations.length > 1) {
+    // A leading annotation belongs to every comma binding. Localize it for the
+    // untouched siblings before replacing/removing it for the selected one.
+    const shared = annotations.filter(
+      (comment) => comment.end <= statement.start,
+    );
+    if (shared.length) {
+      const newline = code.includes("\r\n") ? "\r\n" : "\n";
+      const text = shared
+        .map((comment) => code.slice(comment.start, comment.end))
+        .join(newline);
+      for (const sibling of declaration.declarations)
+        if (sibling !== binding)
+          edits.push(annotateControl(code, sibling.start, text));
+    }
+  }
+  if (numericValue !== undefined && !Object.is(numericValue, control.value)) {
+    const integer =
+      (control.kind === "number" || control.kind === "slider") &&
+      control.integer;
+    let text = Object.is(numericValue, -0) ? "-0" : String(numericValue);
+    if (!integer && Number.isInteger(numericValue) && !text.includes("."))
+      text = text.replace(/e|$/, (suffix) => `.0${suffix}`);
+    edits.push({ start: control.start, end: control.end, text });
+  }
+  if (
+    control.kind === "multi-enum" &&
+    JSON.stringify(settings.values.order) !==
+      JSON.stringify(current.values.order)
+  ) {
+    const selected = (settings.values.order as string[]).flatMap((key) =>
+      control.options.filter(
+        (option) => option.key === key && control.value.includes(option.value),
+      ),
+    );
+    const text = `[${selected.map((option) => enumMember(control.objectName, option.key)).join(", ")}]`;
+    if (code.slice(control.start, control.end) !== text)
+      edits.push({ start: control.start, end: control.end, text });
+  }
+  if (annotation && !replacement)
+    edits.push(annotateControl(code, control.ignoreAt, annotation));
+  if (!edits.length) return;
+  const start = Math.min(...edits.map((edit) => edit.start));
+  const end = Math.max(...edits.map((edit) => edit.end));
+  const text = editSource(
+    code.slice(start, end),
+    edits.map((edit) => ({
+      ...edit,
+      start: edit.start - start,
+      end: edit.end - start,
+    })),
+  );
+  const result = code.slice(0, start) + text + code.slice(end);
+  const parsed = readControls(result);
+  const updated = parsed.controls.find((item) => item.name === name);
+  if (!parsed.valid || !updated || updated.kind !== settings.kind)
+    throw new Error("Could not safely update this control's annotations.");
+  return { start, end, text };
+}
+
 export function ignoreControl(code: string, name: string): Edit | undefined {
   const control = readControls(code).controls.find(
     (control) => control.name === name,
   );
   if (!control) return;
-  return annotateControl(code, control.ignoreAt, "//@ignore");
+  return annotateControl(code, control.ignoreAt, "// @ignore");
 }
 
 function enumMember(objectName: string, key: string) {
@@ -740,7 +1029,7 @@ function annotateControl(
   return {
     start: position,
     end: position,
-    text: `${leading}${annotation}${newline}${indent}`,
+    text: `${leading}${annotation.split(/\r?\n/).join(newline + indent)}${newline}${indent}`,
   };
 }
 
@@ -823,7 +1112,7 @@ function locateControls(code: string): {
   return { located, valid: true };
 }
 
-// Find a `//@ignore` line comment that sits between `boundary` and
+// Find a `// @ignore` line comment that sits between `boundary` and
 // `declaratorStart` with only whitespace/line breaks after it. Returns the
 // start of the comment, so that dragging the binding carries the marker
 // with it, or `declaratorStart` when no marker is present.
@@ -852,7 +1141,7 @@ function moveWithinStatement(
   const tgtIdx = target.declarationIndex;
   if (srcIdx === tgtIdx) return;
 
-  // Each chunk is the declarator plus any `//@ignore` line attached to it.
+  // Each chunk is the declarator plus any `// @ignore` line attached to it.
   const chunks: DeclaratorRange[] = declarators.map((d, i) => {
     const boundary = i === 0 ? source.statementStart : declarators[i - 1].end;
     return {

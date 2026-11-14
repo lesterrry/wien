@@ -1,0 +1,16 @@
+const Fx = Object.freeze({ Echo: 'echo', Crush: 'crush' })
+// Empty selection still offers effects. Toggle one, reorder, then reset to [].
+// @default []
+const effects = [] // @multi Fx
+// @default 0.16
+const level = 0.16 // @slider 0..0.3
+const enabled = true // @default true
+const rhythm = {level, enabled, effects}
+const beat = stack(
+  s("sbd ~ [~ sbd] ~").decay(0.14).gain(level * 1.8),
+  s("~ white ~ white").bpf(1900).decay(0.075).gain(level * 0.6),
+  s("~ pink*2 ~ pink*2").hpf(6200).decay(0.025).gain(level * 0.25)
+).sustain(0).orbit(2)
+const stages = effects.map(effect => effect === Fx.Echo
+  ? delay(0.25).delaytime(0.13).delayfeedback(0.2) : crush(5))
+export default enabled ? (stages.length ? beat.FX(...stages).fxr(0.4) : beat) : silence

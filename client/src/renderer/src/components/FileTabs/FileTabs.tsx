@@ -125,13 +125,12 @@ export function FileTabs({
                     : "/"}
                 </span>
               )}
-              {tab.dirty && (
-                <span
-                  className={styles.unsavedDot}
-                  role="img"
-                  aria-label="Unsaved changes"
-                />
-              )}
+              <span
+                className={styles.unsavedDot}
+                role="img"
+                aria-label="Unsaved changes"
+                aria-hidden={!tab.dirty}
+              />
             </button>
             <button
               type="button"
@@ -196,7 +195,7 @@ export function FileTabs({
             onClick={controller.onSelect}
           >
             <SlidersHorizontal size={13} />
-            <span className={styles.fileTabName}>Controls</span>
+            <span className={styles.fileTabName}>Control Panel</span>
           </button>
           <button
             type="button"

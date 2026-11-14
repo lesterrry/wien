@@ -10,6 +10,7 @@ import {
   FilePlus2,
   FolderOpen,
   FolderPlus,
+  Library,
   Loader2,
   MoreHorizontal,
   Network,
@@ -21,9 +22,7 @@ import {
   Pencil,
   Play,
   Plus,
-  RefreshCw,
   Search,
-  SlidersHorizontal,
   Sparkles,
   Square,
   SquareX,
@@ -31,7 +30,22 @@ import {
   UserRound,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  type MouseEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import {
+  type CommandId,
+  type CommandState,
+  commands,
+  matchCommand,
+  primaryModifier,
+  shortcutLabel,
+} from "../../../../shared/commands";
+import type { ControlCustomization } from "../../../../shared/control-customizations";
 import {
   type ControlGroup,
   type PanelPreferences,
@@ -43,11 +57,19 @@ import {
   type Control,
   type ControlChange,
   changeControl,
+  configureControl,
   ignoreControl,
   moveControl,
+  readControlCustomization,
   readControls,
 } from "../../../../shared/controls";
-import { type Edit, editSource, hasExports } from "../../../../shared/modules";
+import {
+  type Edit,
+  editSource,
+  hasExports,
+  loadGraph,
+} from "../../../../shared/modules";
+import { nextUntitledName } from "../../../../shared/snippet-names";
 import {
   type Entry,
   isWithin,
@@ -56,16 +78,21 @@ import {
   parentPath,
   type VersionEntry,
 } from "../../../../shared/types";
+import { executeEditingCommand, shortcutEnvironment } from "../../commands";
 import {
   type Document,
   useSnippetSessions,
 } from "../../hooks/useSnippetSessions";
 import { useAccount } from "../Account/Account";
+import { AppMenu } from "../AppMenu/AppMenu";
+import { AudioExportDialog } from "../AudioExportDialog/AudioExportDialog";
+import { ControlSettingsDialog } from "../ControlSettingsDialog/ControlSettingsDialog";
 import { ControlsPanel } from "../ControlsPanel/ControlsPanel";
 import { Dialog } from "../Dialog/Dialog";
 import { Explorer } from "../Explorer/Explorer";
 import { FileTabs } from "../FileTabs/FileTabs";
 import { GraphView } from "../GraphView/GraphView";
+import { SplitMarquee } from "../SplitMarquee/SplitMarquee";
 import { StrudelEditor } from "../StrudelEditor/StrudelEditor";
 import { VersionsPanel } from "../VersionsPanel/VersionsPanel";
 import styles from "./App.module.css";
@@ -76,6 +103,8 @@ type Modal =
   | { kind: "move"; entry: Entry }
   | { kind: "delete"; entry: Entry }
   | { kind: "reload" }
+  | { kind: "examples" }
+  | { kind: "audio-export"; path: string }
   | { kind: "help" };
 
 const api = window.workspace;
@@ -188,14 +217,33 @@ export function App() {
   const [sidebar, setSidebar] = useState(true);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [projectMenu, setProjectMenu] = useState(false);
+  const [examples, setExamples] = useState<string[]>([]);
   const [context, setContext] = useState<{
     entry: Entry;
     x: number;
     y: number;
   } | null>(null);
+  const [controlSettings, setControlSettings] = useState<{
+    path: string;
+    control: Control;
+    initial: ControlCustomization;
+  } | null>(null);
   const [modal, setModal] = useState<Modal | null>(null);
   const [value, setValue] = useState("");
   const [modalError, setModalError] = useState<string | null>(null);
+  const modalNameInput = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const input = modalNameInput.current;
+    if (!input || !modal) return;
+    input.focus();
+    const selectionEnd =
+      modal.kind === "create" &&
+      !modal.folder &&
+      input.value.endsWith(".strudel")
+        ? input.value.length - ".strudel".length
+        : input.value.length;
+    input.setSelectionRange(0, selectionEnd);
+  }, [modal]);
   const [workspaceView, setWorkspaceView] = useState<
     "editor" | "controls" | "graph"
   >("editor");
@@ -471,6 +519,13 @@ export function App() {
 
   useEffect(() => {
     void api
+      .examples()
+      .then(setExamples)
+      .catch((error) => setError(message(error)));
+  }, []);
+
+  useEffect(() => {
+    void api
       .current()
       .then(async (project) => {
         setProject(project);
@@ -567,74 +622,6 @@ export function App() {
   }, [player]);
 
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey)) return;
-      if (event.key === "," || event.code === "Comma") {
-        event.preventDefault();
-        event.stopPropagation();
-        if (
-          !event.repeat &&
-          !busyRef.current &&
-          !modal &&
-          !controllerOpen &&
-          !graphActive
-        ) {
-          setWorkspaceView("editor");
-          player.current?.assist();
-        }
-        return;
-      }
-      if (
-        event.target instanceof Element &&
-        event.target.closest("[data-assistant]") &&
-        event.key === "Enter"
-      )
-        return;
-      if (event.key === "w") {
-        event.preventDefault();
-        event.stopPropagation();
-        if (graphActive) closeGraph();
-        else if (controllerOpen) setWorkspaceView("editor");
-        else if (documentRef.current) void closeTab(documentRef.current.path);
-        else api.close();
-      }
-      if (event.key === "s") {
-        event.preventDefault();
-        void flush().catch((error) => setError(message(error)));
-      }
-      if (event.key === "Enter") {
-        event.preventDefault();
-        event.stopPropagation();
-        if (!graphActive) play();
-      }
-      if (event.key === "." || event.code === "Period") {
-        event.preventDefault();
-        event.stopPropagation();
-        if (event.shiftKey || graphActive) void stopAll();
-        else stop();
-      }
-      if (event.key === "b") {
-        event.preventDefault();
-        setSidebar((value) => !value);
-      }
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [
-    closeTab,
-    closeGraph,
-    graphActive,
-    controllerOpen,
-    flush,
-    play,
-    stop,
-    stopAll,
-    modal,
-    player,
-    documentRef,
-  ]);
-
-  useEffect(() => {
     if (!context && !projectMenu) return;
     const close = () => {
       setContext(null);
@@ -651,6 +638,21 @@ export function App() {
     };
   }, [context, projectMenu]);
 
+  function openSnippetActions(event: MouseEvent<HTMLButtonElement>) {
+    event.stopPropagation();
+    if (!document) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    setContext({
+      entry: {
+        id: document.path,
+        name: document.path.split("/").at(-1) ?? document.path,
+        exported: hasExports(document.code),
+      },
+      x: rect.right - 220,
+      y: rect.bottom + 8,
+    });
+  }
+
   function showModal(next: Modal) {
     setContext(null);
     setModalError(null);
@@ -666,30 +668,99 @@ export function App() {
     setModal(next);
   }
 
-  async function refresh() {
-    await controlQueue.current;
-    setProject(await api.current());
-    for (const session of sessionsRef.current) {
-      if (session.document.code !== session.document.saved) continue;
-      try {
-        const code = await api.read(session.document.path);
-        if (code !== session.document.code)
+  const refresh = useCallback(
+    async (isCurrent: () => boolean = () => true) => {
+      await controlQueue.current;
+      if (!isCurrent()) return;
+      const next = await api.current();
+      if (!isCurrent()) return;
+      setProject(next);
+      setSelection((current) =>
+        current ? (findEntry(next.entries, current.id) ?? null) : null,
+      );
+      for (const session of sessionsRef.current) {
+        if (!isCurrent()) return;
+        if (session.document.code !== session.document.saved) continue;
+        try {
+          const code = await api.read(session.document.path);
+          // A filesystem read may finish after typing, a rename or a switch.
+          // Only replace the exact clean document that was read.
+          if (!isCurrent()) return;
+          if (
+            sessionsRef.current.find((current) => current.id === session.id)
+              ?.document !== session.document ||
+            code === session.document.code
+          )
+            continue;
           players.current.get(session.id)?.replaceCode(code);
-        patchSession(session.id, {
-          document: { ...session.document, code, saved: code },
-        });
-      } catch {
-        /* Missing files are diagnosed by the panel and graph. */
+          patchSession(session.id, {
+            document: { ...session.document, code, saved: code },
+          });
+        } catch {
+          /* Missing files are diagnosed by the panel and graph. */
+        }
       }
-    }
-    if (
-      !sessionsRef.current.some(
-        (session) => session.document.code !== session.document.saved,
+      if (!isCurrent()) return;
+      if (
+        !sessionsRef.current.some(
+          (session) => session.document.code !== session.document.saved,
+        )
       )
-    )
-      setControlErrors({});
-    setTreeVersion((version) => version + 1);
-  }
+        setControlErrors({});
+      setTreeVersion((version) => version + 1);
+    },
+    [patchSession, players, sessionsRef],
+  );
+
+  useEffect(() => {
+    if (!project?.root) return;
+    const root = project.root;
+    let disposed = false;
+    let running = false;
+    let pending = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const schedule = () => {
+      pending = true;
+      clearTimeout(timer);
+      timer = setTimeout(update, 100);
+    };
+    const update = async () => {
+      if (disposed || running) return;
+      if (busyRef.current || controlWrites.current > 0) {
+        schedule();
+        return;
+      }
+      pending = false;
+      running = true;
+      try {
+        await refresh(() => {
+          if (disposed) return false;
+          if (busyRef.current || controlWrites.current > 0) {
+            pending = true;
+            return false;
+          }
+          return true;
+        });
+      } catch (error) {
+        if (!disposed) setError(message(error));
+      } finally {
+        running = false;
+        if (pending && !disposed) schedule();
+      }
+    };
+    const unsubscribe = api.onProjectChanged((changedRoot) => {
+      if (changedRoot === root) schedule();
+    });
+    // Close the initial read/subscription gap and reconcile after app sleep.
+    schedule();
+    window.addEventListener("focus", schedule);
+    return () => {
+      disposed = true;
+      clearTimeout(timer);
+      unsubscribe();
+      window.removeEventListener("focus", schedule);
+    };
+  }, [project?.root, refresh]);
 
   async function syncDocument() {
     for (const session of sessionsRef.current) {
@@ -752,7 +823,8 @@ export function App() {
     );
   }
 
-  async function switchProject(create: boolean) {
+  async function switchProject(create: boolean, example?: string) {
+    setProjectMenu(false);
     await run(async () => {
       await controlQueue.current;
       await preferencesSave.current;
@@ -784,7 +856,7 @@ export function App() {
           setError(message(error));
         }
       }
-      const next = await (create ? api.create() : api.open());
+      const next = await (create ? api.create(example) : api.open());
       if (!next) return;
       recoveryBlockedRef.current = false;
       setRecoveryBlocked(false);
@@ -941,13 +1013,59 @@ export function App() {
     : selection
       ? parentPath(selection.id)
       : "";
+  async function createUntitledSnippet() {
+    if (!project || selectedVersion || recoveryBlocked) return;
+    await run(async () => {
+      await controlQueue.current;
+      await flush();
+      const current = await api.current();
+      const siblings = destination
+        ? (findEntry(current.entries, destination)?.children ?? [])
+        : current.entries;
+      const path = await api.add(
+        destination,
+        nextUntitledName(siblings),
+        false,
+      );
+      await refresh();
+      const code = await api.read(path);
+      setWorkspaceView("editor");
+      setDefinitionContext(null);
+      updateDocument({ path, code, saved: code });
+      setSelection({ id: path, name: path.split("/").at(-1) ?? path });
+      setSavedStatus("Saved locally");
+    });
+  }
+
+  function renameActiveSnippet() {
+    const current = documentRef.current;
+    if (
+      !current ||
+      busyRef.current ||
+      selectedVersion ||
+      recoveryBlocked ||
+      graphActive ||
+      controllerOpen
+    )
+      return;
+    showModal({
+      kind: "rename",
+      entry: {
+        id: current.path,
+        name: current.path.split("/").at(-1) ?? current.path,
+      },
+    });
+  }
+
   const filename = document?.path.split("/").at(-1);
   const dirty = document?.code !== document?.saved;
   const folders = (entries: Entry[]): Entry[] =>
     entries.flatMap((entry) =>
       entry.children ? [entry, ...folders(entry.children)] : [],
     );
-  const shortcut = navigator.platform.includes("Mac") ? "⌘" : "Ctrl";
+  const modifier = primaryModifier(shortcutEnvironment);
+  const shortcut =
+    modifier === "Meta" ? "⌘" : modifier === "Control" ? "Ctrl" : "Alt";
   const panelRoot =
     preferences.pinned ??
     (definitionContext?.fullscreen ? definitionContext.root : null) ??
@@ -1058,7 +1176,7 @@ export function App() {
           )) {
             const running = players.current.get(session.id);
             if (running && changes.some((file) => running.dependsOn(file)))
-              await running.update();
+              await running.update({ flash: false });
           }
         })
         .catch((error) => setError(message(error)));
@@ -1066,6 +1184,10 @@ export function App() {
   }
 
   function previewControl(control: Control, change: ControlChange): Control {
+    if (change.type === "reset")
+      return control.defaultValue === undefined
+        ? control
+        : previewControl(control, { type: "set", value: control.defaultValue });
     if (change.type === "set")
       return {
         ...control,
@@ -1164,6 +1286,67 @@ export function App() {
     });
   }
 
+  function openControlSettings(path: string, name: string) {
+    void run(async () => {
+      await controlQueue.current;
+      const open = sessionsRef.current.find(
+        (session) => session.document.path === path,
+      );
+      const source = open ? open.document.code : await api.read(path);
+      const { control, settings } = readControlCustomization(source, name);
+      setControlSettings({ path, control, initial: settings });
+    });
+  }
+
+  async function saveControlSettings(settings: ControlCustomization) {
+    if (!controlSettings || busyRef.current)
+      throw new Error("The workspace is busy. Try again.");
+    const {
+      path,
+      control: { name },
+      initial,
+    } = controlSettings;
+    busyRef.current = true;
+    setBusy(true);
+    controlWrites.current += 1;
+    const work = controlQueue.current.then(async () => {
+      const open = sessionsRef.current.find(
+        (session) => session.document.path === path,
+      );
+      const source = open ? open.document.code : await api.read(path);
+      const edit = configureControl(source, name, settings, initial);
+      if (open) {
+        if (edit) {
+          const editor = players.current.get(open.id);
+          if (!editor)
+            throw new Error("The source editor is not ready. Try again.");
+          editor.configureControl(name, settings, initial);
+        }
+        await flush();
+      } else if (edit)
+        await api.save({
+          path,
+          content: editSource(source, [edit]),
+          expected: source,
+        });
+      setControlErrors((current) => {
+        const next = { ...current };
+        delete next[JSON.stringify([path, name])];
+        return next;
+      });
+      if (edit) scheduleLiveUpdate(path);
+    });
+    controlQueue.current = work.catch(() => {});
+    try {
+      await work;
+    } finally {
+      controlWrites.current -= 1;
+      setTreeVersion((version) => version + 1);
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }
+
   function goToControl(path: string, name: string) {
     void run(async () => {
       await controlQueue.current;
@@ -1219,6 +1402,205 @@ export function App() {
     }
   }, [definitionTarget, document?.path, players, sessionsRef]);
 
+  const [menuState, setMenuState] = useState<CommandState>({});
+  const lastMenuState = useRef("");
+  const commandHandler = useRef<(command: CommandId) => void>(() => {});
+  commandHandler.current = (command) => {
+    const dialogOpen = Boolean(window.document.querySelector("dialog[open]"));
+    if (command === "stopAll") {
+      void stopAll();
+      return;
+    }
+    if (busyRef.current || dialogOpen) return;
+    if (command.startsWith("tab")) {
+      const tabs = window.document.querySelectorAll<HTMLButtonElement>(
+        '[role="tablist"][aria-label="Open snippets"] [role="tab"]',
+      );
+      const number = Number(command.slice(3));
+      tabs[number === 9 ? tabs.length - 1 : number - 1]?.click();
+      return;
+    }
+    switch (command) {
+      case "play":
+        if (!graphActive) play();
+        break;
+      case "stop":
+        stop();
+        break;
+      case "assist":
+        if (!controllerOpen && !graphActive) player.current?.assist();
+        break;
+      case "save":
+        void flush().catch((error) => setError(message(error)));
+        break;
+      case "closeTab":
+        if (graphActive) closeGraph();
+        else if (controllerOpen) setWorkspaceView("editor");
+        else if (documentRef.current) void closeTab(documentRef.current.path);
+        break;
+      case "sidebar":
+        setSidebar((value) => !value);
+        break;
+      case "controls":
+        if (controllerOpen) {
+          setControllerOpen(false);
+          setControlsVisible(true);
+        } else if (!graphActive) setControlsVisible((value) => !value);
+        break;
+      case "graph":
+        openGraph();
+        break;
+      case "newProject":
+        void switchProject(true);
+        break;
+      case "openProject":
+        void switchProject(false);
+        break;
+      case "newFile":
+        void createUntitledSnippet();
+        break;
+      case "renameFile":
+        renameActiveSnippet();
+        break;
+      case "newFolder":
+        if (selectedVersion || recoveryBlocked) break;
+        setValue("");
+        setModalError(null);
+        setModal({
+          kind: "create",
+          parent: destination,
+          folder: true,
+        });
+        break;
+      case "exportProject":
+        void run(async () => {
+          await flush();
+          await api.exportProject?.();
+        });
+        break;
+      case "help":
+        setModal({ kind: "help" });
+        break;
+      case "controlUp":
+      case "controlDown": {
+        const control = window.document.activeElement?.closest<HTMLElement>(
+          "[data-control-move]",
+        );
+        control?.dispatchEvent(
+          new CustomEvent("wien:move-control", {
+            detail: command === "controlUp" ? "up" : "down",
+          }),
+        );
+        break;
+      }
+      default:
+        void Promise.resolve(executeEditingCommand(command)).catch((error) =>
+          setError(message(error)),
+        );
+    }
+  };
+  useEffect(
+    () => api.onMenuCommand?.((command) => commandHandler.current(command)),
+    [],
+  );
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const command = matchCommand(event, shortcutEnvironment);
+      if (!command) return;
+      if (
+        (command.id === "controlUp" || command.id === "controlDown") &&
+        (!(event.target instanceof HTMLElement) ||
+          !event.target.matches("[data-control-move]"))
+      )
+        return;
+      // Enter in the assistant composer belongs to its form.
+      if (
+        command.id === "play" &&
+        event.target instanceof Element &&
+        event.target.closest("[data-assistant]")
+      )
+        return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (!event.repeat) commandHandler.current(command.id);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, []);
+  useEffect(() => {
+    const syncMenu = () => {
+      if (
+        window.document.activeElement?.closest(
+          '[aria-label="Application menu"]',
+        )
+      )
+        return;
+      const available =
+        !busyRef.current && !window.document.querySelector("dialog[open]");
+      const state: CommandState = Object.fromEntries(
+        commands.map((command) => [command.id, available]),
+      );
+      state.play = available && !graphActive && Boolean(player.current);
+      state.assist = state.play && !controllerOpen;
+      state.stop = available && Boolean(player.current);
+      state.stopAll = true;
+      state.save =
+        available &&
+        Boolean(documentRef.current) &&
+        !selectedVersion &&
+        !recoveryBlocked;
+      state.closeTab =
+        available &&
+        Boolean(documentRef.current || graphActive || controllerOpen);
+      state.newFile = state.newFolder =
+        available && Boolean(project) && !selectedVersion && !recoveryBlocked;
+      state.renameFile =
+        available &&
+        Boolean(documentRef.current) &&
+        !selectedVersion &&
+        !recoveryBlocked &&
+        !graphActive &&
+        !controllerOpen;
+      state.controls = available && !graphActive;
+      const control = window.document.activeElement?.closest<HTMLElement>(
+        "[data-control-move]",
+      );
+      state.controlUp = available && control?.dataset.moveUp === "true";
+      state.controlDown = available && control?.dataset.moveDown === "true";
+      const serialized = JSON.stringify(state);
+      if (lastMenuState.current === serialized) return;
+      lastMenuState.current = serialized;
+      api.updateMenuState?.(state);
+      setMenuState(state);
+    };
+    syncMenu();
+    window.addEventListener("focusin", syncMenu);
+    const observer = new MutationObserver((mutations) => {
+      if (
+        mutations.some(
+          (mutation) =>
+            mutation.type === "attributes" ||
+            [...mutation.addedNodes, ...mutation.removedNodes].some(
+              (node) =>
+                node instanceof Element &&
+                (node.matches("dialog") || node.querySelector("dialog")),
+            ),
+        )
+      )
+        syncMenu();
+    });
+    observer.observe(window.document.body, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["open"],
+    });
+    return () => {
+      window.removeEventListener("focusin", syncMenu);
+      observer.disconnect();
+    };
+  });
+
   return (
     <div
       className={classNames(styles.app, {
@@ -1228,10 +1610,20 @@ export function App() {
           !controlsVisible || controllerOpen || graphActive,
       })}
     >
+      {api.platform === "web" && (
+        <AppMenu
+          hidden
+          state={menuState}
+          onCommand={(command) => commandHandler.current(command)}
+        />
+      )}
       <div className={styles.titlebar}>
         <div className={styles.titlebarSidebar}>
           <span className={styles.appName}>
-            wien<span className={styles.wordmarkDot}>.</span>
+            <SplitMarquee
+              text="wien hauptbahnhof südtiroler platz"
+              paused={playingPaths.size === 0}
+            />
           </span>
           <button
             className={styles.iconButton}
@@ -1287,7 +1679,7 @@ export function App() {
           <button
             type="button"
             className={styles.iconButton}
-            title="Toggle controls"
+            title={`Toggle controls (${shortcutLabel(commands.find((command) => command.id === "controls") ?? { id: "controls", label: "Toggle Controls" }, shortcutEnvironment)})`}
             aria-label="Toggle controls"
             aria-expanded={controlsVisible && !controllerOpen && !graphActive}
             disabled={graphActive}
@@ -1384,6 +1776,18 @@ export function App() {
                   <FolderOpen size={15} />
                   Open project…
                 </button>
+                {examples.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProjectMenu(false);
+                      showModal({ kind: "examples" });
+                    }}
+                  >
+                    <Library size={15} />
+                    New from example
+                  </button>
+                )}
                 <div className={styles.menuDivider} />
                 {api.platform === "web" ? (
                   <button
@@ -1436,16 +1840,6 @@ export function App() {
           <div className={styles.sectionHeading}>
             <span>Files</span>
             <div>
-              <button
-                className={styles.iconButton}
-                type="button"
-                title="Refresh files"
-                aria-label="Refresh files"
-                disabled={busy}
-                onClick={() => void run(refresh)}
-              >
-                <RefreshCw size={13} />
-              </button>
               <button
                 className={styles.iconButton}
                 type="button"
@@ -1587,32 +1981,39 @@ export function App() {
         }
         aria-label={graphActive || document ? undefined : "Snippet editor"}
       >
-        {!graphActive && (
+        {!graphActive && !controllerOpen && (
           <header
             className={styles.editorToolbar}
             role="toolbar"
             aria-label="Snippet toolbar"
           >
             <div className={styles.fileHeading}>
-              {controllerOpen && panelRoot ? (
+              {document ? (
                 <>
-                  <SlidersHorizontal size={17} />
-                  <div>
-                    <strong>{panelRoot.split("/").at(-1)}</strong>
-                    <span title={panelRoot}>Controls · {panelRoot}</span>
-                  </div>
-                </>
-              ) : document ? (
-                <>
-                  {controllerOpen ? (
-                    <SlidersHorizontal size={17} />
-                  ) : hasExports(document.code) ? (
+                  {hasExports(document.code) ? (
                     <Package size={17} />
                   ) : (
                     <FileCode2 size={17} />
                   )}
                   <div>
-                    <strong>{filename}</strong>
+                    <button
+                      type="button"
+                      className={styles.fileName}
+                      title={`Double-click to rename (${shortcut} R)`}
+                      aria-label={`Rename ${filename}`}
+                      disabled={
+                        busy || Boolean(selectedVersion) || recoveryBlocked
+                      }
+                      onDoubleClick={renameActiveSnippet}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          renameActiveSnippet();
+                        }
+                      }}
+                    >
+                      {filename}
+                    </button>
                     <span>
                       {project?.name}
                       {parentPath(document.path)
@@ -1646,10 +2047,10 @@ export function App() {
               <button
                 type="button"
                 className={styles.iconButton}
-                aria-label="Ask Wien"
+                aria-label="Ask Assist"
                 data-assistant-trigger
-                title={`Ask Wien (${shortcut} ,)`}
-                disabled={!document || busy || controllerOpen}
+                title={`Ask Assist (${shortcut} ,)`}
+                disabled={!document || busy}
                 onClick={() => player.current?.assist("bottom")}
               >
                 <Sparkles size={16} />
@@ -1695,49 +2096,19 @@ export function App() {
                 ) : (
                   <Play size={13} fill="currentColor" />
                 )}
-                <span>
-                  {playback.started ? "Update" : "Play"}
-                  {controllerOpen &&
-                    document &&
-                    ` ${document.path.split("/").at(-1)}`}
-                </span>
+                <span>{playback.started ? "Update" : "Play"}</span>
                 <kbd>{shortcut} ↵</kbd>
               </button>
-              {controllerOpen ? (
-                <button
-                  type="button"
-                  className={styles.closeButton}
-                  title="Close controls"
-                  aria-label="Close controls"
-                  onClick={() => setControllerOpen(false)}
-                >
-                  <X size={15} />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className={styles.iconButton}
-                  title="Snippet actions"
-                  aria-label="Snippet actions"
-                  disabled={!document || busy}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    if (!document) return;
-                    const rect = event.currentTarget.getBoundingClientRect();
-                    setContext({
-                      entry: {
-                        id: document.path,
-                        name: filename ?? document.path,
-                        exported: hasExports(document.code),
-                      },
-                      x: rect.right - 220,
-                      y: rect.bottom + 8,
-                    });
-                  }}
-                >
-                  <MoreHorizontal size={18} />
-                </button>
-              )}
+              <button
+                type="button"
+                className={styles.iconButton}
+                title="Snippet actions"
+                aria-label="Snippet actions"
+                disabled={!document || busy}
+                onClick={openSnippetActions}
+              >
+                <MoreHorizontal size={18} />
+              </button>
             </div>
           </header>
         )}
@@ -1766,6 +2137,51 @@ export function App() {
         <ControlsPanel
           key={`${project?.root}/${panelRoot}`}
           fullscreen={controllerOpen}
+          headerActions={
+            controllerOpen ? (
+              <div className={styles.transport}>
+                <button
+                  type="button"
+                  className={classNames(styles.iconButton, styles.stopButton)}
+                  title={`Stop (${shortcut} .)`}
+                  aria-label="Stop playback"
+                  disabled={!playback.started}
+                  onClick={stop}
+                >
+                  <Square size={14} fill="currentColor" />
+                </button>
+                <button
+                  type="button"
+                  className={styles.playButton}
+                  disabled={!document || playback.pending || busy}
+                  title={
+                    document
+                      ? `Play / update ${document.path}`
+                      : "Open a file to play"
+                  }
+                  onClick={play}
+                >
+                  {playback.pending ? (
+                    <Loader2 size={14} className={styles.spin} />
+                  ) : (
+                    <Play size={13} fill="currentColor" />
+                  )}
+                  <span>{playback.started ? "Update" : "Play"}</span>
+                  <kbd>{shortcut} ↵</kbd>
+                </button>
+                <button
+                  type="button"
+                  className={styles.iconButton}
+                  title="Snippet actions"
+                  aria-label="Snippet actions"
+                  disabled={!document || busy}
+                  onClick={openSnippetActions}
+                >
+                  <MoreHorizontal size={18} />
+                </button>
+              </div>
+            ) : undefined
+          }
           visible={!graphActive && (controlsVisible || controllerOpen)}
           tree={controlTree?.path === panelRoot ? controlTree : null}
           root={panelRoot}
@@ -1790,6 +2206,7 @@ export function App() {
           onChange={editPanelControl}
           onIgnore={(path, name) => editPanelControl(path, name)}
           onDefinition={goToControl}
+          onConfigure={openControlSettings}
           onMove={movePanelControl}
           onOpenController={toggleController}
           onReloadSource={(path) => {
@@ -1871,6 +2288,7 @@ export function App() {
             <GraphView
               key={project.root}
               project={project}
+              sourceRevision={treeVersion}
               active={graphActive}
               focus={graphFocus}
               drafts={graphDrafts}
@@ -1922,6 +2340,16 @@ export function App() {
         >
           {!context.entry.children && (
             <>
+              <button
+                type="button"
+                disabled={busy || recoveryBlocked}
+                onClick={() =>
+                  showModal({ kind: "audio-export", path: context.entry.id })
+                }
+              >
+                <ArrowDownToLine size={14} />
+                Save WAV
+              </button>
               <button type="button" onClick={() => openGraph(context.entry.id)}>
                 <Network size={14} />
                 View in Graph View
@@ -1996,7 +2424,54 @@ export function App() {
         </div>
       )}
 
-      {modal && (
+      {controlSettings && (
+        <ControlSettingsDialog
+          control={controlSettings.control}
+          path={controlSettings.path}
+          initial={controlSettings.initial}
+          onSave={saveControlSettings}
+          onClose={() => setControlSettings(null)}
+        />
+      )}
+      {modal?.kind === "examples" && (
+        <Dialog title="New from example" onClose={() => setModal(null)}>
+          <ul className={styles.exampleList} aria-label="Examples">
+            {examples.map((example) => (
+              <li key={example}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModal(null);
+                    void switchProject(true, example);
+                  }}
+                >
+                  <Library size={16} />
+                  {example}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Dialog>
+      )}
+      {modal?.kind === "audio-export" && (
+        <AudioExportDialog
+          path={modal.path}
+          snapshot={() => {
+            const drafts = new Map(
+              sessionsRef.current.map((session) => [
+                session.document.path,
+                session.document.code,
+              ]),
+            );
+            return loadGraph(
+              modal.path,
+              async (path) => drafts.get(path) ?? (await api.read(path)),
+            );
+          }}
+          onClose={() => setModal(null)}
+        />
+      )}
+      {modal && modal.kind !== "examples" && modal.kind !== "audio-export" && (
         <Dialog
           title={
             modal.kind === "create"
@@ -2027,26 +2502,16 @@ export function App() {
                   ? "Your projects are saved in this browser. Export a project to keep a backup or move it to another browser."
                   : "Your snippets are plain files on your computer."}
               </p>
-              <div>
-                <span>Play / update code</span>
-                <kbd>{shortcut} Enter</kbd>
-              </div>
-              <div>
-                <span>Stop playback</span>
-                <kbd>{shortcut} .</kbd>
-              </div>
-              <div>
-                <span>Ask Wien</span>
-                <kbd>{shortcut} ,</kbd>
-              </div>
-              <div>
-                <span>Save now</span>
-                <kbd>{shortcut} S</kbd>
-              </div>
-              <div>
-                <span>Toggle sidebar</span>
-                <kbd>{shortcut} B</kbd>
-              </div>
+              {commands
+                .filter((command) =>
+                  ["play", "stop", "stopAll", "assist"].includes(command.id),
+                )
+                .map((command) => (
+                  <div key={command.id}>
+                    <span>{command.label}</span>
+                    <kbd>{shortcutLabel(command, shortcutEnvironment)}</kbd>
+                  </div>
+                ))}
               <p className={styles.muted}>
                 Drag snippets into folders to organize them. Starter sounds use
                 built-in synthesizers and work offline. Playback continues while
@@ -2110,15 +2575,7 @@ export function App() {
                   <input
                     id="item-name"
                     value={value}
-                    ref={(input) => {
-                      if (
-                        input &&
-                        window.document.activeElement?.tagName !== "INPUT"
-                      ) {
-                        input.focus();
-                        input.select();
-                      }
-                    }}
+                    ref={modalNameInput}
                     onChange={(event) => setValue(event.target.value)}
                     autoComplete="off"
                   />

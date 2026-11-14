@@ -3,8 +3,10 @@ import * as fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { _electron as electron, expect } from "@playwright/test";
+import { seedWorkspace, workspaceFiles } from "./fixtures/workspace.mjs";
 
 const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "wien-sliders-"));
+await seedWorkspace(temporary);
 const environment = { ...process.env, WIEN_USER_DATA: temporary };
 delete environment.ELECTRON_RUN_AS_NODE;
 let app;
@@ -20,7 +22,7 @@ try {
   page.on("pageerror", (error) => errors.push(error.message));
   const code = page.getByLabel("Strudel code editor");
   await code.waitFor();
-  const example = await fs.readFile("../examples/sliders.strudel", "utf8");
+  const example = workspaceFiles["controls-demo.strudel"];
   const modifier = process.platform === "darwin" ? "Meta" : "Control";
   async function replaceCode(source) {
     await code.click();
@@ -39,14 +41,14 @@ try {
       .getAttribute("aria-selected"),
     "true",
   );
-  await page.getByRole("button", { name: /First session/ }).click();
+  await page.getByRole("button", { name: "Project and account" }).click();
   assert.equal(
     await page
       .getByRole("button", { name: "Open controls demo", exact: true })
       .count(),
     0,
   );
-  await page.getByRole("button", { name: /First session/ }).click();
+  await page.getByRole("button", { name: "Project and account" }).click();
   const cutoff = page.getByRole("slider", {
     name: "cutoff slider",
     exact: true,
@@ -81,7 +83,7 @@ try {
     fullEffects.getByRole("checkbox", { name: "Echo", exact: true }),
   ).toBeChecked();
   await page
-    .getByRole("button", { name: "Close controls", exact: true })
+    .getByRole("button", { name: "Close controls view", exact: true })
     .click();
 
   assert.equal(await triangle.isChecked(), true);
@@ -109,10 +111,6 @@ try {
   await page.screenshot({ path: path.join(temporary, "enum.png") });
   assert.equal(await cutoff.getAttribute("min"), "20");
   assert.equal(await cutoff.getAttribute("max"), "20000");
-  assert.equal(
-    await cutoff.locator("xpath=../..").getAttribute("data-control-style"),
-    "fire",
-  );
   await cutoff.press("ArrowRight");
   assert.equal(await cutoff.inputValue(), "1201");
   await cutoff.press("Shift+ArrowRight");
@@ -140,36 +138,28 @@ try {
   assert.equal(await repeats.getAttribute("aria-valuenow"), "2");
   await repeats.press("Shift+ArrowDown");
   assert.equal(await repeats.getAttribute("aria-valuenow"), "1");
-  // Both numeric controls share wheel handling, including sub-step accumulation.
-  await repeats.evaluate((element) => {
-    for (let i = 0; i < 5; i++)
-      element.dispatchEvent(
-        new WheelEvent("wheel", {
-          deltaY: -100,
-          shiftKey: true,
-          cancelable: true,
-        }),
-      );
-  });
-  await expect(repeats).toHaveAttribute("aria-valuenow", "2");
-  await repeats.press("ArrowDown");
+  // Wheel events remain available for scrolling and never change control values.
   await speed.press("Home");
-  await speed.evaluate((element) => {
-    element.dispatchEvent(
-      new WheelEvent("wheel", { deltaY: -3, deltaMode: 1, cancelable: true }),
+  for (const target of [repeats, speed]) {
+    const allowed = await target.evaluate((element) =>
+      [
+        { deltaY: -100, shiftKey: true },
+        { deltaY: -3, deltaMode: 1 },
+        { deltaY: -100, ctrlKey: true },
+      ].every((init) =>
+        element.dispatchEvent(
+          new WheelEvent("wheel", {
+            ...init,
+            bubbles: true,
+            cancelable: true,
+          }),
+        ),
+      ),
     );
-  });
-  await expect(speed).toHaveValue("0.2575");
-  await speed.evaluate((element) => {
-    element.dispatchEvent(
-      new WheelEvent("wheel", {
-        deltaY: -100,
-        ctrlKey: true,
-        cancelable: true,
-      }),
-    );
-  });
-  await expect(speed).toHaveValue("0.2575");
+    assert.equal(allowed, true);
+  }
+  await expect(repeats).toHaveAttribute("aria-valuenow", "1");
+  await expect(speed).toHaveValue("0.25");
   await speed.press("End");
   const effects = page.getByRole("group", { name: "effects options" });
   const chorus = effects.getByRole("checkbox", { name: "Chorus" });
@@ -269,17 +259,14 @@ try {
   await pan.press("End");
   assert.equal(await pan.inputValue(), "1");
   await gain.press("ArrowUp");
-  assert.equal(await gain.getAttribute("aria-valuenow"), "0.21");
+  assert.equal(await gain.getAttribute("aria-valuenow"), "1.2");
   await gain.press("ArrowDown");
   assert.equal(await gain.getAttribute("aria-valuenow"), "0.2");
   assert.equal(
     await page.evaluate(() => Boolean(window.getIsStarted())),
     false,
   );
-  assert.match(
-    await code.textContent(),
-    /const cutoff = [\d.]+ \/\/ @slider fire/,
-  );
+  assert.match(await code.textContent(), /const cutoff = [\d.]+ \/\/ @slider/);
   assert.match(
     await code.textContent(),
     /const pan = 1\s*\/\/ @slider vertical/,
@@ -352,7 +339,7 @@ try {
   const saved = await fs.readFile(demoFile, "utf8");
   assert.match(saved, /const waveform = Wave.Sine/);
   assert.match(saved, /@multi Fx order=Echo,Crush,Chorus/);
-  assert.match(saved, /const cutoff = 20 \/\/ @slider fire/);
+  assert.match(saved, /const cutoff = 20 \/\/ @slider/);
 
   await page
     .getByRole("button", { name: "first-light.strudel", exact: true })

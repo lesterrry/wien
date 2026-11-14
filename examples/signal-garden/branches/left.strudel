@@ -1,0 +1,7 @@
+import { voice } from '../shared/prism.js'
+// Five notes travel through three bars. No randomness: the shape always returns.
+// @default 0.12
+const level = 0.12 // @knob step=0.01 min=0 max=0.25
+const enabled = true // @default true
+const branch = {level, enabled}
+export default voice("d5 a4 e5 f5 c5", -0.55, 1).slow(3).gain(enabled ? level : 0)

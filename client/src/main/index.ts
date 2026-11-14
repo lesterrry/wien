@@ -1,16 +1,24 @@
 import * as fs from "node:fs/promises";
 import path from "node:path";
-import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import type { AssistRequest } from "../shared/assistant";
+import { validateWav, wavFilename } from "../shared/audio-export";
+import { matchCommand } from "../shared/commands";
+import {
+  defaultExampleFiles,
+  exampleNames,
+  getExampleFiles,
+} from "../shared/examples";
 import { externalWebUrl } from "../shared/links";
 import type { SaveRequest } from "../shared/types";
 import { AccountClient } from "./account";
 import { AccountStorage } from "./account-storage";
 import { AssistAccessError, askAssistant } from "./assistant";
 import { backendConfig } from "./config";
+import { installMenu, updateMenuState } from "./menu";
 import { ProjectFs } from "./project-fs";
 import { ProjectVersions } from "./project-versions";
-import { starterFiles } from "./starter";
+import { watchProject } from "./project-watcher";
 
 if (!app.isPackaged && process.env.WIEN_USER_DATA) {
   app.setPath("userData", process.env.WIEN_USER_DATA);
@@ -18,6 +26,7 @@ if (!app.isPackaged && process.env.WIEN_USER_DATA) {
 
 let window: BrowserWindow | null = null;
 let project: ProjectFs;
+let stopWatchingProject: (() => void) | undefined;
 let versions: ProjectVersions;
 let versionUnavailable: string | null = null;
 let closing = false;
@@ -51,15 +60,21 @@ async function selectProject(root: string) {
   const info = await next.project();
   await fs.mkdir(app.getPath("userData"), { recursive: true });
   await fs.writeFile(stateFile(), JSON.stringify({ root: realRoot }));
+  const stopWatching = watchProject(realRoot, () => {
+    if (project === next && !window?.webContents.isDestroyed())
+      window?.webContents.send("project:changed", realRoot);
+  });
+  stopWatchingProject?.();
+  stopWatchingProject = stopWatching;
   project = next;
   versions = nextVersions;
   versionUnavailable = recoveryError;
   return info;
 }
 
-async function createStarter(root: string) {
+async function createStarter(root: string, files = defaultExampleFiles) {
   await fs.mkdir(root);
-  for (const [relative, code] of Object.entries(starterFiles)) {
+  for (const [relative, code] of Object.entries(files)) {
     const target = path.join(root, relative);
     await fs.mkdir(path.dirname(target), { recursive: true });
     await fs.writeFile(target, code, { flag: "wx" });
@@ -97,6 +112,30 @@ async function initializeProject() {
 }
 
 function registerIpc() {
+  // A native save dialog is deliberately outside the autosave/project IO queue.
+  ipcMain.handle(
+    "audio:save",
+    async (event, name: string, data: ArrayBuffer) => {
+      if (
+        !window ||
+        event.sender !== window.webContents ||
+        event.senderFrame !== window.webContents.mainFrame
+      )
+        throw new Error("Invalid audio export request.");
+      if (typeof name !== "string" || name.length > 255)
+        throw new Error("Invalid filename.");
+      validateWav(data);
+      const result = await dialog.showSaveDialog(window, {
+        title: "Save WAV",
+        buttonLabel: "Save WAV",
+        defaultPath: wavFilename(name),
+        filters: [{ name: "WAV audio", extensions: ["wav"] }],
+      });
+      if (result.canceled || !result.filePath) return false;
+      await fs.writeFile(result.filePath, new Uint8Array(data));
+      return true;
+    },
+  );
   const origin = backendConfig().url;
   const accountStorage = new AccountStorage(app.getPath("userData"), origin);
   const account = new AccountClient(origin, accountStorage);
@@ -192,6 +231,7 @@ function registerIpc() {
     return project.saveControlPreferences(preferences);
   });
   handle("project:current", () => project.project());
+  handle("project:examples", () => exampleNames);
   const availableVersions = () => {
     if (versionUnavailable) throw new Error(versionUnavailable);
     return versions;
@@ -234,16 +274,30 @@ function registerIpc() {
     });
     return result.canceled ? null : selectProject(result.filePaths[0]);
   });
-  handle("project:create", async () => {
+  handle("project:create", async (example?: string) => {
+    const files = getExampleFiles(example ?? "default");
     if (!window) return null;
+    const defaultPath = example
+      ? path.join(path.dirname(project.root), example)
+      : path.join(app.getPath("documents"), "Untitled session");
+    if (example) {
+      const exists = await fs.lstat(defaultPath).then(
+        () => true,
+        (error: NodeJS.ErrnoException) => {
+          if (error.code === "ENOENT") return false;
+          throw error;
+        },
+      );
+      if (!exists) return createStarter(defaultPath, files);
+    }
     const result = await dialog.showSaveDialog(window, {
-      title: "Create a music project",
+      title: example ? "Choose another project name" : "Create a music project",
       buttonLabel: "Create project",
-      defaultPath: path.join(app.getPath("documents"), "Untitled session"),
+      defaultPath,
       properties: ["createDirectory"],
     });
     if (result.canceled || !result.filePath) return null;
-    return createStarter(result.filePath);
+    return createStarter(result.filePath, files);
   });
   ipcMain.on("app:close", (event) => {
     if (event.sender === window?.webContents) window.close();
@@ -299,6 +353,34 @@ function createWindow() {
       }
     }
   });
+  window.webContents.on("before-input-event", (_event, input) => {
+    // macOS always registers menu accelerators. Route our commands only through
+    // the renderer; keep native Edit/View/Window shortcuts working normally.
+    window?.webContents.setIgnoreMenuShortcuts(
+      Boolean(
+        matchCommand(
+          {
+            code: input.code,
+            metaKey: input.meta,
+            ctrlKey: input.control,
+            altKey: input.alt,
+            shiftKey: input.shift,
+            isComposing: input.isComposing,
+            getModifierState: () => false,
+          },
+          {
+            platform: "desktop",
+            os:
+              process.platform === "darwin"
+                ? "mac"
+                : process.platform === "win32"
+                  ? "windows"
+                  : "linux",
+          },
+        ),
+      ),
+    );
+  });
   window.on("closed", () => {
     assistantRequest?.controller.abort();
     assistantRequest = null;
@@ -319,17 +401,15 @@ void app
       app.dock?.setIcon(icon);
     await initializeProject();
     registerIpc();
-    Menu.setApplicationMenu(
-      Menu.buildFromTemplate([
-        ...(process.platform === "darwin"
-          ? [{ role: "appMenu" as const }]
-          : []),
-        { label: "File", submenu: [{ role: "close" }] },
-        { role: "editMenu" },
-        { role: "viewMenu" },
-        { role: "windowMenu" },
-      ]),
-    );
+    installMenu();
+    ipcMain.on("menu:state", (event, state) => {
+      if (
+        event.sender === window?.webContents &&
+        state &&
+        typeof state === "object"
+      )
+        updateMenuState(state);
+    });
     createWindow();
     app.on("activate", () => {
       if (!BrowserWindow.getAllWindows().length) createWindow();
@@ -343,6 +423,8 @@ void app
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
+
+app.on("will-quit", () => stopWatchingProject?.());
 
 app.on("before-quit", (event) => {
   if (!window || closing || window.webContents.isDestroyed()) return;

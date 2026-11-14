@@ -4,6 +4,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { _electron as electron, expect } from "@playwright/test";
+import { seedWorkspace } from "./fixtures/workspace.mjs";
 
 const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "wien-assistant-"));
 const calls = [];
@@ -45,6 +46,7 @@ const environment = {
 };
 delete environment.ELECTRON_RUN_AS_NODE;
 const mod = process.platform === "darwin" ? "Meta" : "Control";
+await seedWorkspace(temporary);
 let app;
 try {
   app = await electron.launch({
@@ -82,9 +84,9 @@ try {
   );
   await expect(code).toHaveText(original.replaceAll("\n", ""));
   const dialog = page.getByRole("dialog", { name: "Wien assistant" });
-  const input = page.getByRole("textbox", { name: "Ask Wien" });
+  const input = page.getByRole("textbox", { name: "Ask Assist" });
 
-  const trigger = page.getByRole("button", { name: /^Ask Wien/ });
+  const trigger = page.getByRole("button", { name: /^Ask Assist/ });
   await trigger.click();
   await expect(input).toBeFocused();
   await input.fill("Toolbar draft");

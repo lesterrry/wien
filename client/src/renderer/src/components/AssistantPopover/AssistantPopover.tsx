@@ -291,7 +291,7 @@ export function AssistantPopover({
       >
         <textarea
           ref={input}
-          aria-label="Ask Wien"
+          aria-label="Ask Assist"
           placeholder="What would you like to make?"
           value={prompt}
           readOnly={pending}

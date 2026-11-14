@@ -1,0 +1,25 @@
+// Backbeat with quieter ghosts. Alternating noise colour avoids a machine-gun roll.
+// @default 0.18
+const snap = 0.18 // @knob step=0.01 min=0 max=0.35
+const hit = steps => stack(
+  s("white").struct(steps).hpf(800).bpf(2100).bpq(0.7).decay(0.105).gain(snap),
+  note("d3").struct(steps).s("triangle").decay(0.055).gain(snap * 0.5)
+).attack(0.001).sustain(0).release(0.025)
+export const backbeat = hit("0 1 0 1")
+export const ghosts = s("<[~ ~ ~ pink ~ ~ ~ ~ ~ pink ~ ~ ~ ~ ~ ~] [~ ~ ~ ~ ~ ~ pink ~ ~ ~ ~ pink ~ ~ [pink pink] ~]>")
+  .hpf(1400).bpf(2900).decay(0.035).sustain(0).gain(snap * 0.3).pan(-0.2)
+// The second backbeat moves a sixteenth early; the soft roll answers across it.
+export const splice = stack(
+  hit("0 0 0 0 1 0 0 0 0 0 0 1 0 0 0 0"),
+  s("~ ~ ~ ~ ~ ~ pink ~ ~ [pink pink] ~ ~ ~ [pink pink pink] ~ ~")
+    .hpf(1800).bpf(3400).decay(0.023).sustain(0).release(0.01)
+    .gain(snap * 0.38).pan("-0.3 0.3")
+).orbit(0)
+// A final flurry, then a full beat of silence before the next downbeat.
+export const turnaround = stack(
+  hit("0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0"),
+  s("~ ~ [pink pink pink pink] ~").hpf(1700).bpf(2900)
+    .decay(0.025).sustain(0).release(0.01)
+    .gain("0.34 0.25 0.2 0.14".fast(4).mul(snap)).pan(0.2)
+).orbit(0)
+export default stack(backbeat, ghosts).orbit(0)

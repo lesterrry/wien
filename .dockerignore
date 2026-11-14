@@ -35,6 +35,8 @@ client/**
 !client/electron.vite.config.ts
 !client/src/
 !client/src/**
+!examples/
+!examples/**
 !deploy/
 deploy/**
 !deploy/nginx.conf

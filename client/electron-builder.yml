@@ -11,7 +11,7 @@ files:
   - resources/icon.png
 mac:
   category: public.app-category.music
-  icon: resources/Wien.icon
+  icon: resources/icon.icns
   identity: null
 win:
   icon: resources/icon.ico

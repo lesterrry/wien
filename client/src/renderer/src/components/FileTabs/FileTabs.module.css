@@ -1,5 +1,10 @@
 .unsavedDot {
   composes: unsavedDot from "../../styles/common.module.css";
+  flex-shrink: 0;
+}
+
+.unsavedDot[aria-hidden="true"] {
+  visibility: hidden;
 }
 
 .fileTabs {

@@ -1,0 +1,6 @@
+// One sustained pedal below the moving branches.
+// @default 0.075
+const level = 0.075 // @slider 0..0.15
+export default note("[d2,a2] ~").slow(4).s("triangle")
+  .attack(0.5).decay(1.5).sustain(0.2).release(1).lpf(450)
+  .room(0.25).orbit(3).gain(level)

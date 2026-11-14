@@ -1,15 +1,15 @@
-.iconButton {
-  composes: iconButton from "../../styles/common.module.css";
-}
-
-.numberControl {
+.controlCard {
   display: flex;
   flex-direction: column;
-  height: 176px;
   margin: 0;
   border: 1px solid var(--color-border);
   border-radius: var(--control-radius, 6px);
   padding: 8px;
+}
+
+.numberControl {
+  composes: controlCard;
+  height: 176px;
 }
 
 .controlHeading {
@@ -28,12 +28,6 @@
   white-space: nowrap;
   text-overflow: ellipsis;
   flex: 1;
-}
-
-.controlHeading .iconButton {
-  width: 22px;
-  height: 22px;
-  flex-shrink: 0;
 }
 
 .controlBody {
@@ -64,10 +58,19 @@
 
 .numberKnob > svg[aria-hidden="true"] {
   display: block;
+  overflow: visible;
 }
 
 .knobRing {
   fill: none;
+  stroke: var(--color-border-strong);
+  stroke-width: 1;
+  transition:
+    stroke 120ms ease,
+    filter 120ms ease;
+}
+
+.knobTick {
   stroke: var(--color-border-strong);
   stroke-width: 1;
 }
@@ -76,16 +79,32 @@
   fill: var(--color-hover);
   stroke: var(--color-border-strong);
   stroke-width: 1;
+  transition:
+    fill 120ms ease,
+    fill-opacity 120ms ease,
+    stroke 120ms ease;
 }
 
 .knobIndicator {
   stroke: var(--color-brand);
   stroke-width: 3;
   stroke-linecap: round;
+  filter: var(--control-glow);
 }
 
 .numberKnob:hover .knobFace {
   fill: var(--color-active);
+}
+
+.numberKnob[data-held="true"]:not(:disabled) .knobRing {
+  stroke: var(--color-brand);
+  filter: var(--control-glow);
+}
+
+.numberKnob[data-held="true"]:not(:disabled) .knobFace {
+  fill: var(--color-brand);
+  fill-opacity: 0.22;
+  stroke: var(--color-brand);
 }
 
 .controlValue {

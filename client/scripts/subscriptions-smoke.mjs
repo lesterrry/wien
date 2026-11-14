@@ -4,6 +4,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { _electron as electron, expect } from "@playwright/test";
+import { seedWorkspace } from "./fixtures/workspace.mjs";
 
 const temporary = await fs.mkdtemp(
   path.join(os.tmpdir(), "wien-subscriptions-"),
@@ -56,6 +57,7 @@ const environment = {
   WIEN_BACKEND_URL: `http://127.0.0.1:${server.address().port}`,
 };
 delete environment.ELECTRON_RUN_AS_NODE;
+await seedWorkspace(temporary);
 let app;
 try {
   app = await electron.launch({
@@ -81,8 +83,11 @@ try {
   );
   await menu.click();
   async function submit() {
-    await page.getByRole("button", { name: /^Ask Wien/ }).click();
-    const input = page.getByRole("textbox", { name: "Ask Wien", exact: true });
+    await page.getByRole("button", { name: /^Ask Assist/ }).click();
+    const input = page.getByRole("textbox", {
+      name: "Ask Assist",
+      exact: true,
+    });
     await input.fill("A soft bass");
     await input.press("Enter");
   }

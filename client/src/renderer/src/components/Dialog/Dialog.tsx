@@ -23,6 +23,7 @@ export function Dialog({
       closedby="any"
       className={[styles.dialog, className].filter(Boolean).join(" ")}
       onCancel={onClose}
+      onClose={onClose}
       aria-label={title}
     >
       <div className={styles.dialogHeading}>

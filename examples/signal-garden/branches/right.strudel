@@ -1,0 +1,8 @@
+import * as prism from '../shared/prism.js'
+// Namespace import; seven notes over four bars meet the left branch every twelve.
+// @default 0.1
+const level = 0.1 // @knob step=0.01 min=0 max=0.25
+const enabled = true // @default true
+const branch = {level, enabled}
+export default prism.voice("a5 e5 c6 g5 f5 e6 d6", 0.55, 2).slow(4)
+  .late(1 / 8).gain(enabled ? level : 0)

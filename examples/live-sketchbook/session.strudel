@@ -1,0 +1,12 @@
+// LIVE SKETCHBOOK · labelled root tracks and independently playable loops.
+// Play this arrangement OR the files in loops/, not both at full volume.
+// Tabs have independent clocks: background playback is not beat synchronisation.
+import pulse from './loops/pulse.strudel'
+import chords from './loops/chords.strudel'
+import notes from './loops/notes.strudel'
+const bpm = 102 // @knob step=1 min=70 max=140
+const enabled = true // @default true
+setcpm(bpm / 4)
+$: enabled ? pulse : silence
+$: enabled ? chords : silence
+$: enabled ? notes : silence

@@ -24,6 +24,7 @@ declare module "@strudel/codemirror" {
     code: string;
     repl: {
       state: ReplState;
+      evaluate(code: string, autostart: boolean): Promise<unknown>;
       start(): Promise<void>;
       scheduler: { now(): number; cps: number };
     };
@@ -39,6 +40,16 @@ declare module "@strudel/codemirror" {
 
 declare module "@strudel/core" {
   export function evalScope(...modules: unknown[]): Promise<unknown>;
+  export function repl(options: {
+    getTime: () => number;
+    defaultOutput: () => void;
+    transpiler: () => { output: string };
+    onEvalError: (error: Error) => never;
+  }): {
+    evaluate(code: string, autostart: boolean): Promise<unknown>;
+    stop(): void;
+    scheduler: { cps: number };
+  };
 }
 declare module "@strudel/mini";
 declare module "@strudel/tonal";
@@ -54,7 +65,19 @@ declare module "@strudel/transpiler" {
 }
 declare module "@strudel/webaudio" {
   export function getAudioContext(): AudioContext;
-  export function initAudio(): Promise<void>;
+  export function initAudio(options?: {
+    maxPolyphony: number;
+    multiChannelOrbits: boolean;
+  }): Promise<void>;
+  export function setAudioContext(context: OfflineAudioContext): void;
+  export function setSuperdoughAudioController(controller: null): void;
+  export function superdough(
+    value: Record<string, unknown>,
+    time: number,
+    duration: number,
+    cps: number,
+    absoluteTime: number,
+  ): Promise<unknown>;
   export function registerSynthSounds(): Promise<void>;
   export function registerZZFXSounds(): void;
   export function samples(
