@@ -387,7 +387,8 @@
                   },
                   "path": "first-light.strudel"
                 },
-                "prompt": "Make the bass softer. Reply briefly."
+                "prompt": "Make the bass softer. Reply briefly.",
+                "turbo": false
               }
             }
           },
@@ -525,6 +526,10 @@
           },
           "prompt": {
             "type": "string"
+          },
+          "turbo": {
+            "type": "boolean",
+            "description": "Answer directly without reference lookup or tool calls. Defaults to false."
           }
         },
         "additionalProperties": false

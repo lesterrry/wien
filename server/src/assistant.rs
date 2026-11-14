@@ -43,6 +43,9 @@ pub struct FileContext {
 pub struct AssistRequest {
     pub prompt: String,
     pub file: FileContext,
+    /// Answer directly without reference lookup or tool calls. Defaults to false.
+    #[serde(default)]
+    pub turbo: bool,
 }
 
 impl AssistRequest {
@@ -157,19 +160,31 @@ async fn run(
     request: &AssistRequest,
 ) -> Result<AssistResponse, AssistError> {
     let mut options = config.options();
-    options.instructions = Some(instructions());
+    options.instructions = Some(if request.turbo {
+        format!(
+            "{MASTER_PROMPT}\n\nReference lookup and tools are disabled for this request. Answer directly from the supplied code and your Strudel knowledge. Do not claim to have searched documentation."
+        )
+    } else {
+        instructions()
+    });
     let mut context = model_context(request).ok_or(ProviderError::InvalidResponse)?;
-    let corpus = tools.call("strudel_rag_get_corpus_info", json!({})).await?;
-    if corpus["ready"] != true {
-        return Err(ToolError::NotReady.into());
+    if !request.turbo {
+        let corpus = tools.call("strudel_rag_get_corpus_info", json!({})).await?;
+        if corpus["ready"] != true {
+            return Err(ToolError::NotReady.into());
+        }
+        if corpus.to_string().len() > 64 * 1024 {
+            return Err(ToolError::ResultTooLarge.into());
+        }
+        context["rag_corpus"] = corpus;
     }
-    if corpus.to_string().len() > 64 * 1024 {
-        return Err(ToolError::ResultTooLarge.into());
-    }
-    context["rag_corpus"] = corpus;
     let mut turn = TurnRequest {
         input: vec![user_input(&context.to_string())],
-        tools: tools::definitions(),
+        tools: if request.turbo {
+            vec![]
+        } else {
+            tools::definitions()
+        },
         options,
     };
     let mut call_ids = HashSet::new();
@@ -184,6 +199,10 @@ async fn run(
         let response = provider.turn(&turn).await?;
         if response.calls.is_empty() {
             return parse_response(&response.response.text).map_err(Into::into);
+        }
+        // Even an unexpected provider tool call must never reach RAG in Turbo.
+        if request.turbo {
+            return Err(ProviderError::InvalidResponse.into());
         }
         if call_ids.len() + response.calls.len() > 12 {
             return Err(AssistError::Limit);

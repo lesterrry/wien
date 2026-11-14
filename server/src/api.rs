@@ -256,6 +256,7 @@ fn parse_body<T>(body: Result<Json<T>, JsonRejection>) -> Result<T, ApiError> {
     security(("session"=[]), ("browser_session"=[])),
     request_body(content = AssistRequest, example = json!({
         "prompt": "Make the bass softer. Reply briefly.",
+        "turbo": false,
         "file": {"path": "first-light.strudel", "content": "note(\"a1\").s(\"sawtooth\").gain(0.2)", "cursor": {"anchor": 0, "head": 10}}
     })),
     responses(

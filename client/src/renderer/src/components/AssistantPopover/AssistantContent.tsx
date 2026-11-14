@@ -1,5 +1,5 @@
 import classNames from "classnames";
-import { ArrowUp, Square, X } from "lucide-react";
+import { ArrowUp, Square, X, Zap } from "lucide-react";
 import type { Ref } from "react";
 import { AnimatedBorder } from "../AnimatedBorder/AnimatedBorder";
 import { MarkdownAnswer } from "../MarkdownAnswer/MarkdownAnswer";
@@ -13,6 +13,8 @@ export function AssistantContent({
   pending,
   disabled = false,
   showComposer = true,
+  turbo = false,
+  onTurboChange,
   inputRef,
   placeholder = "What would you like to make?",
   onPromptChange,
@@ -26,6 +28,8 @@ export function AssistantContent({
   pending: boolean;
   disabled?: boolean;
   showComposer?: boolean;
+  turbo?: boolean;
+  onTurboChange?: (enabled: boolean) => void;
   inputRef?: Ref<HTMLTextAreaElement>;
   placeholder?: string;
   onPromptChange: (value: string) => void;
@@ -80,6 +84,19 @@ export function AssistantContent({
             }}
           />
           <div className={styles.actions}>
+            {onTurboChange && (
+              <button
+                type="button"
+                className={styles.turbo}
+                aria-label="Turbo"
+                aria-pressed={turbo}
+                title="Быстрее ответы, меньше точность"
+                disabled={pending || disabled}
+                onClick={() => onTurboChange(!turbo)}
+              >
+                <Zap size={13} fill={turbo ? "currentColor" : "none"} />
+              </button>
+            )}
             {pending ? (
               <button
                 type="button"

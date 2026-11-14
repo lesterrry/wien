@@ -23,5 +23,6 @@ Authorization: Bearer {{sessionToken}}
     },
     "path": "first-light.strudel"
   },
-  "prompt": "Make the bass softer. Reply briefly."
+  "prompt": "Make the bass softer. Reply briefly.",
+  "turbo": false
 }

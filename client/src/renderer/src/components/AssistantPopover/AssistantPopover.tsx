@@ -10,6 +10,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { parseModule } from "../../../../shared/modules";
+import { useAssistTurbo } from "../../hooks/useAssistTurbo";
 import { useAccount } from "../Account/Account";
 import { AssistantContent } from "./AssistantContent";
 import styles from "./AssistantPopover.module.css";
@@ -30,6 +31,7 @@ export function AssistantPopover({
   disabled: boolean;
 }) {
   const account = useAccount();
+  const [turbo, setTurbo] = useAssistTurbo();
   const [open, setOpen] = useState(false);
   const [visible, setVisible] = useState(false);
   const [activePlacement, setActivePlacement] =
@@ -202,6 +204,7 @@ export function AssistantPopover({
       if (request.current !== id) return;
       const result = await window.workspace.assist(id, {
         prompt: prompt.trim(),
+        turbo,
         file: { path, content: snapshot.toString(), cursor: { anchor, head } },
       });
       if (request.current !== id || !view.dom.isConnected) return;
@@ -273,6 +276,8 @@ export function AssistantPopover({
         error={error}
         pending={pending}
         disabled={disabled}
+        turbo={turbo}
+        onTurboChange={setTurbo}
         inputRef={input}
         onPromptChange={setPrompt}
         onSubmit={() => void submit()}

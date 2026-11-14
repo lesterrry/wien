@@ -148,6 +148,7 @@ try {
   await expect(rim).toHaveCSS("opacity", "0.9");
   assert.deepEqual(calls[0], {
     prompt: "Make a soft bass",
+    turbo: false,
     file: {
       path: "first-light.strudel",
       content: original,
@@ -332,9 +333,39 @@ try {
   assert.equal(calls[8].file.content, fixture);
   reply({ message: "White noise pattern.", code: null });
   await expect(dialog).toContainText("White noise pattern.");
+  // Turbo is shared across editors, survives reload, and travels through IPC/HTTP.
+  const turbo = dialog.getByRole("button", { name: "Turbo", exact: true });
+  await expect(turbo).toHaveAttribute("aria-pressed", "false");
+  await turbo.click();
+  await expect(turbo).toHaveAttribute("aria-pressed", "true");
+  await input.fill("Answer quickly");
+  await input.press("Enter");
+  await expect.poll(() => calls.length).toBe(10);
+  assert.equal(calls[9].turbo, true);
+  await expect(turbo).toBeDisabled();
+  reply({ message: "Turbo answer.", code: null });
+  await expect(dialog).toContainText("Turbo answer.");
+  await input.press("Escape");
+  await page
+    .getByRole("tab", { name: "first-light.strudel", exact: true })
+    .click();
+  await trigger.click();
+  await expect(turbo).toHaveAttribute("aria-pressed", "true");
+  await input.press("Escape");
+  await page.reload();
+  await trigger.click();
+  await expect(turbo).toHaveAttribute("aria-pressed", "true");
+  await turbo.click();
+  await input.fill("Use references again");
+  await input.press("Enter");
+  await expect.poll(() => calls.length).toBe(11);
+  assert.equal(calls[10].turbo, false);
+  reply({ message: "Normal answer.", code: null });
+  await expect(dialog).toContainText("Normal answer.");
+  await page.screenshot({ path: path.join(temporary, "turbo.png") });
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: assistant focus, selection/context, immediate edit, autosave, single-step Undo, last answer only, syntax/errors, stale edits, cancellation and navigation.",
+    "PASS: assistant focus, selection/context, immediate edit, autosave, single-step Undo, last answer only, syntax/errors, stale edits, cancellation, navigation and persistent Turbo requests.",
   );
 } finally {
   app?.process().kill("SIGKILL");

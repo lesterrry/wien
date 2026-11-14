@@ -17,6 +17,7 @@ const user = {
   assist_requests_remaining: 10,
 };
 let assists = 0;
+let lastAssist;
 let signedIn = false;
 const server = http.createServer(async (req, res) => {
   try {
@@ -65,6 +66,9 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       if (req.url === "/v1/assist") {
+        let body = "";
+        for await (const chunk of req) body += chunk;
+        lastAssist = JSON.parse(body);
         assists++;
         user.assist_requests_remaining--;
         res.end(JSON.stringify({ message: "Web assist works.", code: null }));
@@ -356,6 +360,32 @@ try {
   );
   assert.equal(result.message, "Web assist works.");
   assert.equal(assists, 1);
+  // The browser Assist UI sends Turbo and remembers it after a reload.
+  const assistTrigger = page.getByRole("button", {
+    name: "Ask Assist",
+    exact: true,
+  });
+  await assistTrigger.click();
+  const assistDialog = page.getByRole("dialog", { name: "Wien assistant" });
+  const turbo = assistDialog.getByRole("button", {
+    name: "Turbo",
+    exact: true,
+  });
+  await expect(turbo).toHaveAttribute("aria-pressed", "false");
+  await turbo.click();
+  const prompt = assistDialog.getByRole("textbox", { name: "Ask Assist" });
+  await prompt.fill("Explain this quickly");
+  await prompt.press("Enter");
+  await expect(assistDialog).toContainText("Web assist works.");
+  assert.equal(assists, 2);
+  assert.equal(lastAssist.turbo, true);
+  await prompt.press("Escape");
+  await page.reload();
+  await assistTrigger.click();
+  await expect(turbo).toHaveAttribute("aria-pressed", "true");
+  await turbo.click();
+  await expect(turbo).toHaveAttribute("aria-pressed", "false");
+  await prompt.press("Escape");
   await page
     .getByRole("button", { name: "Open Graph View", exact: true })
     .click();

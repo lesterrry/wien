@@ -1,5 +1,6 @@
 export interface AssistRequest {
   prompt: string;
+  turbo?: boolean;
   file: {
     path: string;
     content: string;

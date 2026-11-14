@@ -103,6 +103,25 @@
   height: 30px;
 }
 
+.turbo {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--color-secondary);
+}
+
+.turbo:hover:not(:disabled) {
+  background: #ffffff12;
+}
+
+.turbo[aria-pressed="true"] {
+  color: var(--color-brand);
+  background: color-mix(in srgb, var(--color-brand) 12%, transparent);
+}
+
 .send,
 .closeButton {
   display: grid;
