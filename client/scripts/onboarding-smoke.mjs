@@ -107,6 +107,7 @@ async function walkThrough(page, web) {
     "Start with a sound.",
     "Your code becomes an instrument.",
     "Describe the change you hear.",
+    "Turn a sound into a snippet.",
     "Small parts. A bigger track.",
     "Leave yourself a way back.",
     "Turn a sketch into a track.",
@@ -149,12 +150,12 @@ async function walkThrough(page, web) {
   await expect(dialog.getByRole("button", { name: "Skip tour" })).toHaveCount(
     0,
   );
-  await expect(dialog.locator("nav button")).toHaveCount(6);
+  await expect(dialog.locator("nav button")).toHaveCount(7);
   for (let i = 0; i < titles.length; i++) {
     await expect(
       dialog.getByRole("heading", { name: titles[i], exact: true }),
     ).toBeVisible();
-    await expect(dialog.locator("ol > li")).toHaveCount(i === 4 ? 2 : 3);
+    await expect(dialog.locator("ol > li")).toHaveCount(i === 5 ? 2 : 3);
     if (i === 0) {
       await expect(dialog.locator("kbd").first()).toHaveText(
         web ? "Ctrl + Enter" : "⌘ + Enter",
@@ -243,7 +244,7 @@ async function walkThrough(page, web) {
         chat.getByRole("status").filter({ hasText: "Replaced the thirds" }),
       ).toBeVisible();
     }
-    if (i === 3) {
+    if (i === 4) {
       const graphTab = dialog.getByRole("tab", {
         name: "Graph View",
         exact: true,
@@ -291,7 +292,7 @@ async function walkThrough(page, web) {
         .click();
       await play();
     }
-    if (i === 4) {
+    if (i === 5) {
       await expect(editor).toHaveCount(0);
       await expect(
         dialog.getByRole("button", { name: "Play", exact: true }),
@@ -314,7 +315,7 @@ async function walkThrough(page, web) {
         dialog.getByRole("status").filter({ hasText: "Current version:" }),
       ).toHaveText("Current version: My tour version");
     }
-    if (i === 5) {
+    if (i === 6) {
       await expect(dialog.locator("[data-tour-sandbox]")).toHaveCount(0);
       await expect
         .poll(
@@ -339,7 +340,7 @@ async function walkThrough(page, web) {
   );
   await dialog.getByRole("button", { name: "Back", exact: true }).click();
   await expect(
-    dialog.getByRole("heading", { name: titles[4], exact: true }),
+    dialog.getByRole("heading", { name: titles[5], exact: true }),
   ).toBeFocused();
   await dialog
     .getByRole("button", { name: "Save your sound", exact: true })

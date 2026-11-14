@@ -62,7 +62,8 @@ export function Onboarding({
           {step.id === "save" ? (
             <TourVersions />
           ) : (
-            step.id !== "wav" && <TourSandbox key={step.id} topic={step.id} />
+            step.id !== "wav" &&
+            step.id !== "audio" && <TourSandbox key={step.id} topic={step.id} />
           )}
           <ol className={styles.instructions}>
             {step.instructions.map((instruction) => (

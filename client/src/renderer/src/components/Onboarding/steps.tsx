@@ -3,6 +3,7 @@ import {
   History,
   type LucideIcon,
   Network,
+  Paperclip,
   SlidersHorizontal,
   Sparkles,
 } from "lucide-react";
@@ -18,6 +19,7 @@ export type TourTopic =
   | "play"
   | "controls"
   | "assist"
+  | "audio"
   | "modules"
   | "save"
   | "wav";
@@ -153,6 +155,35 @@ export function tourSteps(web: boolean): TourStep[] {
               Edits appear directly in the editor. Press Play / Update to hear
               them, or return to the editor and use <Shortcut command="undo" />{" "}
               to undo. Esc closes Assist.
+            </>
+          ),
+        },
+      ],
+    },
+    {
+      id: "audio",
+      label: "Start from audio",
+      icon: Paperclip,
+      title: "Turn a sound into a snippet.",
+      description:
+        "Give Assist a short audio reference to recreate as editable Strudel code, from its notes and rhythm to its tempo.",
+      instructions: [
+        {
+          title: "Attach an MP3",
+          body: "Open Assist, click the paperclip and choose an MP3 from your computer.",
+        },
+        {
+          title: "Choose the part you want",
+          body: "Select up to 10 seconds on the waveform. Drag the selection or adjust its start and end times, then preview it. Only the selected excerpt is sent to Assist.",
+        },
+        {
+          title: "Make it your own",
+          body: (
+            <>
+              Add a request such as “Recreate the melody and tempo,” or send
+              just the audio. The result replaces the current snippet. Press
+              Play / Update to listen, tweak the code, or use{" "}
+              <Shortcut command="undo" /> to undo.
             </>
           ),
         },
