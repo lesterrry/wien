@@ -1,0 +1,89 @@
+.iconButton {
+  composes: iconButton from "../../styles/common.module.css";
+}
+
+.muted {
+  composes: muted from "../../styles/common.module.css";
+}
+
+.secondaryButton {
+  composes: secondaryButton from "../../styles/common.module.css";
+}
+
+.editorToolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+  height: 76px;
+  padding: 0 27px;
+  gap: 12px;
+}
+
+.fileHeading {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
+.fileHeading > svg {
+  color: var(--color-muted);
+}
+
+.fileHeading > div {
+  min-width: 0;
+}
+
+.fileHeading strong,
+.fileName {
+  display: block;
+  font-size: 13px;
+  font-weight: 550;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileHeading span:not(.muted) {
+  display: block;
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--color-muted);
+}
+
+.transport {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 1050px) {
+  .editorToolbar {
+    padding: 0 20px;
+  }
+}
+
+@media (max-width: 1050px) {
+  .transport {
+    gap: 5px;
+  }
+}
+
+.fileName {
+  display: block;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: text;
+}
+
+.fileName:focus-visible {
+  outline: 1px solid var(--color-brand);
+  outline-offset: 2px;
+}

@@ -1,0 +1,32 @@
+.dangerButton {
+  composes: dangerButton from "../../styles/common.module.css";
+}
+
+.primaryButton {
+  composes: primaryButton from "../../styles/common.module.css";
+}
+
+.secondaryButton {
+  composes: secondaryButton from "../../styles/common.module.css";
+}
+
+.spin {
+  composes: spin from "../../styles/common.module.css";
+}
+
+.modalForm .fieldHint {
+  font-size: 11px;
+  color: var(--color-muted);
+  margin-top: 8px;
+}
+
+.modalForm .formError {
+  color: var(--color-danger);
+}
+
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 25px;
+}

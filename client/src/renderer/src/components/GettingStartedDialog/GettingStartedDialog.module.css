@@ -1,0 +1,29 @@
+.muted {
+  composes: muted from "../../styles/common.module.css";
+}
+
+.primaryButton {
+  composes: primaryButton from "../../styles/common.module.css";
+}
+
+.secondaryButton {
+  composes: secondaryButton from "../../styles/common.module.css";
+}
+
+.helpContent > div {
+  display: flex;
+  justify-content: space-between;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 12px;
+}
+
+.helpContent p:first-child {
+  margin-top: 0;
+  margin-bottom: 18px;
+}
+
+.helpContent > button {
+  width: 100%;
+  margin-top: 10px;
+}

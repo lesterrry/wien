@@ -1,0 +1,13 @@
+.contextMenu {
+  position: fixed;
+}
+
+.dangerText {
+  composes: dangerText from "../../styles/menu.module.css";
+}
+.menu {
+  composes: menu from "../../styles/menu.module.css";
+}
+.menuDivider {
+  composes: menuDivider from "../../styles/menu.module.css";
+}

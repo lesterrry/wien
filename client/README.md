@@ -596,6 +596,13 @@ src/renderer/   # React, explorer, редактор и плеер Strudel
 собираются через `classnames`. Общие кнопки и индикаторы переиспользуются через
 `composes` из `styles/common.module.css`.
 
+`App/App.tsx` связывает состояние проекта, открытые редакторы и операции с файлами.
+Меню проекта, сайдбар, заголовок окна, тулбар, строка состояния и диалоги вынесены
+в отдельные компоненты. `PlaybackControls` общий для редактора и полноэкранных
+контролов. В `App/useControlPanel.ts` находятся изменения контролов, их настройки
+и обновление звука; `App/useWorkspaceCommands.ts` связывает горячие клавиши и меню
+Electron с командами приложения. Общие стили меню — `styles/menu.module.css`.
+
 Цвета интерфейса: `src/renderer/src/styles/theme.css`.
 Глобальные базовые стили: `src/renderer/src/styles/global.css`.
 Реестр примеров: `../examples/`, загрузчик: `src/shared/examples.ts`.

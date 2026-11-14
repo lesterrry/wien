@@ -1,0 +1,54 @@
+.iconButton {
+  composes: iconButton from "../../styles/common.module.css";
+}
+
+.titlebar {
+  display: flex;
+  grid-column: 1 / -1;
+  -webkit-app-region: drag;
+  user-select: none;
+  background: var(--color-surface);
+}
+
+.titlebarSidebar {
+  width: 258px;
+  flex-shrink: 0;
+  padding: 0 17px 0 96px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.appName {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  overflow: hidden;
+  font-size: 19px;
+  font-weight: 650;
+  color: var(--color-primary);
+}
+
+.web .titlebarSidebar {
+  padding-left: 18px;
+}
+
+.titlebarMain {
+  flex: 1;
+  min-width: 0;
+  padding: 0 18px 0 12px;
+  gap: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+@media (max-width: 1050px) {
+  .titlebarSidebar {
+    width: 235px;
+  }
+}

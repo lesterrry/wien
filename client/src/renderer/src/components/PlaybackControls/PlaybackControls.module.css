@@ -1,0 +1,39 @@
+.iconButton {
+  composes: iconButton from "../../styles/common.module.css";
+}
+
+.spin {
+  composes: spin from "../../styles/common.module.css";
+}
+
+.playButton {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-primary);
+  color: var(--color-background);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.playButton:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+.playButton kbd {
+  color: var(--color-muted);
+  margin-left: 12px;
+  font-size: 10px;
+}
+
+.stopButton {
+  color: var(--color-secondary);
+}
+
+@media (max-width: 1050px) {
+  .playButton kbd {
+    display: none;
+  }
+}

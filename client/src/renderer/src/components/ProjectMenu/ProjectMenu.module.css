@@ -1,0 +1,139 @@
+.projectPickerWrap {
+  position: relative;
+}
+
+.projectPicker {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  padding: 10px 8px;
+  border-radius: 8px;
+}
+
+.projectPicker:hover {
+  background: var(--color-hover);
+}
+
+.projectAvatar {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  background: var(--color-hover);
+  border: 1px solid var(--color-border);
+  color: var(--color-brand);
+  border-radius: 8px;
+}
+
+.projectPicker > span:nth-child(2) {
+  min-width: 0;
+  flex: 1;
+}
+
+.projectPicker strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 550;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.projectPicker small {
+  display: block;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--color-muted);
+}
+
+.projectPicker > svg {
+  color: var(--color-muted);
+}
+
+.projectMenu {
+  position: absolute;
+  top: 60px;
+  left: 5px;
+  width: 228px;
+  max-height: calc(100dvh - 120px);
+  overflow-y: auto;
+}
+
+.projectPicker .accountIdentity {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.accountIdentity > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.tierBadge {
+  flex-shrink: 0;
+  font-size: 8px;
+  font-weight: 650;
+  letter-spacing: 0.5px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-brand);
+}
+
+.subscription {
+  margin: 10px 4px 6px;
+  padding: 10px 10px 6px;
+  border-radius: 6px;
+  background: var(--color-background);
+}
+
+.subscription > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 11px;
+}
+
+.subscription strong {
+  font-weight: 550;
+}
+
+.subscription span {
+  color: var(--color-secondary);
+}
+
+.subscription button {
+  margin-top: 10px;
+  padding: 4px 0;
+  font-size: 11px;
+  justify-content: space-between;
+  color: var(--color-brand);
+}
+
+.subscription button > span {
+  color: inherit;
+}
+
+.subscription button:hover {
+  background: transparent;
+}
+
+.subscription button:hover > span {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.menu {
+  composes: menu from "../../styles/menu.module.css";
+}
+.menuDivider {
+  composes: menuDivider from "../../styles/menu.module.css";
+}

@@ -1,35 +1,5 @@
 import classNames from "classnames";
-import {
-  ArrowDownToLine,
-  ArrowRight,
-  Check,
-  ChevronDown,
-  CircleHelp,
-  Code2,
-  FileCode2,
-  FilePlus2,
-  FolderOpen,
-  FolderPlus,
-  Library,
-  Loader2,
-  MoreHorizontal,
-  Network,
-  Package,
-  PanelLeftClose,
-  PanelLeftOpen,
-  PanelRightClose,
-  PanelRightOpen,
-  Pencil,
-  Play,
-  Plus,
-  Search,
-  Sparkles,
-  Square,
-  SquareX,
-  Trash2,
-  UserRound,
-  X,
-} from "lucide-react";
+import { Code2, Plus, X } from "lucide-react";
 import {
   type MouseEvent,
   useCallback,
@@ -41,35 +11,9 @@ import {
   type CommandId,
   type CommandState,
   commands,
-  matchCommand,
-  primaryModifier,
-  shortcutLabel,
 } from "../../../../shared/commands";
-import type { ControlCustomization } from "../../../../shared/control-customizations";
-import {
-  type ControlGroup,
-  type PanelPreferences,
-  readControlTree,
-  readPanelPreferences,
-  relocatePanelPreferences,
-} from "../../../../shared/control-tree";
-import {
-  type Control,
-  type ControlChange,
-  changeControl,
-  configureControl,
-  ignoreControl,
-  moveControl,
-  readControlCustomization,
-  readControls,
-} from "../../../../shared/controls";
-import { exampleDescriptions } from "../../../../shared/example-descriptions";
-import {
-  type Edit,
-  editSource,
-  hasExports,
-  loadGraph,
-} from "../../../../shared/modules";
+import { relocatePanelPreferences } from "../../../../shared/control-tree";
+import { hasExports, loadGraph } from "../../../../shared/modules";
 import { nextUntitledName } from "../../../../shared/snippet-names";
 import {
   type Entry,
@@ -79,7 +23,7 @@ import {
   parentPath,
   type VersionEntry,
 } from "../../../../shared/types";
-import { executeEditingCommand, shortcutEnvironment } from "../../commands";
+import { executeEditingCommand } from "../../commands";
 import {
   type Document,
   useSnippetSessions,
@@ -89,82 +33,36 @@ import { AppMenu } from "../AppMenu/AppMenu";
 import { AudioExportDialog } from "../AudioExportDialog/AudioExportDialog";
 import { ControlSettingsDialog } from "../ControlSettingsDialog/ControlSettingsDialog";
 import { ControlsPanel } from "../ControlsPanel/ControlsPanel";
-import { Dialog } from "../Dialog/Dialog";
+import { ExamplePickerDialog } from "../ExamplePickerDialog/ExamplePickerDialog";
 import { Explorer } from "../Explorer/Explorer";
+import { FileContextMenu } from "../FileContextMenu/FileContextMenu";
+import { FileOperationDialog } from "../FileOperationDialog/FileOperationDialog";
 import { FileTabs } from "../FileTabs/FileTabs";
+import { GettingStartedDialog } from "../GettingStartedDialog/GettingStartedDialog";
 import { GraphView } from "../GraphView/GraphView";
 import { Onboarding } from "../Onboarding/Onboarding";
 import { hasSeenOnboarding } from "../Onboarding/onboarding-state";
-import { SplitMarquee } from "../SplitMarquee/SplitMarquee";
+import { PlaybackControls } from "../PlaybackControls/PlaybackControls";
+import { ProjectMenu } from "../ProjectMenu/ProjectMenu";
+import { SnippetToolbar } from "../SnippetToolbar/SnippetToolbar";
 import { StrudelEditor } from "../StrudelEditor/StrudelEditor";
 import { VersionsPanel } from "../VersionsPanel/VersionsPanel";
+import { WorkspaceSidebar } from "../WorkspaceSidebar/WorkspaceSidebar";
+import { WorkspaceStatus } from "../WorkspaceStatus/WorkspaceStatus";
+import { WorkspaceTitlebar } from "../WorkspaceTitlebar/WorkspaceTitlebar";
 import styles from "./App.module.css";
-
-type Modal =
-  | { kind: "create"; parent: string; folder: boolean }
-  | { kind: "rename"; entry: Entry }
-  | { kind: "move"; entry: Entry }
-  | { kind: "delete"; entry: Entry }
-  | { kind: "reload" }
-  | { kind: "examples" }
-  | { kind: "audio-export"; path: string }
-  | { kind: "help" }
-  | { kind: "onboarding" };
+import { useControlPanel } from "./useControlPanel";
+import { useWorkspaceCommands } from "./useWorkspaceCommands";
+import type { Modal } from "./workspace-types";
+import { findEntry, markExports, message } from "./workspace-utils";
 
 const api = window.workspace;
-function findEntry(entries: Entry[], path: string): Entry | undefined {
-  for (const entry of entries) {
-    if (entry.id === path) return entry;
-    if (entry.children) {
-      const found = findEntry(entry.children, path);
-      if (found) return found;
-    }
-  }
-}
-function markExports(
-  entries: Entry[],
-  path: string,
-  exported: boolean,
-): Entry[] {
-  return entries.map((entry) =>
-    entry.id === path
-      ? { ...entry, exported }
-      : entry.children
-        ? { ...entry, children: markExports(entry.children, path, exported) }
-        : entry,
-  );
-}
-const message = (error: unknown) =>
-  String(error instanceof Error ? error.message : error).replace(
-    /^Error invoking remote method '[^']+': Error: /,
-    "",
-  );
-
 export function App() {
   const {
     user,
     resolved: accountResolved,
     dialogOpen: accountDialogOpen,
-    openProfile,
-    openUpgrade,
-    refresh: refreshAccount,
   } = useAccount();
-  const [preferences, setPreferences] = useState<PanelPreferences>({
-    pinned: null,
-    roots: {},
-  });
-  const [preferencesProject, setPreferencesProject] = useState<string | null>(
-    null,
-  );
-  const [controlTree, setControlTree] = useState<ControlGroup | null>(null);
-  const [treeLoading, setTreeLoading] = useState(false);
-  const [treeVersion, setTreeVersion] = useState(0);
-  const [controlErrors, setControlErrors] = useState<Record<string, string>>(
-    {},
-  );
-  const controlQueue = useRef(Promise.resolve());
-  const controlWrites = useRef(0);
-  const liveUpdateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const navigationBack = useRef(
     new Map<
       string,
@@ -184,7 +82,6 @@ export function App() {
     created: boolean;
   } | null>(null);
   const [controllerRoot, setControllerRoot] = useState<string | null>(null);
-  const preferencesSave = useRef(Promise.resolve());
   const [definitionTarget, setDefinitionTarget] = useState<{
     path: string;
     name: string;
@@ -229,51 +126,9 @@ export function App() {
     x: number;
     y: number;
   } | null>(null);
-  const [controlSettings, setControlSettings] = useState<{
-    path: string;
-    control: Control;
-    initial: ControlCustomization;
-  } | null>(null);
   const [modal, setModal] = useState<Modal | null>(null);
-  const onboardingRequested = useRef(false);
-  useEffect(() => {
-    if (
-      !accountResolved ||
-      user ||
-      !project ||
-      busy ||
-      modal ||
-      controlSettings ||
-      accountDialogOpen ||
-      onboardingRequested.current
-    )
-      return;
-    onboardingRequested.current = true;
-    if (!hasSeenOnboarding()) setModal({ kind: "onboarding" });
-  }, [
-    accountResolved,
-    user,
-    project,
-    busy,
-    modal,
-    controlSettings,
-    accountDialogOpen,
-  ]);
   const [value, setValue] = useState("");
   const [modalError, setModalError] = useState<string | null>(null);
-  const modalNameInput = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    const input = modalNameInput.current;
-    if (!input || !modal) return;
-    input.focus();
-    const selectionEnd =
-      modal.kind === "create" &&
-      !modal.folder &&
-      input.value.endsWith(".strudel")
-        ? input.value.length - ".strudel".length
-        : input.value.length;
-    input.setSelectionRange(0, selectionEnd);
-  }, [modal]);
   const [workspaceView, setWorkspaceView] = useState<
     "editor" | "controls" | "graph"
   >("editor");
@@ -309,13 +164,6 @@ export function App() {
     (open: boolean) => setWorkspaceView(open ? "controls" : "editor"),
     [],
   );
-  // const playingFile =
-  //   sessions
-  //     .filter((session) => session.playback.started)
-  //     .map((session) => session.document.path)
-  //     .join(", ") || null;
-  const pendingControlPaths = useRef(new Set<string>());
-
   const updateTabs = useCallback((next: string[]) => {
     tabsRef.current = next;
     setTabs(next);
@@ -401,6 +249,68 @@ export function App() {
     }
   }, []);
 
+  const {
+    preferences,
+    setPreferences,
+    preferencesSave,
+    controlTree,
+    treeLoading,
+    treeVersion,
+    setTreeVersion,
+    controlErrors,
+    setControlErrors,
+    controlQueue,
+    controlWrites,
+    controlSettings,
+    setControlSettings,
+    panelRoot,
+    panelLayout,
+    movePanelControl,
+    editPanelControl,
+    openControlSettings,
+    saveControlSettings,
+    cancelLiveUpdate,
+  } = useControlPanel({
+    projectRoot: project?.root,
+    activePath:
+      (definitionContext?.fullscreen ? definitionContext.root : null) ??
+      document?.path ??
+      (controllerOpen ? controllerRoot : null) ??
+      null,
+    sessions,
+    sessionsRef,
+    players,
+    flush,
+    run,
+    busyRef,
+    setBusy,
+    setError,
+  });
+  const onboardingRequested = useRef(false);
+  useEffect(() => {
+    if (
+      !accountResolved ||
+      user ||
+      !project ||
+      busy ||
+      modal ||
+      controlSettings ||
+      accountDialogOpen ||
+      onboardingRequested.current
+    )
+      return;
+    onboardingRequested.current = true;
+    if (!hasSeenOnboarding()) setModal({ kind: "onboarding" });
+  }, [
+    accountResolved,
+    user,
+    project,
+    busy,
+    modal,
+    controlSettings,
+    accountDialogOpen,
+  ]);
+
   const activateFile = useCallback(
     async (path: string) => {
       await controlQueue.current;
@@ -414,7 +324,7 @@ export function App() {
       updateDocument({ path, code, saved: code });
       setSavedStatus("Saved locally");
     },
-    [flush, updateDocument, sessionsRef, players],
+    [flush, updateDocument, sessionsRef, players, controlQueue.current],
   );
 
   const openFile = useCallback(
@@ -465,69 +375,9 @@ export function App() {
       removeSessions,
       documentRef,
       setControllerOpen,
+      controlQueue.current,
     ],
   );
-
-  function saveForeignEdit(
-    path: string,
-    transform: (code: string) => Edit | undefined,
-  ): Promise<void> {
-    controlWrites.current += 1;
-    const task = controlQueue.current.then(async () => {
-      const open = sessionsRef.current.find(
-        (session) => session.document.path === path,
-      );
-      const code = open ? open.document.code : await api.read(path);
-      const edit = transform(code);
-      if (!edit) return;
-      const next = editSource(code, [edit]);
-      if (open) {
-        players.current.get(open.id)?.replaceCode(next);
-        await flush();
-      } else await api.save({ path, content: next, expected: code });
-      setTreeVersion((version) => version + 1);
-      scheduleLiveUpdate(path);
-    });
-    const settled = task.finally(() => {
-      controlWrites.current -= 1;
-      setTreeVersion((version) => version + 1);
-    });
-    controlQueue.current = settled.catch(() => {});
-    return settled;
-  }
-
-  function movePanelControl(
-    path: string,
-    name: string,
-    targetName: string,
-    placement: "before" | "after",
-  ) {
-    void saveForeignEdit(path, (code) => {
-      const controls = readControls(code).controls;
-      if (
-        ![name, targetName].every((binding) =>
-          controls.some((control) => control.name === binding),
-        )
-      )
-        throw new Error(
-          "This control has changed. Refresh the panel before moving it.",
-        );
-      return moveControl(code, name, targetName, placement);
-    })
-      .then(() =>
-        setControlErrors((current) => {
-          const next = { ...current };
-          delete next[JSON.stringify([path, name])];
-          return next;
-        }),
-      )
-      .catch((error) =>
-        setControlErrors((current) => ({
-          ...current,
-          [JSON.stringify([path, name])]: message(error),
-        })),
-      );
-  }
 
   useEffect(() => {
     if (!project?.root || api.platform === "web") return;
@@ -635,7 +485,15 @@ export function App() {
           }
         });
       }),
-    [blockRecovery, flush, run, selectedVersion, stopAll],
+    [
+      blockRecovery,
+      flush,
+      run,
+      selectedVersion,
+      stopAll,
+      preferencesSave.current,
+      controlQueue.current,
+    ],
   );
 
   const play = useCallback(() => {
@@ -646,7 +504,7 @@ export function App() {
       await flush();
       await target?.play();
     })().catch((error) => setError(message(error)));
-  }, [flush, player]);
+  }, [flush, player, controlQueue.current]);
   const stop = useCallback(() => {
     void player.current?.stop();
   }, [player]);
@@ -739,7 +597,14 @@ export function App() {
         setControlErrors({});
       setTreeVersion((version) => version + 1);
     },
-    [patchSession, players, sessionsRef],
+    [
+      patchSession,
+      players,
+      sessionsRef,
+      setTreeVersion,
+      setControlErrors,
+      controlQueue.current,
+    ],
   );
 
   useEffect(() => {
@@ -790,7 +655,7 @@ export function App() {
       unsubscribe();
       window.removeEventListener("focus", schedule);
     };
-  }, [project?.root, refresh]);
+  }, [project?.root, refresh, controlWrites.current]);
 
   async function syncDocument() {
     for (const session of sessionsRef.current) {
@@ -921,11 +786,7 @@ export function App() {
         !window.confirm("Discard edits made in this version?")
       )
         return;
-      if (liveUpdateTimer.current !== null) {
-        clearTimeout(liveUpdateTimer.current);
-        liveUpdateTimer.current = null;
-      }
-      pendingControlPaths.current.clear();
+      cancelLiveUpdate();
       await removeSessions(tabsRef.current);
       updateTabs([]);
       updateDocument(null);
@@ -1087,296 +948,7 @@ export function App() {
     });
   }
 
-  const filename = document?.path.split("/").at(-1);
   const dirty = document?.code !== document?.saved;
-  const folders = (entries: Entry[]): Entry[] =>
-    entries.flatMap((entry) =>
-      entry.children ? [entry, ...folders(entry.children)] : [],
-    );
-  const modifier = primaryModifier(shortcutEnvironment);
-  const shortcut =
-    modifier === "Meta" ? "⌘" : modifier === "Control" ? "Ctrl" : "Alt";
-  const panelRoot =
-    preferences.pinned ??
-    (definitionContext?.fullscreen ? definitionContext.root : null) ??
-    document?.path ??
-    (controllerOpen ? controllerRoot : null) ??
-    null;
-  const panelLayout = (panelRoot && preferences.roots[panelRoot]) || {
-    hidden: {},
-    collapsed: {},
-  };
-
-  useEffect(() => {
-    if (!project?.root) return;
-    let cancelled = false;
-    const root = project.root;
-    setPreferencesProject(null);
-    setPreferences({ pinned: null, roots: {} });
-    setControlErrors({});
-    void api
-      .readControlPreferences(root)
-      .then((saved) => {
-        if (!cancelled) {
-          setPreferences(saved ?? readPanelPreferences(root));
-          setPreferencesProject(root);
-        }
-      })
-      .catch((error) => {
-        if (!cancelled) setError(message(error));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [project?.root]);
-
-  const projectRoot = project?.root;
-  useEffect(() => {
-    if (!projectRoot || preferencesProject !== projectRoot) return;
-    let cancelled = false;
-    const root = projectRoot;
-    const task = preferencesSave.current
-      .catch(() => {})
-      .then(() => api.saveControlPreferences(root, preferences))
-      .then(() => {
-        try {
-          localStorage.removeItem(`wien:controls:${root}`);
-        } catch {
-          /* Project settings have already been saved. */
-        }
-      });
-    preferencesSave.current = task;
-    void task.catch((error) => {
-      if (!cancelled)
-        setError(`Could not save panel settings: ${message(error)}`);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [projectRoot, preferences, preferencesProject]);
-
-  const treeRevision = JSON.stringify([
-    project?.root,
-    sessions.map((session) => [session.document.path, session.document.code]),
-    treeVersion,
-  ]);
-  useEffect(() => {
-    const [, openSources] = JSON.parse(treeRevision) as [
-      string | null,
-      [string, string][],
-      number,
-    ];
-    const drafts = new Map(openSources);
-    let cancelled = false;
-    if (!panelRoot) {
-      setControlTree(null);
-      setTreeLoading(false);
-      return;
-    }
-    setTreeLoading(true);
-    const timer = setTimeout(() => {
-      void readControlTree(panelRoot, async (path) => {
-        return drafts.has(path)
-          ? Promise.resolve(drafts.get(path) as string)
-          : api.read(path);
-      }).then((tree) => {
-        if (!cancelled && controlWrites.current === 0) {
-          setControlTree(tree);
-          setTreeLoading(false);
-        }
-      });
-    }, 80);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [panelRoot, treeRevision]);
-
-  function scheduleLiveUpdate(path: string) {
-    pendingControlPaths.current.add(path);
-    if (liveUpdateTimer.current !== null) return;
-    liveUpdateTimer.current = setTimeout(() => {
-      liveUpdateTimer.current = null;
-      void controlQueue.current
-        .then(async () => {
-          const changes = [...pendingControlPaths.current];
-          pendingControlPaths.current.clear();
-          for (const session of sessionsRef.current.filter(
-            (session) => session.playback.started,
-          )) {
-            const running = players.current.get(session.id);
-            if (running && changes.some((file) => running.dependsOn(file)))
-              await running.update({ flash: false });
-          }
-        })
-        .catch((error) => setError(message(error)));
-    }, 60);
-  }
-
-  function previewControl(control: Control, change: ControlChange): Control {
-    if (change.type === "reset")
-      return control.defaultValue === undefined
-        ? control
-        : previewControl(control, { type: "set", value: control.defaultValue });
-    if (change.type === "set")
-      return {
-        ...control,
-        value: change.value,
-        ...(control.kind === "enum"
-          ? {
-              selectedKey:
-                control.options.find((option) =>
-                  Object.is(option.value, change.value),
-                )?.key ?? control.selectedKey,
-            }
-          : {}),
-      } as Control;
-    if (control.kind !== "multi-enum") return control;
-    const options = change.order.flatMap((key) =>
-      control.options.filter((option) => option.key === key),
-    );
-    return {
-      ...control,
-      options,
-      hasOrder: true,
-      value: options
-        .filter((option) => control.value.includes(option.value))
-        .map((option) => option.value),
-    };
-  }
-
-  function editPanelControl(
-    path: string,
-    name: string,
-    change?: ControlChange,
-  ) {
-    const key = JSON.stringify([path, name]);
-    // All appearances share an optimistic value, including keyboard gestures
-    // whose next step arrives before the file write has finished.
-    const updateTree = (group: ControlGroup): ControlGroup => ({
-      ...group,
-      controls:
-        group.path === path
-          ? group.controls.flatMap((control) =>
-              control.name !== name
-                ? [control]
-                : change === undefined
-                  ? []
-                  : [previewControl(control, change)],
-            )
-          : group.controls,
-      children: group.children.map(updateTree),
-    });
-    setControlTree((tree) => (tree ? updateTree(tree) : null));
-    controlWrites.current += 1;
-    controlQueue.current = controlQueue.current.then(async () => {
-      try {
-        const open = sessionsRef.current.find(
-          (session) => session.document.path === path,
-        );
-        const source = open ? open.document.code : await api.read(path);
-        const control = readControls(source).controls.find(
-          (control) => control.name === name,
-        );
-        if (
-          !control ||
-          (change?.type === "reorder" && control.kind !== "multi-enum") ||
-          (change?.type === "set" &&
-            typeof control.value !== typeof change.value)
-        )
-          throw new Error(
-            "This control has changed. Fix its declaration before editing.",
-          );
-        const edit =
-          change === undefined
-            ? ignoreControl(source, name)
-            : changeControl(source, name, change);
-        if (edit) {
-          const code = editSource(source, [edit]);
-          if (open) {
-            if (change === undefined)
-              players.current.get(open.id)?.ignoreControl(name);
-            else players.current.get(open.id)?.changeControl(name, change);
-            await flush();
-          } else await api.save({ path, content: code, expected: source });
-        }
-        setTreeVersion((version) => version + 1);
-        setControlErrors((current) => {
-          const next = { ...current };
-          delete next[key];
-          return next;
-        });
-        if (change !== undefined) scheduleLiveUpdate(path);
-      } catch (error) {
-        setControlErrors((current) => ({ ...current, [key]: message(error) }));
-      } finally {
-        controlWrites.current -= 1;
-        setTreeVersion((version) => version + 1);
-      }
-    });
-  }
-
-  function openControlSettings(path: string, name: string) {
-    void run(async () => {
-      await controlQueue.current;
-      const open = sessionsRef.current.find(
-        (session) => session.document.path === path,
-      );
-      const source = open ? open.document.code : await api.read(path);
-      const { control, settings } = readControlCustomization(source, name);
-      setControlSettings({ path, control, initial: settings });
-    });
-  }
-
-  async function saveControlSettings(settings: ControlCustomization) {
-    if (!controlSettings || busyRef.current)
-      throw new Error("The workspace is busy. Try again.");
-    const {
-      path,
-      control: { name },
-      initial,
-    } = controlSettings;
-    busyRef.current = true;
-    setBusy(true);
-    controlWrites.current += 1;
-    const work = controlQueue.current.then(async () => {
-      const open = sessionsRef.current.find(
-        (session) => session.document.path === path,
-      );
-      const source = open ? open.document.code : await api.read(path);
-      const edit = configureControl(source, name, settings, initial);
-      if (open) {
-        if (edit) {
-          const editor = players.current.get(open.id);
-          if (!editor)
-            throw new Error("The source editor is not ready. Try again.");
-          editor.configureControl(name, settings, initial);
-        }
-        await flush();
-      } else if (edit)
-        await api.save({
-          path,
-          content: editSource(source, [edit]),
-          expected: source,
-        });
-      setControlErrors((current) => {
-        const next = { ...current };
-        delete next[JSON.stringify([path, name])];
-        return next;
-      });
-      if (edit) scheduleLiveUpdate(path);
-    });
-    controlQueue.current = work.catch(() => {});
-    try {
-      await work;
-    } finally {
-      controlWrites.current -= 1;
-      setTreeVersion((version) => version + 1);
-      busyRef.current = false;
-      setBusy(false);
-    }
-  }
-
   function goToControl(path: string, name: string) {
     void run(async () => {
       await controlQueue.current;
@@ -1432,10 +1004,7 @@ export function App() {
     }
   }, [definitionTarget, document?.path, players, sessionsRef]);
 
-  const [menuState, setMenuState] = useState<CommandState>({});
-  const lastMenuState = useRef("");
-  const commandHandler = useRef<(command: CommandId) => void>(() => {});
-  commandHandler.current = (command) => {
+  const handleCommand = (command: CommandId) => {
     const dialogOpen = Boolean(window.document.querySelector("dialog[open]"));
     if (command === "stopAll") {
       void stopAll();
@@ -1529,44 +1098,10 @@ export function App() {
         );
     }
   };
-  useEffect(
-    () => api.onMenuCommand?.((command) => commandHandler.current(command)),
-    [],
-  );
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      const command = matchCommand(event, shortcutEnvironment);
-      if (!command) return;
-      if (
-        (command.id === "controlUp" || command.id === "controlDown") &&
-        (!(event.target instanceof HTMLElement) ||
-          !event.target.matches("[data-control-move]"))
-      )
-        return;
-      // Enter in the assistant composer belongs to its form.
-      if (
-        command.id === "play" &&
-        event.target instanceof Element &&
-        event.target.closest("[data-assistant]")
-      )
-        return;
-      event.preventDefault();
-      event.stopPropagation();
-      if (!event.repeat) commandHandler.current(command.id);
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, []);
-  useEffect(() => {
-    const syncMenu = () => {
-      if (
-        window.document.activeElement?.closest(
-          '[aria-label="Application menu"]',
-        )
-      )
-        return;
-      const available =
-        !busyRef.current && !window.document.querySelector("dialog[open]");
+  const { menuState, dispatchCommand } = useWorkspaceCommands(
+    handleCommand,
+    (dialogClosed) => {
+      const available = dialogClosed && !busyRef.current;
       const state: CommandState = Object.fromEntries(
         commands.map((command) => [command.id, available]),
       );
@@ -1597,403 +1132,170 @@ export function App() {
       );
       state.controlUp = available && control?.dataset.moveUp === "true";
       state.controlDown = available && control?.dataset.moveDown === "true";
-      const serialized = JSON.stringify(state);
-      if (lastMenuState.current === serialized) return;
-      lastMenuState.current = serialized;
-      api.updateMenuState?.(state);
-      setMenuState(state);
-    };
-    syncMenu();
-    window.addEventListener("focusin", syncMenu);
-    const observer = new MutationObserver((mutations) => {
-      if (
-        mutations.some(
-          (mutation) =>
-            mutation.type === "attributes" ||
-            [...mutation.addedNodes, ...mutation.removedNodes].some(
-              (node) =>
-                node instanceof Element &&
-                (node.matches("dialog") || node.querySelector("dialog")),
-            ),
-        )
-      )
-        syncMenu();
-    });
-    observer.observe(window.document.body, {
-      subtree: true,
-      childList: true,
-      attributes: true,
-      attributeFilter: ["open"],
-    });
-    return () => {
-      window.removeEventListener("focusin", syncMenu);
-      observer.disconnect();
-    };
-  });
-
+      return state;
+    },
+  );
+  const playbackProps = {
+    path: document?.path ?? null,
+    busy,
+    playback,
+    onPlay: play,
+    onStop: stop,
+    onActions: openSnippetActions,
+  };
+  const fileTabs = (
+    <FileTabs
+      tabs={tabs.map((path) => ({
+        path,
+        exported:
+          path === document?.path
+            ? hasExports(document.code)
+            : Boolean(findEntry(project?.entries ?? [], path)?.exported),
+        dirty: sessions.some(
+          (s) =>
+            s.document.path === path && s.document.code !== s.document.saved,
+        ),
+        playing: sessions.some(
+          (s) => s.document.path === path && s.playback.started,
+        ),
+      }))}
+      active={document?.path ?? null}
+      disabled={busy}
+      onSelect={(path) => {
+        setWorkspaceView("editor");
+        void openFile(path);
+      }}
+      onClose={(path) => void closeTab(path)}
+      graph={{
+        open: graphOpen,
+        active: graphActive,
+        onSelect: () => setWorkspaceView("graph"),
+        onClose: closeGraph,
+      }}
+      controller={{
+        open: controllerOpen,
+        disabled: busy,
+        onSelect: () => {},
+        onClose: () => setWorkspaceView("editor"),
+      }}
+    />
+  );
+  const projectMenuContent = (
+    <ProjectMenu
+      projectName={project?.name}
+      open={projectMenu}
+      onOpenChange={setProjectMenu}
+      busy={busy}
+      hasExamples={examples.length > 0}
+      onSwitchProject={(create) => void switchProject(create)}
+      onExamples={() => showModal({ kind: "examples" })}
+      onExport={() =>
+        void run(async () => {
+          await flush();
+          await api.exportProject?.();
+        })
+      }
+      onReveal={() =>
+        void api.reveal().catch((error) => setError(message(error)))
+      }
+    />
+  );
+  const explorerContent = (
+    <Explorer
+      entries={
+        document
+          ? markExports(
+              project?.entries ?? [],
+              document.path,
+              hasExports(document.code),
+            )
+          : (project?.entries ?? [])
+      }
+      selected={document?.path ?? null}
+      search={search}
+      disabled={busy}
+      onOpen={(path) => void openFile(path)}
+      onSelect={setSelection}
+      onRename={(path, name) =>
+        run(() => move(path, joinPath(parentPath(path), name)))
+      }
+      onMove={(paths, parent) =>
+        run(async () => {
+          for (const path of paths)
+            await move(path, joinPath(parent, path.split("/").at(-1) ?? path));
+        })
+      }
+      onMenu={(entry, x, y) =>
+        setContext({
+          entry,
+          x: Math.min(x, window.innerWidth - 210),
+          y: Math.min(y, window.innerHeight - 225),
+        })
+      }
+    />
+  );
+  const versionsContent = api.platform !== "web" && (
+    <VersionsPanel
+      versions={versions}
+      selected={selectedVersion}
+      disabled={busy}
+      recoveryBlocked={recoveryBlocked}
+      error={versionError}
+      onRetry={() => {
+        void api
+          .versions()
+          .then((entries) => {
+            setVersions(entries);
+            setVersionError(null);
+          })
+          .catch((error) => setVersionError(message(error)));
+      }}
+      onCreate={createVersion}
+      onSelect={(oid) => void changeVersion(oid)}
+    />
+  );
   return (
     <div
       className={classNames(styles.app, {
-        [styles.webApp]: api.platform === "web",
         [styles.sidebarHidden]: !sidebar,
         [styles.controlsHidden]:
           !controlsVisible || controllerOpen || graphActive,
       })}
     >
       {api.platform === "web" && (
-        <AppMenu
-          hidden
-          state={menuState}
-          onCommand={(command) => commandHandler.current(command)}
-        />
+        <AppMenu hidden state={menuState} onCommand={dispatchCommand} />
       )}
-      <div className={styles.titlebar}>
-        <div className={styles.titlebarSidebar}>
-          <span className={styles.appName}>
-            <SplitMarquee
-              text="wien hauptbahnhof südtiroler platz"
-              paused={playingPaths.size === 0}
-            />
-          </span>
-          <button
-            className={styles.iconButton}
-            type="button"
-            title={`Toggle sidebar (${shortcut} B)`}
-            aria-label="Toggle sidebar"
-            onClick={() => setSidebar(!sidebar)}
-          >
-            {sidebar ? (
-              <PanelLeftClose size={17} />
-            ) : (
-              <PanelLeftOpen size={17} />
-            )}
-          </button>
-        </div>
-        <div className={styles.titlebarMain}>
-          <FileTabs
-            tabs={tabs.map((path) => ({
-              path,
-              exported:
-                path === document?.path
-                  ? hasExports(document.code)
-                  : Boolean(findEntry(project?.entries ?? [], path)?.exported),
-              dirty: sessions.some(
-                (s) =>
-                  s.document.path === path &&
-                  s.document.code !== s.document.saved,
-              ),
-              playing: sessions.some(
-                (s) => s.document.path === path && s.playback.started,
-              ),
-            }))}
-            active={document?.path ?? null}
-            disabled={busy}
-            onSelect={(path) => {
-              setWorkspaceView("editor");
-              void openFile(path);
-            }}
-            onClose={(path) => void closeTab(path)}
-            graph={{
-              open: graphOpen,
-              active: graphActive,
-              onSelect: () => setWorkspaceView("graph"),
-              onClose: closeGraph,
-            }}
-            controller={{
-              open: controllerOpen,
-              disabled: busy,
-              onSelect: () => {},
-              onClose: () => setWorkspaceView("editor"),
-            }}
-          />
-          <button
-            type="button"
-            className={styles.iconButton}
-            title={`Toggle controls (${shortcutLabel(commands.find((command) => command.id === "controls") ?? { id: "controls", label: "Toggle Controls" }, shortcutEnvironment)})`}
-            aria-label="Toggle controls"
-            aria-expanded={controlsVisible && !controllerOpen && !graphActive}
-            disabled={graphActive}
-            onClick={() => {
-              if (controllerOpen) {
-                setControllerOpen(false);
-                setControlsVisible(true);
-              } else setControlsVisible(!controlsVisible);
-            }}
-          >
-            {controlsVisible ? (
-              <PanelRightClose size={17} />
-            ) : (
-              <PanelRightOpen size={17} />
-            )}
-          </button>
-        </div>
-      </div>
+      <WorkspaceTitlebar
+        playing={playingPaths.size > 0}
+        sidebar={sidebar}
+        onSidebar={() => setSidebar(!sidebar)}
+        controlsVisible={controlsVisible}
+        controllerOpen={controllerOpen}
+        graphActive={graphActive}
+        onControls={() => {
+          if (controllerOpen) {
+            setControllerOpen(false);
+            setControlsVisible(true);
+          } else setControlsVisible(!controlsVisible);
+        }}
+        tabs={fileTabs}
+      />
 
       {sidebar && (
-        <aside className={styles.sidebar}>
-          <div className={styles.projectPickerWrap}>
-            <button
-              className={styles.projectPicker}
-              type="button"
-              aria-label="Project and account"
-              aria-expanded={projectMenu}
-              onClick={(event) => {
-                event.stopPropagation();
-                setProjectMenu(!projectMenu);
-                if (!projectMenu) void refreshAccount().catch(() => {});
-              }}
-              disabled={busy}
-            >
-              <span className={styles.projectAvatar}>
-                <Code2 size={18} />
-              </span>
-              <span>
-                <strong>{project?.name ?? "Opening workspace…"}</strong>
-                <small className={styles.accountIdentity}>
-                  <span title={user?.username}>
-                    {user?.username ?? "Not signed in"}
-                  </span>
-                  {user && user.tier !== "free" && (
-                    <span className={styles.tierBadge} data-tier={user.tier}>
-                      {user.tier.toUpperCase()}
-                    </span>
-                  )}
-                </small>
-              </span>
-              <ChevronDown size={14} />
-            </button>
-            {projectMenu && (
-              <div className={classNames(styles.menu, styles.projectMenu)}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setProjectMenu(false);
-                    openProfile();
-                  }}
-                >
-                  <UserRound size={15} />
-                  {user ? "Your profile" : "Sign in"}
-                </button>
-                {user && (
-                  <div className={styles.subscription}>
-                    <div>
-                      <strong>
-                        {user.tier === "free"
-                          ? "Free"
-                          : user.tier.toUpperCase()}
-                      </strong>
-                      <span>
-                        {user.assist_requests_remaining} assist requests left
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setProjectMenu(false);
-                        openUpgrade();
-                      }}
-                    >
-                      <span>Explore plans</span> <ArrowRight size={13} />
-                    </button>
-                  </div>
-                )}
-                <div className={styles.menuDivider} />
-                <button type="button" onClick={() => void switchProject(true)}>
-                  <Plus size={15} />
-                  New project
-                </button>
-                <button type="button" onClick={() => void switchProject(false)}>
-                  <FolderOpen size={15} />
-                  Open project…
-                </button>
-                {examples.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setProjectMenu(false);
-                      showModal({ kind: "examples" });
-                    }}
-                  >
-                    <Library size={15} />
-                    New from example
-                  </button>
-                )}
-                <div className={styles.menuDivider} />
-                {api.platform === "web" ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setProjectMenu(false);
-                      void run(async () => {
-                        await flush();
-                        await api.exportProject?.();
-                      });
-                    }}
-                  >
-                    Export project…
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void api
-                        .reveal()
-                        .catch((error) => setError(message(error)))
-                    }
-                  >
-                    <ArrowRight size={15} />
-                    Show project folder
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-          <label className={styles.searchBox}>
-            <Search size={14} />
-            <input
-              aria-label="Find a snippet"
-              placeholder="Find a snippet…"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-            {search && (
-              <button
-                className={styles.iconButton}
-                type="button"
-                aria-label="Clear search"
-                onClick={() => setSearch("")}
-              >
-                <X size={12} />
-              </button>
-            )}
-          </label>
-          <div className={styles.sectionHeading}>
-            <span>Files</span>
-            <div>
-              <button
-                className={styles.iconButton}
-                type="button"
-                title="New snippet"
-                aria-label="New snippet"
-                disabled={busy}
-                onClick={() =>
-                  showModal({
-                    kind: "create",
-                    parent: destination,
-                    folder: false,
-                  })
-                }
-              >
-                <FilePlus2 size={15} />
-              </button>
-              <button
-                className={styles.iconButton}
-                type="button"
-                title="New folder"
-                aria-label="New folder"
-                disabled={busy}
-                onClick={() =>
-                  showModal({
-                    kind: "create",
-                    parent: destination,
-                    folder: true,
-                  })
-                }
-              >
-                <FolderPlus size={15} />
-              </button>
-            </div>
-          </div>
-          <Explorer
-            entries={
-              document
-                ? markExports(
-                    project?.entries ?? [],
-                    document.path,
-                    hasExports(document.code),
-                  )
-                : (project?.entries ?? [])
-            }
-            selected={document?.path ?? null}
-            search={search}
-            disabled={busy}
-            onOpen={(path) => void openFile(path)}
-            onSelect={setSelection}
-            onRename={(path, name) =>
-              run(() => move(path, joinPath(parentPath(path), name)))
-            }
-            onMove={(paths, parent) =>
-              run(async () => {
-                for (const path of paths)
-                  await move(
-                    path,
-                    joinPath(parent, path.split("/").at(-1) ?? path),
-                  );
-              })
-            }
-            onMenu={(entry, x, y) =>
-              setContext({
-                entry,
-                x: Math.min(x, window.innerWidth - 210),
-                y: Math.min(y, window.innerHeight - 225),
-              })
-            }
-          />
-          {api.platform !== "web" && (
-            <VersionsPanel
-              versions={versions}
-              selected={selectedVersion}
-              disabled={busy}
-              recoveryBlocked={recoveryBlocked}
-              error={versionError}
-              onRetry={() => {
-                void api
-                  .versions()
-                  .then((entries) => {
-                    setVersions(entries);
-                    setVersionError(null);
-                  })
-                  .catch((error) => setVersionError(message(error)));
-              }}
-              onCreate={createVersion}
-              onSelect={(oid) => void changeVersion(oid)}
-            />
-          )}
-          {api.platform === "web" && (
-            <a
-              className={styles.downloadApp}
-              href="https://github.com/lesterrry/wien/releases"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <ArrowDownToLine size={16} aria-hidden="true" />
-              Скачать приложение
-            </a>
-          )}
-          <div className={styles.sidebarBottom}>
-            <button
-              type="button"
-              className={styles.graphLink}
-              onClick={() => openGraph()}
-              disabled={!project || busy}
-              aria-label="Open Graph View"
-            >
-              <Network size={16} />
-              <span>
-                Graph View<small>Explore project dependencies</small>
-              </span>
-              <ArrowRight size={13} />
-            </button>
-            <button
-              type="button"
-              className={styles.helpButton}
-              onClick={() => showModal({ kind: "help" })}
-            >
-              <CircleHelp size={14} />
-              Getting started<span>?</span>
-            </button>
-          </div>
-        </aside>
+        <WorkspaceSidebar
+          busy={busy}
+          projectReady={Boolean(project)}
+          search={search}
+          onSearch={setSearch}
+          onCreate={(folder) =>
+            showModal({ kind: "create", parent: destination, folder })
+          }
+          onGraph={() => openGraph()}
+          onHelp={() => showModal({ kind: "help" })}
+          projectMenu={projectMenuContent}
+          versions={versionsContent}
+          explorer={explorerContent}
+        />
       )}
 
       <main
@@ -2012,135 +1314,29 @@ export function App() {
         aria-label={graphActive || document ? undefined : "Snippet editor"}
       >
         {!graphActive && !controllerOpen && (
-          <header
-            className={styles.editorToolbar}
-            role="toolbar"
-            aria-label="Snippet toolbar"
-          >
-            <div className={styles.fileHeading}>
-              {document ? (
-                <>
-                  {hasExports(document.code) ? (
-                    <Package size={17} />
-                  ) : (
-                    <FileCode2 size={17} />
-                  )}
-                  <div>
-                    <button
-                      type="button"
-                      className={styles.fileName}
-                      title={`Double-click to rename (${shortcut} R)`}
-                      aria-label={`Rename ${filename}`}
-                      disabled={
-                        busy || Boolean(selectedVersion) || recoveryBlocked
-                      }
-                      onDoubleClick={renameActiveSnippet}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          renameActiveSnippet();
-                        }
-                      }}
-                    >
-                      {filename}
-                    </button>
-                    <span>
-                      {project?.name}
-                      {parentPath(document.path)
-                        ? ` / ${parentPath(document.path)}`
-                        : ""}
-                    </span>
-                  </div>
-                </>
-              ) : (
-                <span className={styles.muted}>Your next idea starts here</span>
-              )}
-            </div>
-            <div className={styles.transport}>
-              {definitionContext?.fullscreen && (
-                <button
-                  type="button"
-                  className={styles.secondaryButton}
-                  onClick={backToControls}
-                >
-                  Back to controls
-                </button>
-              )}
-              {/* {playback.started && (
-                <small
-                  className={styles.playingTarget}
-                  title={playingFile ?? undefined}
-                >
-                  Playing {playingFile?.split("/").at(-1)}
-                </small>
-              )} */}
-              <button
-                type="button"
-                className={styles.iconButton}
-                aria-label="Ask Assist"
-                data-assistant-trigger
-                title={`Ask Assist (${shortcut} ,)`}
-                disabled={!document || busy}
-                onClick={() => player.current?.assist("bottom")}
-              >
-                <Sparkles size={16} />
-              </button>
-              <button
-                type="button"
-                className={classNames(styles.iconButton, styles.stopButton)}
-                title={`Stop (${shortcut} .)`}
-                aria-label="Stop playback"
-                disabled={!playback.started}
-                onClick={stop}
-              >
-                <Square size={14} fill="currentColor" />
-              </button>
-              {sessions.some(
-                (session) =>
-                  session.playback.started &&
-                  session.document.path !== document?.path,
-              ) && (
-                <button
-                  type="button"
-                  className={styles.iconButton}
-                  aria-label="Stop all playback"
-                  title={`Stop all (${shortcut} ⇧ .)`}
-                  onClick={() => void stopAll()}
-                >
-                  <SquareX size={16} />
-                </button>
-              )}
-              <button
-                type="button"
-                className={styles.playButton}
-                disabled={!document || playback.pending || busy}
-                title={
-                  document
-                    ? `Play / update ${document.path}`
-                    : "Open a file to play"
+          <SnippetToolbar
+            document={document}
+            projectName={project?.name}
+            busy={busy}
+            readOnly={Boolean(selectedVersion) || recoveryBlocked}
+            onRename={renameActiveSnippet}
+            onBack={definitionContext?.fullscreen ? backToControls : undefined}
+            onAssist={() => player.current?.assist("bottom")}
+            playbackControls={
+              <PlaybackControls
+                {...playbackProps}
+                onStopAll={
+                  sessions.some(
+                    (session) =>
+                      session.playback.started &&
+                      session.document.path !== document?.path,
+                  )
+                    ? () => void stopAll()
+                    : undefined
                 }
-                onClick={play}
-              >
-                {playback.pending ? (
-                  <Loader2 size={14} className={styles.spin} />
-                ) : (
-                  <Play size={13} fill="currentColor" />
-                )}
-                <span>{playback.started ? "Update" : "Play"}</span>
-                <kbd>{shortcut} ↵</kbd>
-              </button>
-              <button
-                type="button"
-                className={styles.iconButton}
-                title="Snippet actions"
-                aria-label="Snippet actions"
-                disabled={!document || busy}
-                onClick={openSnippetActions}
-              >
-                <MoreHorizontal size={18} />
-              </button>
-            </div>
-          </header>
+              />
+            }
+          />
         )}
         {error && (
           <div role="alert" className={styles.errorBanner}>
@@ -2170,45 +1366,7 @@ export function App() {
           headerActions={
             controllerOpen ? (
               <div className={styles.transport}>
-                <button
-                  type="button"
-                  className={classNames(styles.iconButton, styles.stopButton)}
-                  title={`Stop (${shortcut} .)`}
-                  aria-label="Stop playback"
-                  disabled={!playback.started}
-                  onClick={stop}
-                >
-                  <Square size={14} fill="currentColor" />
-                </button>
-                <button
-                  type="button"
-                  className={styles.playButton}
-                  disabled={!document || playback.pending || busy}
-                  title={
-                    document
-                      ? `Play / update ${document.path}`
-                      : "Open a file to play"
-                  }
-                  onClick={play}
-                >
-                  {playback.pending ? (
-                    <Loader2 size={14} className={styles.spin} />
-                  ) : (
-                    <Play size={13} fill="currentColor" />
-                  )}
-                  <span>{playback.started ? "Update" : "Play"}</span>
-                  <kbd>{shortcut} ↵</kbd>
-                </button>
-                <button
-                  type="button"
-                  className={styles.iconButton}
-                  title="Snippet actions"
-                  aria-label="Snippet actions"
-                  disabled={!document || busy}
-                  onClick={openSnippetActions}
-                >
-                  <MoreHorizontal size={18} />
-                </button>
+                <PlaybackControls {...playbackProps} />
               </div>
             ) : undefined
           }
@@ -2337,121 +1495,23 @@ export function App() {
           </div>
         )}
         {!graphActive && (
-          <footer className={styles.statusbar}>
-            <span
-              className={classNames({
-                [styles.saveError]: savedStatus === "Not saved",
-              })}
-            >
-              {savedStatus === "Saving…" ? (
-                <Loader2 size={12} className={styles.spin} />
-              ) : dirty ? (
-                <span className={styles.unsavedDot} />
-              ) : (
-                <Check size={12} />
-              )}
-              {savedStatus}
-            </span>
-            <div>
-              <span>
-                Ln {position[0]}, Col {position[1]}
-              </span>
-              <span>UTF-8</span>
-              <span className={styles.strudelBadge}>Strudel</span>
-            </div>
-          </footer>
+          <WorkspaceStatus
+            savedStatus={savedStatus}
+            dirty={dirty}
+            position={position}
+          />
         )}
       </main>
 
       {context && (
-        <div
-          className={classNames(styles.menu, styles.contextMenu)}
-          style={{ left: context.x, top: context.y }}
-        >
-          {!context.entry.children && (
-            <>
-              <button
-                type="button"
-                disabled={busy || recoveryBlocked}
-                onClick={() =>
-                  showModal({ kind: "audio-export", path: context.entry.id })
-                }
-              >
-                <ArrowDownToLine size={14} />
-                Save WAV
-              </button>
-              <button type="button" onClick={() => openGraph(context.entry.id)}>
-                <Network size={14} />
-                View in Graph View
-              </button>
-              <button
-                type="button"
-                onClick={() => void toggleExport(context.entry.id)}
-              >
-                {context.entry.exported ? (
-                  <FileCode2 size={14} />
-                ) : (
-                  <Package size={14} />
-                )}
-                {context.entry.exported ? "Remove exports" : "Make exportable"}
-              </button>
-              <div className={styles.menuDivider} />
-            </>
-          )}
-          {context.entry.children && (
-            <>
-              <button
-                type="button"
-                onClick={() =>
-                  showModal({
-                    kind: "create",
-                    parent: context.entry.id,
-                    folder: false,
-                  })
-                }
-              >
-                <FilePlus2 size={14} />
-                New snippet
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  showModal({
-                    kind: "create",
-                    parent: context.entry.id,
-                    folder: true,
-                  })
-                }
-              >
-                <FolderPlus size={14} />
-                New folder
-              </button>
-              <div className={styles.menuDivider} />
-            </>
-          )}
-          <button
-            type="button"
-            onClick={() => showModal({ kind: "rename", entry: context.entry })}
-          >
-            <Pencil size={14} />
-            Rename
-          </button>
-          <button
-            type="button"
-            onClick={() => showModal({ kind: "move", entry: context.entry })}
-          >
-            <ArrowRight size={14} />
-            Move to folder…
-          </button>
-          <button
-            type="button"
-            className={styles.dangerText}
-            onClick={() => showModal({ kind: "delete", entry: context.entry })}
-          >
-            <Trash2 size={14} />
-            {api.platform === "web" ? "Delete" : "Move to Trash"}
-          </button>
-        </div>
+        <FileContextMenu
+          context={context}
+          busy={busy}
+          recoveryBlocked={recoveryBlocked}
+          onModal={showModal}
+          onGraph={openGraph}
+          onToggleExport={(path) => void toggleExport(path)}
+        />
       )}
 
       {controlSettings && (
@@ -2464,37 +1524,14 @@ export function App() {
         />
       )}
       {modal?.kind === "examples" && (
-        <Dialog title="New from example" onClose={() => setModal(null)}>
-          <ul className={styles.exampleList} aria-label="Examples">
-            {examples.map((example) => (
-              <li key={example}>
-                <button
-                  type="button"
-                  aria-label={example}
-                  aria-describedby={
-                    exampleDescriptions[example]
-                      ? `example-${example}-description`
-                      : undefined
-                  }
-                  onClick={() => {
-                    setModal(null);
-                    void switchProject(true, example);
-                  }}
-                >
-                  <Library size={16} />
-                  <span className={styles.exampleDetails}>
-                    <span>{example}</span>
-                    {exampleDescriptions[example] && (
-                      <small id={`example-${example}-description`}>
-                        {exampleDescriptions[example]}
-                      </small>
-                    )}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </Dialog>
+        <ExamplePickerDialog
+          examples={examples}
+          onClose={() => setModal(null)}
+          onSelect={(example) => {
+            setModal(null);
+            void switchProject(true, example);
+          }}
+        />
       )}
       {modal?.kind === "audio-export" && (
         <AudioExportDialog
@@ -2520,177 +1557,31 @@ export function App() {
           onExamples={() => showModal({ kind: "examples" })}
         />
       )}
+      {modal?.kind === "help" && (
+        <GettingStartedDialog
+          onClose={() => {
+            if (!busy) setModal(null);
+          }}
+          onTour={() => showModal({ kind: "onboarding" })}
+        />
+      )}
       {modal &&
-        modal.kind !== "examples" &&
-        modal.kind !== "audio-export" &&
-        modal.kind !== "onboarding" && (
-          <Dialog
-            title={
-              modal.kind === "create"
-                ? modal.folder
-                  ? "New folder"
-                  : "New snippet"
-                : modal.kind === "reload"
-                  ? "Reload saved file?"
-                  : modal.kind === "rename"
-                    ? "Rename"
-                    : modal.kind === "move"
-                      ? "Move to folder"
-                      : modal.kind === "delete"
-                        ? api.platform === "web"
-                          ? "Delete?"
-                          : "Move to Trash?"
-                        : "A place to play"
-            }
-            onClose={() => {
-              if (!busy) setModal(null);
-            }}
-          >
-            {modal.kind === "help" ? (
-              <div className={styles.helpContent}>
-                <p>
-                  Write Strudel code, play it, and follow the sound.{" "}
-                  {api.platform === "web"
-                    ? "Your projects are saved in this browser. Export a project to keep a backup or move it to another browser."
-                    : "Your snippets are plain files on your computer."}
-                </p>
-                {commands
-                  .filter((command) =>
-                    ["play", "stop", "stopAll", "assist"].includes(command.id),
-                  )
-                  .map((command) => (
-                    <div key={command.id}>
-                      <span>{command.label}</span>
-                      <kbd>{shortcutLabel(command, shortcutEnvironment)}</kbd>
-                    </div>
-                  ))}
-                <p className={styles.muted}>
-                  Drag snippets into folders to organize them. Starter sounds
-                  use built-in synthesizers and work offline. Playback continues
-                  while you browse other snippets.
-                </p>
-                <button
-                  type="button"
-                  className={styles.secondaryButton}
-                  onClick={() => showModal({ kind: "onboarding" })}
-                >
-                  Take a tour
-                  <ArrowRight size={14} />
-                </button>
-                <button
-                  type="button"
-                  className={styles.primaryButton}
-                  onClick={() => setModal(null)}
-                >
-                  Let’s make something
-                </button>
-              </div>
-            ) : (
-              <form
-                className={styles.modalForm}
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void submitModal();
-                }}
-              >
-                {modal.kind === "reload" ? (
-                  <p>
-                    Unsaved edits will be discarded. Copy anything you want to
-                    keep before reloading the saved file.
-                  </p>
-                ) : modal.kind === "delete" ? (
-                  <p>
-                    <strong>{modal.entry.name}</strong>
-                    {modal.entry.children ? " and everything inside it" : ""}
-                    {api.platform === "web"
-                      ? " will be permanently deleted from this browser project."
-                      : " will move to your computer’s Trash."}
-                  </p>
-                ) : modal.kind === "move" ? (
-                  <>
-                    <label htmlFor="destination">Destination</label>
-                    <select
-                      id="destination"
-                      value={value}
-                      onChange={(event) => setValue(event.target.value)}
-                    >
-                      <option value="">Project root</option>
-                      {folders(project?.entries ?? [])
-                        .filter((entry) => !isWithin(entry.id, modal.entry.id))
-                        .map((entry) => (
-                          <option key={entry.id} value={entry.id}>
-                            {entry.id}
-                          </option>
-                        ))}
-                    </select>
-                  </>
-                ) : (
-                  <>
-                    <label htmlFor="item-name">
-                      {modal.kind === "create" && modal.folder
-                        ? "Folder name"
-                        : "Name"}
-                    </label>
-                    <input
-                      id="item-name"
-                      value={value}
-                      ref={modalNameInput}
-                      onChange={(event) => setValue(event.target.value)}
-                      autoComplete="off"
-                    />
-                    <p className={styles.fieldHint}>
-                      {modal.kind === "create"
-                        ? `In ${modal.parent || project?.name || "project root"}`
-                        : "Use .strudel or .js for snippets."}
-                    </p>
-                  </>
-                )}
-                {modalError && (
-                  <p role="alert" className={styles.formError}>
-                    {modalError}
-                  </p>
-                )}
-                <div className={styles.dialogActions}>
-                  <button
-                    type="button"
-                    className={styles.secondaryButton}
-                    disabled={busy}
-                    onClick={() => setModal(null)}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className={
-                      modal.kind === "delete"
-                        ? styles.dangerButton
-                        : styles.primaryButton
-                    }
-                    disabled={busy}
-                  >
-                    {busy ? (
-                      <Loader2 size={14} className={styles.spin} />
-                    ) : modal.kind === "delete" ? (
-                      <Trash2 size={14} />
-                    ) : (
-                      <ArrowDownToLine size={14} />
-                    )}
-                    {modal.kind === "create"
-                      ? "Create"
-                      : modal.kind === "delete"
-                        ? api.platform === "web"
-                          ? "Delete"
-                          : "Move to Trash"
-                        : modal.kind === "move"
-                          ? "Move"
-                          : modal.kind === "reload"
-                            ? "Discard and reload"
-                            : "Rename"}
-                  </button>
-                </div>
-              </form>
-            )}
-          </Dialog>
+        (modal.kind === "create" ||
+          modal.kind === "rename" ||
+          modal.kind === "move" ||
+          modal.kind === "delete" ||
+          modal.kind === "reload") && (
+          <FileOperationDialog
+            modal={modal}
+            entries={project?.entries ?? []}
+            projectName={project?.name}
+            value={value}
+            onValue={setValue}
+            busy={busy}
+            modalError={modalError}
+            onSubmit={() => void submitModal()}
+            onClose={() => setModal(null)}
+          />
         )}
     </div>
   );
