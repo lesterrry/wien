@@ -20,6 +20,7 @@ import {
   moveControl,
   readControls,
 } from "../../../../shared/controls";
+import type { ModuleGraph } from "../../../../shared/modules";
 import type { Entry } from "../../../../shared/types";
 import { compileGraph } from "../../module-compiler";
 import { registerStandardSounds } from "../../standard-sounds";
@@ -73,6 +74,7 @@ function prepareScope() {
 
 export function StrudelEditor({
   initialCode,
+  sandbox,
   path,
   active,
   disabled,
@@ -83,6 +85,7 @@ export function StrudelEditor({
   onPosition,
 }: {
   initialCode: string;
+  sandbox?: { graph: (path: string, code: string) => Promise<ModuleGraph> };
   path: string;
   active: boolean;
   disabled: boolean;
@@ -103,7 +106,7 @@ export function StrudelEditor({
     () => ({
       accept: "NODE",
       canDrop: (item: { id: string; data: Entry }) =>
-        !disabled && !item.data.children && item.id !== path,
+        !sandbox && !disabled && !item.data.children && item.id !== path,
       drop: (item: { id: string; data: Entry }) => {
         onLink(item.id);
         return { linked: true };
@@ -113,8 +116,10 @@ export function StrudelEditor({
         canDrop: monitor.canDrop(),
       }),
     }),
-    [disabled, onLink, path],
+    [disabled, onLink, path, sandbox],
   );
+  const sandboxRef = useRef(sandbox);
+  sandboxRef.current = sandbox;
   const callbacks = useRef({ onChange, onState, onReady, onPosition });
   callbacks.current = { onChange, onState, onReady, onPosition };
   const code = useRef(initialCode);
@@ -145,10 +150,9 @@ export function StrudelEditor({
       },
       beforeEval: async () => {
         try {
-          const graph = await window.workspace.graph(
-            pathRef.current,
-            evaluationCode ?? mirror.code,
-          );
+          const graph = await (
+            sandboxRef.current?.graph ?? window.workspace.graph
+          )(pathRef.current, evaluationCode ?? mirror.code);
           if (!alive || evaluationGeneration !== generation)
             throw new Error("Evaluation cancelled.");
           compiled = compileGraph(graph, transpiler);
@@ -372,7 +376,7 @@ export function StrudelEditor({
         }}
         data-drop-hint="Release to import snippet"
       />
-      {view && (
+      {view && !sandbox && (
         <AssistantPopover
           view={view}
           path={path}

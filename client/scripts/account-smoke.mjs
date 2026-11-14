@@ -3,6 +3,7 @@ import * as fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { _electron as electron, expect } from "@playwright/test";
+import { workspaceWindow } from "./fixtures/onboarding.mjs";
 
 const origin = process.env.WIEN_BACKEND_URL;
 if (!origin || !/^http:\/\/127\.0\.0\.1:\d+$/.test(origin)) {
@@ -26,7 +27,7 @@ async function launch() {
     args: ["--mute-audio", "out/main/index.js"],
     env: environment,
   });
-  const page = await app.firstWindow();
+  const page = await workspaceWindow(app);
   page.setDefaultTimeout(15000);
   await page.getByLabel("Strudel code editor").waitFor();
   return page;

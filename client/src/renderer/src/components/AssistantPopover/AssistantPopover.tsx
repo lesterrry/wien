@@ -1,7 +1,6 @@
 import { isolateHistory } from "@codemirror/commands";
 import type { EditorView } from "@codemirror/view";
 import classNames from "classnames";
-import { ArrowUp, Square, X } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -12,8 +11,7 @@ import {
 import { createPortal } from "react-dom";
 import { parseModule } from "../../../../shared/modules";
 import { useAccount } from "../Account/Account";
-import { AnimatedBorder } from "../AnimatedBorder/AnimatedBorder";
-import { MarkdownAnswer } from "../MarkdownAnswer/MarkdownAnswer";
+import { AssistantContent } from "./AssistantContent";
 import styles from "./AssistantPopover.module.css";
 
 export type AssistantPlacement = "cursor" | "bottom";
@@ -269,78 +267,18 @@ export function AssistantPopover({
       style={{ ...position, height: open ? undefined : closingHeight }}
       aria-busy={pending}
     >
-      <AnimatedBorder active={pending} className={styles.rim} />
-      {(answer || error) && (
-        <div
-          className={classNames(styles.answer, { [styles.error]: !!error })}
-          role={error ? "alert" : "status"}
-          aria-live="polite"
-        >
-          {error || (answer && <MarkdownAnswer>{answer}</MarkdownAnswer>)}
-        </div>
-      )}
-      <span className={styles.srOnly} role="status">
-        {pending ? "Working on it…" : ""}
-      </span>
-      <form
-        className={styles.composer}
-        onSubmit={(event) => {
-          event.preventDefault();
-          void submit();
-        }}
-      >
-        <textarea
-          ref={input}
-          aria-label="Ask Assist"
-          placeholder="What would you like to make?"
-          value={prompt}
-          readOnly={pending}
-          maxLength={16000}
-          rows={1}
-          onChange={(event) => setPrompt(event.target.value)}
-          onKeyDown={(event) => {
-            if (
-              event.key === "Enter" &&
-              !event.shiftKey &&
-              !event.nativeEvent.isComposing
-            ) {
-              event.preventDefault();
-              void submit();
-            }
-          }}
-        />
-        <div className={styles.actions}>
-          {pending ? (
-            <button
-              type="button"
-              className={styles.send}
-              aria-label="Cancel request"
-              onClick={cancel}
-            >
-              <Square size={12} fill="currentColor" />
-            </button>
-          ) : prompt.trim() ? (
-            <button
-              type="submit"
-              className={styles.send}
-              aria-label="Send request"
-              disabled={disabled}
-            >
-              <ArrowUp size={17} />
-            </button>
-          ) : (
-            <button
-              type="button"
-              className={styles.closeButton}
-              aria-label="Close assistant"
-              title="Close (Esc)"
-              onClick={() => close()}
-            >
-              <X size={14} />
-            </button>
-          )}
-        </div>
-      </form>
+      <AssistantContent
+        prompt={prompt}
+        answer={answer}
+        error={error}
+        pending={pending}
+        disabled={disabled}
+        inputRef={input}
+        onPromptChange={setPrompt}
+        onSubmit={() => void submit()}
+        onCancel={cancel}
+        onClose={() => close()}
+      />
     </div>,
     document.body,
   );

@@ -63,6 +63,7 @@ import {
   readControlCustomization,
   readControls,
 } from "../../../../shared/controls";
+import { exampleDescriptions } from "../../../../shared/example-descriptions";
 import {
   type Edit,
   editSource,
@@ -92,6 +93,8 @@ import { Dialog } from "../Dialog/Dialog";
 import { Explorer } from "../Explorer/Explorer";
 import { FileTabs } from "../FileTabs/FileTabs";
 import { GraphView } from "../GraphView/GraphView";
+import { Onboarding } from "../Onboarding/Onboarding";
+import { hasSeenOnboarding } from "../Onboarding/onboarding-state";
 import { SplitMarquee } from "../SplitMarquee/SplitMarquee";
 import { StrudelEditor } from "../StrudelEditor/StrudelEditor";
 import { VersionsPanel } from "../VersionsPanel/VersionsPanel";
@@ -105,7 +108,8 @@ type Modal =
   | { kind: "reload" }
   | { kind: "examples" }
   | { kind: "audio-export"; path: string }
-  | { kind: "help" };
+  | { kind: "help" }
+  | { kind: "onboarding" };
 
 const api = window.workspace;
 function findEntry(entries: Entry[], path: string): Entry | undefined {
@@ -139,6 +143,8 @@ const message = (error: unknown) =>
 export function App() {
   const {
     user,
+    resolved: accountResolved,
+    dialogOpen: accountDialogOpen,
     openProfile,
     openUpgrade,
     refresh: refreshAccount,
@@ -229,6 +235,30 @@ export function App() {
     initial: ControlCustomization;
   } | null>(null);
   const [modal, setModal] = useState<Modal | null>(null);
+  const onboardingRequested = useRef(false);
+  useEffect(() => {
+    if (
+      !accountResolved ||
+      user ||
+      !project ||
+      busy ||
+      modal ||
+      controlSettings ||
+      accountDialogOpen ||
+      onboardingRequested.current
+    )
+      return;
+    onboardingRequested.current = true;
+    if (!hasSeenOnboarding()) setModal({ kind: "onboarding" });
+  }, [
+    accountResolved,
+    user,
+    project,
+    busy,
+    modal,
+    controlSettings,
+    accountDialogOpen,
+  ]);
   const [value, setValue] = useState("");
   const [modalError, setModalError] = useState<string | null>(null);
   const modalNameInput = useRef<HTMLInputElement>(null);
@@ -2440,13 +2470,26 @@ export function App() {
               <li key={example}>
                 <button
                   type="button"
+                  aria-label={example}
+                  aria-describedby={
+                    exampleDescriptions[example]
+                      ? `example-${example}-description`
+                      : undefined
+                  }
                   onClick={() => {
                     setModal(null);
                     void switchProject(true, example);
                   }}
                 >
                   <Library size={16} />
-                  {example}
+                  <span className={styles.exampleDetails}>
+                    <span>{example}</span>
+                    {exampleDescriptions[example] && (
+                      <small id={`example-${example}-description`}>
+                        {exampleDescriptions[example]}
+                      </small>
+                    )}
+                  </span>
                 </button>
               </li>
             ))}
@@ -2471,168 +2514,184 @@ export function App() {
           onClose={() => setModal(null)}
         />
       )}
-      {modal && modal.kind !== "examples" && modal.kind !== "audio-export" && (
-        <Dialog
-          title={
-            modal.kind === "create"
-              ? modal.folder
-                ? "New folder"
-                : "New snippet"
-              : modal.kind === "reload"
-                ? "Reload saved file?"
-                : modal.kind === "rename"
-                  ? "Rename"
-                  : modal.kind === "move"
-                    ? "Move to folder"
-                    : modal.kind === "delete"
-                      ? api.platform === "web"
-                        ? "Delete?"
-                        : "Move to Trash?"
-                      : "A place to play"
-          }
-          onClose={() => {
-            if (!busy) setModal(null);
-          }}
-        >
-          {modal.kind === "help" ? (
-            <div className={styles.helpContent}>
-              <p>
-                Write Strudel code, play it, and follow the sound.{" "}
-                {api.platform === "web"
-                  ? "Your projects are saved in this browser. Export a project to keep a backup or move it to another browser."
-                  : "Your snippets are plain files on your computer."}
-              </p>
-              {commands
-                .filter((command) =>
-                  ["play", "stop", "stopAll", "assist"].includes(command.id),
-                )
-                .map((command) => (
-                  <div key={command.id}>
-                    <span>{command.label}</span>
-                    <kbd>{shortcutLabel(command, shortcutEnvironment)}</kbd>
-                  </div>
-                ))}
-              <p className={styles.muted}>
-                Drag snippets into folders to organize them. Starter sounds use
-                built-in synthesizers and work offline. Playback continues while
-                you browse other snippets.
-              </p>
-              <button
-                type="button"
-                className={styles.primaryButton}
-                onClick={() => setModal(null)}
-              >
-                Let’s make something
-                <ArrowRight size={14} />
-              </button>
-            </div>
-          ) : (
-            <form
-              className={styles.modalForm}
-              onSubmit={(event) => {
-                event.preventDefault();
-                void submitModal();
-              }}
-            >
-              {modal.kind === "reload" ? (
+      {modal?.kind === "onboarding" && (
+        <Onboarding
+          onClose={() => setModal(null)}
+          onExamples={() => showModal({ kind: "examples" })}
+        />
+      )}
+      {modal &&
+        modal.kind !== "examples" &&
+        modal.kind !== "audio-export" &&
+        modal.kind !== "onboarding" && (
+          <Dialog
+            title={
+              modal.kind === "create"
+                ? modal.folder
+                  ? "New folder"
+                  : "New snippet"
+                : modal.kind === "reload"
+                  ? "Reload saved file?"
+                  : modal.kind === "rename"
+                    ? "Rename"
+                    : modal.kind === "move"
+                      ? "Move to folder"
+                      : modal.kind === "delete"
+                        ? api.platform === "web"
+                          ? "Delete?"
+                          : "Move to Trash?"
+                        : "A place to play"
+            }
+            onClose={() => {
+              if (!busy) setModal(null);
+            }}
+          >
+            {modal.kind === "help" ? (
+              <div className={styles.helpContent}>
                 <p>
-                  Unsaved edits will be discarded. Copy anything you want to
-                  keep before reloading the saved file.
-                </p>
-              ) : modal.kind === "delete" ? (
-                <p>
-                  <strong>{modal.entry.name}</strong>
-                  {modal.entry.children ? " and everything inside it" : ""}
+                  Write Strudel code, play it, and follow the sound.{" "}
                   {api.platform === "web"
-                    ? " will be permanently deleted from this browser project."
-                    : " will move to your computer’s Trash."}
+                    ? "Your projects are saved in this browser. Export a project to keep a backup or move it to another browser."
+                    : "Your snippets are plain files on your computer."}
                 </p>
-              ) : modal.kind === "move" ? (
-                <>
-                  <label htmlFor="destination">Destination</label>
-                  <select
-                    id="destination"
-                    value={value}
-                    onChange={(event) => setValue(event.target.value)}
-                  >
-                    <option value="">Project root</option>
-                    {folders(project?.entries ?? [])
-                      .filter((entry) => !isWithin(entry.id, modal.entry.id))
-                      .map((entry) => (
-                        <option key={entry.id} value={entry.id}>
-                          {entry.id}
-                        </option>
-                      ))}
-                  </select>
-                </>
-              ) : (
-                <>
-                  <label htmlFor="item-name">
-                    {modal.kind === "create" && modal.folder
-                      ? "Folder name"
-                      : "Name"}
-                  </label>
-                  <input
-                    id="item-name"
-                    value={value}
-                    ref={modalNameInput}
-                    onChange={(event) => setValue(event.target.value)}
-                    autoComplete="off"
-                  />
-                  <p className={styles.fieldHint}>
-                    {modal.kind === "create"
-                      ? `In ${modal.parent || project?.name || "project root"}`
-                      : "Use .strudel or .js for snippets."}
-                  </p>
-                </>
-              )}
-              {modalError && (
-                <p role="alert" className={styles.formError}>
-                  {modalError}
+                {commands
+                  .filter((command) =>
+                    ["play", "stop", "stopAll", "assist"].includes(command.id),
+                  )
+                  .map((command) => (
+                    <div key={command.id}>
+                      <span>{command.label}</span>
+                      <kbd>{shortcutLabel(command, shortcutEnvironment)}</kbd>
+                    </div>
+                  ))}
+                <p className={styles.muted}>
+                  Drag snippets into folders to organize them. Starter sounds
+                  use built-in synthesizers and work offline. Playback continues
+                  while you browse other snippets.
                 </p>
-              )}
-              <div className={styles.dialogActions}>
                 <button
                   type="button"
                   className={styles.secondaryButton}
-                  disabled={busy}
-                  onClick={() => setModal(null)}
+                  onClick={() => showModal({ kind: "onboarding" })}
                 >
-                  Cancel
+                  Take a tour
+                  <ArrowRight size={14} />
                 </button>
                 <button
-                  type="submit"
-                  className={
-                    modal.kind === "delete"
-                      ? styles.dangerButton
-                      : styles.primaryButton
-                  }
-                  disabled={busy}
+                  type="button"
+                  className={styles.primaryButton}
+                  onClick={() => setModal(null)}
                 >
-                  {busy ? (
-                    <Loader2 size={14} className={styles.spin} />
-                  ) : modal.kind === "delete" ? (
-                    <Trash2 size={14} />
-                  ) : (
-                    <ArrowDownToLine size={14} />
-                  )}
-                  {modal.kind === "create"
-                    ? "Create"
-                    : modal.kind === "delete"
-                      ? api.platform === "web"
-                        ? "Delete"
-                        : "Move to Trash"
-                      : modal.kind === "move"
-                        ? "Move"
-                        : modal.kind === "reload"
-                          ? "Discard and reload"
-                          : "Rename"}
+                  Let’s make something
                 </button>
               </div>
-            </form>
-          )}
-        </Dialog>
-      )}
+            ) : (
+              <form
+                className={styles.modalForm}
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void submitModal();
+                }}
+              >
+                {modal.kind === "reload" ? (
+                  <p>
+                    Unsaved edits will be discarded. Copy anything you want to
+                    keep before reloading the saved file.
+                  </p>
+                ) : modal.kind === "delete" ? (
+                  <p>
+                    <strong>{modal.entry.name}</strong>
+                    {modal.entry.children ? " and everything inside it" : ""}
+                    {api.platform === "web"
+                      ? " will be permanently deleted from this browser project."
+                      : " will move to your computer’s Trash."}
+                  </p>
+                ) : modal.kind === "move" ? (
+                  <>
+                    <label htmlFor="destination">Destination</label>
+                    <select
+                      id="destination"
+                      value={value}
+                      onChange={(event) => setValue(event.target.value)}
+                    >
+                      <option value="">Project root</option>
+                      {folders(project?.entries ?? [])
+                        .filter((entry) => !isWithin(entry.id, modal.entry.id))
+                        .map((entry) => (
+                          <option key={entry.id} value={entry.id}>
+                            {entry.id}
+                          </option>
+                        ))}
+                    </select>
+                  </>
+                ) : (
+                  <>
+                    <label htmlFor="item-name">
+                      {modal.kind === "create" && modal.folder
+                        ? "Folder name"
+                        : "Name"}
+                    </label>
+                    <input
+                      id="item-name"
+                      value={value}
+                      ref={modalNameInput}
+                      onChange={(event) => setValue(event.target.value)}
+                      autoComplete="off"
+                    />
+                    <p className={styles.fieldHint}>
+                      {modal.kind === "create"
+                        ? `In ${modal.parent || project?.name || "project root"}`
+                        : "Use .strudel or .js for snippets."}
+                    </p>
+                  </>
+                )}
+                {modalError && (
+                  <p role="alert" className={styles.formError}>
+                    {modalError}
+                  </p>
+                )}
+                <div className={styles.dialogActions}>
+                  <button
+                    type="button"
+                    className={styles.secondaryButton}
+                    disabled={busy}
+                    onClick={() => setModal(null)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className={
+                      modal.kind === "delete"
+                        ? styles.dangerButton
+                        : styles.primaryButton
+                    }
+                    disabled={busy}
+                  >
+                    {busy ? (
+                      <Loader2 size={14} className={styles.spin} />
+                    ) : modal.kind === "delete" ? (
+                      <Trash2 size={14} />
+                    ) : (
+                      <ArrowDownToLine size={14} />
+                    )}
+                    {modal.kind === "create"
+                      ? "Create"
+                      : modal.kind === "delete"
+                        ? api.platform === "web"
+                          ? "Delete"
+                          : "Move to Trash"
+                        : modal.kind === "move"
+                          ? "Move"
+                          : modal.kind === "reload"
+                            ? "Discard and reload"
+                            : "Rename"}
+                  </button>
+                </div>
+              </form>
+            )}
+          </Dialog>
+        )}
     </div>
   );
 }

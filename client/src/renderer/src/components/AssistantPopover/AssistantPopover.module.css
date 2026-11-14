@@ -87,6 +87,10 @@
   animation: answer-in 180ms ease-out;
 }
 
+.answerOnly {
+  border-bottom: 0;
+}
+
 .error {
   color: var(--color-danger);
 }

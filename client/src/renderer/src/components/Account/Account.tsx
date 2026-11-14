@@ -27,6 +27,8 @@ const errorMessage = (error: unknown) =>
 
 interface AccountContextValue {
   user: UserProfile | null;
+  resolved: boolean;
+  dialogOpen: boolean;
   refresh: () => Promise<UserProfile | null>;
   openProfile: () => void;
   openUpgrade: () => void;
@@ -43,6 +45,7 @@ export function useAccount() {
 export function AccountProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(registrationRequested);
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [resolved, setResolved] = useState(false);
   const [mode, setMode] = useState<"login" | "register" | "password">(
     registrationRequested ? "register" : "login",
   );
@@ -61,7 +64,10 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     const version = ++refreshVersion.current;
     const profile = await api.accountCurrent();
-    if (version === refreshVersion.current) setUser(profile);
+    if (version === refreshVersion.current) {
+      setUser(profile);
+      setResolved(true);
+    }
     return profile;
   }, []);
   useEffect(() => {
@@ -83,6 +89,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     if (action === "sign_in") {
       refreshVersion.current++;
       setUser(null);
+      setResolved(true);
       close();
       openProfile();
       setNotice(
@@ -157,6 +164,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
             : await api.accountLogin({ username, password });
       refreshVersion.current++;
       setUser(profile);
+      setResolved(true);
       clearPasswords();
       setNotice(
         mode === "password"
@@ -182,6 +190,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       await api.accountLogout();
       refreshVersion.current++;
       setUser(null);
+      setResolved(true);
       clearPasswords();
       setMode("login");
     } catch (e) {
@@ -195,6 +204,8 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     <AccountContext.Provider
       value={{
         user,
+        resolved,
+        dialogOpen: open || plansOpen,
         refresh,
         openProfile,
         openUpgrade,

@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { _electron as electron, expect } from "@playwright/test";
 import { seedControlGraph } from "./fixtures/control-graph.mjs";
+import { workspaceWindow } from "./fixtures/onboarding.mjs";
 
 const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "wien-playground-"));
 const root = path.join(temporary, "project");
@@ -34,7 +35,7 @@ try {
     args: ["--mute-audio", "out/main/index.js"],
     env: environment,
   });
-  const page = await app.firstWindow();
+  const page = await workspaceWindow(app);
   page.setDefaultTimeout(20000);
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));

@@ -25,7 +25,8 @@
     "dev:web": "vite --config vite.web.config.ts",
     "build:web": "pnpm typecheck && vite build --config vite.web.config.ts",
     "test:web": "node scripts/web-smoke.mjs",
-    "test:audio-export": "pnpm build && pnpm build:web && node scripts/audio-export-smoke.mjs"
+    "test:audio-export": "pnpm build && pnpm build:web && node scripts/audio-export-smoke.mjs",
+    "test:onboarding": "pnpm build && pnpm build:web && node scripts/onboarding-smoke.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.1",

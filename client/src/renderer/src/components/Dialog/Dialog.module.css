@@ -1,10 +1,13 @@
 .iconButton {
   composes: iconButton from "../../styles/common.module.css";
+  flex-shrink: 0;
+  /* Keep the larger hit area centered on the 20px heading line. */
+  margin: -4px -4px -4px 0;
 }
 
 .dialog {
   width: 420px;
-  padding: 18px 22px 22px;
+  padding: 12px;
   background: var(--color-surface);
   color: var(--color-primary);
   border: 1px solid var(--color-border);
@@ -19,13 +22,15 @@
 
 .dialogHeading {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
+  gap: 12px;
   margin-bottom: 12px;
 }
 
 .dialog h2 {
   font-size: 16px;
+  line-height: 20px;
   margin: 0;
   font-weight: 550;
   letter-spacing: -0.3px;

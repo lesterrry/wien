@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { _electron as electron, expect } from "@playwright/test";
 import { build } from "esbuild";
+import { workspaceWindow } from "./fixtures/onboarding.mjs";
 
 // Real renderer, bundled synths, actual offline audio; no sample network needed.
 // Previews are local artifacts, not additional assets in the example registry.
@@ -58,7 +59,7 @@ try {
       env,
     });
     try {
-      const page = await app.firstWindow();
+      const page = await workspaceWindow(app);
       page.setDefaultTimeout(30000);
       const errors = [];
       page.on("pageerror", (error) => errors.push(error.message));

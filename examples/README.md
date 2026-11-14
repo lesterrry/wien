@@ -34,8 +34,8 @@ are never replaced when bundled examples change.
 
 Keep `.strudel` / `.js` files and all relative imports inside its project directory.
 A project has one playable root file, which Wien opens automatically (the first
-root snippet by name). Put reusable voices in subdirectories. `README.md` describes
-what to hear and what to try; it is repository documentation, not a project snippet.
+root snippet by name). Put reusable voices in subdirectories. `example.json` provides the short `description` shown below the project name in
+the example picker. `README.md` describes what to hear and what to try; it is repository documentation, not a project snippet.
 
 `client/src/shared/examples.ts` discovers and bundles every project at build time;
 there is no handwritten file list. `default/` seeds First session and New project.

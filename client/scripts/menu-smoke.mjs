@@ -4,6 +4,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { chromium, _electron as electron, expect } from "@playwright/test";
+import { workspaceWindow } from "./fixtures/onboarding.mjs";
 import { seedBrowserWorkspace } from "./fixtures/workspace.mjs";
 
 const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "wien-menu-"));
@@ -122,7 +123,7 @@ try {
     args: ["--mute-audio", "out/main/index.js"],
     env,
   });
-  const page = await app.firstWindow();
+  const page = await workspaceWindow(app);
   const editor = page.locator(
     '[data-active="true"] [aria-label="Strudel code editor"][contenteditable="true"]',
   );

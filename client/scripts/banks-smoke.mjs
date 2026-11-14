@@ -3,6 +3,7 @@ import * as fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { _electron as electron, expect } from "@playwright/test";
+import { workspaceWindow } from "./fixtures/onboarding.mjs";
 
 const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "wien-banks-"));
 const environment = { ...process.env, WIEN_USER_DATA: temporary };
@@ -13,7 +14,7 @@ try {
     args: ["--mute-audio", "out/main/index.js"],
     env: environment,
   });
-  const page = await app.firstWindow();
+  const page = await workspaceWindow(app);
   page.setDefaultTimeout(20000);
   const diagnostics = [];
   const lateLoads = [];

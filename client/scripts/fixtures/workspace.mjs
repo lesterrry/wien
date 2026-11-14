@@ -58,6 +58,7 @@ export async function seedWorkspace(userData) {
 export async function seedBrowserWorkspace(page) {
   await page.getByLabel("Strudel code editor", { exact: true }).waitFor();
   await page.evaluate(async (files) => {
+    localStorage.setItem("wien:onboarding-seen", "1");
     await new Promise((resolve, reject) => {
       const request = indexedDB.open("wien-projects", 1);
       request.onerror = () => reject(request.error);

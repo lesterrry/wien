@@ -4,6 +4,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { chromium, _electron as electron, expect } from "@playwright/test";
+import { skipOnboarding, workspaceWindow } from "./fixtures/onboarding.mjs";
 
 const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "wien-examples-"));
 const output = path.resolve("out-web");
@@ -58,9 +59,16 @@ async function checkExamples(page, desktop) {
     await expect(
       page.getByRole("dialog", { name: "New from example" }),
     ).toBeVisible();
-    await expect(
-      page.getByRole("list", { name: "Examples" }).getByRole("button"),
-    ).toHaveText(examples);
+    const list = page.getByRole("list", { name: "Examples" });
+    await expect(list.getByRole("button")).toHaveCount(examples.length);
+    for (const name of examples) {
+      const metadata = JSON.parse(
+        await fs.readFile(path.join(registry, name, "example.json"), "utf8"),
+      );
+      await expect(
+        list.getByRole("button", { name, exact: true }),
+      ).toHaveAccessibleDescription(metadata.description);
+    }
   };
   if (desktop) {
     await app.evaluate(({ dialog }) => {
@@ -70,6 +78,14 @@ async function checkExamples(page, desktop) {
     });
   }
   await openMenu();
+  if (process.env.WIEN_EXAMPLE_SCREENSHOTS) {
+    await page.screenshot({
+      path: path.join(
+        process.env.WIEN_EXAMPLE_SCREENSHOTS,
+        `wien-examples-${desktop ? "desktop" : "web"}.png`,
+      ),
+    });
+  }
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
   assert.equal(
@@ -239,6 +255,7 @@ try {
   });
   const page = await browser.newPage();
   await page.goto(`http://127.0.0.1:${server.address().port}`);
+  await skipOnboarding(page);
   await checkExamples(page, false);
   const env = {
     ...process.env,
@@ -250,7 +267,7 @@ try {
     args: ["--mute-audio", "out/main/index.js"],
     env,
   });
-  await checkExamples(await app.firstWindow(), true);
+  await checkExamples(await workspaceWindow(app), true);
 } finally {
   await app?.close();
   await browser?.close();

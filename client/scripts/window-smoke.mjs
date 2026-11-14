@@ -4,6 +4,7 @@ import * as fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { _electron as electron } from "@playwright/test";
+import { workspaceWindow } from "./fixtures/onboarding.mjs";
 import { seedWorkspace } from "./fixtures/workspace.mjs";
 
 const temporary = await fs.mkdtemp(
@@ -20,7 +21,7 @@ async function launch() {
     env: environment,
   });
   child = app.process();
-  const page = await app.firstWindow();
+  const page = await workspaceWindow(app);
   page.setDefaultTimeout(10000);
   await page.getByLabel("Strudel code editor").waitFor();
   await page

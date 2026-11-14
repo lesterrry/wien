@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { _electron as electron, expect } from "@playwright/test";
+import { workspaceWindow } from "./fixtures/onboarding.mjs";
 
 const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "wien-explorer-"));
 const root = path.join(temporary, "project");
@@ -17,7 +18,7 @@ delete env.ELECTRON_RUN_AS_NODE;
 let app;
 try {
   app = await electron.launch({ args: ["out/main/index.js"], env });
-  const page = await app.firstWindow();
+  const page = await workspaceWindow(app);
   page.setDefaultTimeout(15000);
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));

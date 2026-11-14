@@ -4,6 +4,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { chromium, _electron as electron, expect } from "@playwright/test";
+import { workspaceWindow } from "./fixtures/onboarding.mjs";
 import { seedBrowserWorkspace, seedWorkspace } from "./fixtures/workspace.mjs";
 
 const temporary = await fs.mkdtemp(
@@ -183,7 +184,7 @@ try {
     args: ["--mute-audio", "out/main/index.js"],
     env,
   });
-  await check(await app.firstWindow(), true);
+  await check(await workspaceWindow(app), true);
 } finally {
   await app?.close();
   await browser?.close();
