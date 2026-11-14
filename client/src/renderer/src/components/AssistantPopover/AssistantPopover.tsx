@@ -10,10 +10,12 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { parseModule } from "../../../../shared/modules";
+import { type AudioSelection, prepareAssistAudio } from "../../assist-audio";
 import { useAssistTurbo } from "../../hooks/useAssistTurbo";
 import { useAccount } from "../Account/Account";
 import { AssistantContent } from "./AssistantContent";
 import styles from "./AssistantPopover.module.css";
+import { AudioAttachment, AudioPicker } from "./AudioAttachment";
 
 export type AssistantPlacement = "cursor" | "bottom";
 
@@ -40,6 +42,11 @@ export function AssistantPopover({
   const [answer, setAnswer] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [audioOpen, setAudioOpen] = useState(false);
+  const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [audioSelection, setAudioSelection] = useState<AudioSelection | null>(
+    null,
+  );
   const [closingHeight, setClosingHeight] = useState<number>();
   const [position, setPosition] = useState<{
     left: number;
@@ -188,7 +195,13 @@ export function AssistantPopover({
   }, [open, close]);
 
   async function submit() {
-    if (!prompt.trim() || request.current || disabled) return;
+    if (
+      (!prompt.trim() && !audioSelection) ||
+      (audioFile && !audioSelection) ||
+      request.current ||
+      disabled
+    )
+      return;
     const id = crypto.randomUUID();
     const snapshot = view.state.doc;
     const { anchor, head } = view.state.selection.main;
@@ -197,14 +210,19 @@ export function AssistantPopover({
     setError(null);
     setPending(true);
     try {
-      if (!(await account.ensureAssist())) {
+      if (!(await account.ensureAssist(!!audioSelection))) {
         close(false);
         return;
       }
       if (request.current !== id) return;
+      const audio = audioSelection
+        ? await prepareAssistAudio(audioSelection)
+        : undefined;
+      if (request.current !== id) return;
       const result = await window.workspace.assist(id, {
         prompt: prompt.trim(),
-        turbo,
+        turbo: audio ? false : turbo,
+        ...(audio ? { audio } : {}),
         file: { path, content: snapshot.toString(), cursor: { anchor, head } },
       });
       if (request.current !== id || !view.dom.isConnected) return;
@@ -220,9 +238,11 @@ export function AssistantPopover({
           );
         try {
           parseModule(result.code, path);
-        } catch {
+        } catch (error) {
+          const detail =
+            error instanceof Error ? ` ${error.message}` : "";
           throw new Error(
-            "The model returned invalid code. Your file is unchanged. Try again.",
+            `The model returned invalid code. Your file is unchanged.${detail}`,
           );
         }
         view.dispatch({
@@ -236,6 +256,9 @@ export function AssistantPopover({
       }
       setAnswer(result.message);
       setPrompt("");
+      setAudioFile(null);
+      setAudioSelection(null);
+      setAudioOpen(false);
     } catch (error) {
       if (request.current === id)
         setError(
@@ -275,8 +298,57 @@ export function AssistantPopover({
         answer={answer}
         error={error}
         pending={pending}
-        disabled={disabled}
-        turbo={turbo}
+        disabled={disabled || (!!audioFile && !audioSelection)}
+        turbo={!audioFile && turbo}
+        hasAudio={!!audioFile}
+        onAttach={() => {
+          if (!account.user) {
+            close(false);
+            account.openProfile();
+          } else if (account.user.tier === "free") {
+            close(false);
+            account.openUpgrade("audio");
+          } else {
+            setAudioOpen(true);
+            void account.refresh().catch(() => {});
+          }
+        }}
+        attachment={
+          audioOpen ? (
+            audioFile ? (
+              <AudioAttachment
+                file={audioFile}
+                pending={pending}
+                onSelect={setAudioSelection}
+                onRemove={() => {
+                  setAudioFile(null);
+                  setAudioSelection(null);
+                  setAudioOpen(false);
+                }}
+              />
+            ) : (
+              <div className={styles.attachment}>
+                <div className={styles.audioHeader}>
+                  <span>Add audio</span>
+                  <button
+                    type="button"
+                    aria-label="Close audio picker"
+                    onClick={() => setAudioOpen(false)}
+                  >
+                    ×
+                  </button>
+                </div>
+                <AudioPicker
+                  onFile={(file) => {
+                    setError(null);
+                    setAudioFile(file);
+                  }}
+                  onError={setError}
+                />
+              </div>
+            )
+          ) : undefined
+        }
         onTurboChange={setTurbo}
         inputRef={input}
         onPromptChange={setPrompt}

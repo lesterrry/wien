@@ -8,6 +8,8 @@ const user = {
   created_at: "2026-11-12T00:00:00Z",
   tier: "free",
   assist_requests_remaining: 10,
+  audio_requests_used: 0,
+  assist_requests_used: 0,
 };
 const token = "a".repeat(64);
 class MemoryStore implements TokenStore {

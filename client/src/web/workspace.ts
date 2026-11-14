@@ -14,7 +14,7 @@ const projects = new BrowserProjects();
 const account = new AccountClient("", null);
 const requests = new Map<string, AbortController>();
 async function choose(create: boolean, example?: string) {
-  const files = getExampleFiles(example ?? "default");
+  const files = getExampleFiles(example ?? "empty");
   const existing = await projects.list();
   if (
     create &&

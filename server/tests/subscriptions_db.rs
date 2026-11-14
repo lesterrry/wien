@@ -54,6 +54,22 @@ impl Model {
 }
 #[async_trait]
 impl Provider for Model {
+    async fn audio(&self, prompt: &str, _: &str) -> Result<String, ProviderError> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        self.entered.add_permits(1);
+        if self.block.load(Ordering::SeqCst) {
+            self.release.acquire().await.unwrap().forget();
+        }
+        if prompt.contains("Previous reconstruction") {
+            if self.fail.load(Ordering::SeqCst) {
+                return Err(ProviderError::Timeout);
+            }
+            Ok(json!({"message":"Audio ready", "code":"note('a4').s('sine')"}).to_string())
+        } else {
+            Ok(json!({"bpm":120,"notes":[],"code":"note('a4')"}).to_string())
+        }
+    }
+
     async fn send(&self, _: &str, _: &ModelOptions) -> Result<ModelResponse, ProviderError> {
         unreachable!()
     }
@@ -150,6 +166,45 @@ async fn remaining(pool: &PgPool) -> i32 {
         .fetch_one(pool)
         .await
         .unwrap()
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL in DATABASE_URL; CI runs this explicitly"]
+async fn paid_tiers_ignore_free_allowance_and_keep_usage_counts(pool: PgPool) {
+    let model = Model::new();
+    let app = app(&pool, model.clone()).await;
+    let user = register(&app).await;
+    let token = user["token"].as_str().unwrap();
+    let mut used = 0_i64;
+    for tier in ["plus", "pro", "ultra"] {
+        for allowance in [0, 2] {
+            sqlx::query("UPDATE subscriptions SET tier=$1,assist_requests_remaining=$2")
+                .bind(tier)
+                .bind(allowance)
+                .execute(&pool)
+                .await
+                .unwrap();
+            let (status, body) = request(&app, "POST", "/v1/assist", context(), Some(token)).await;
+            assert_eq!(status, StatusCode::OK, "{tier}: {body}");
+            used += 1;
+            assert_eq!(remaining(&pool).await, allowance);
+            let counts: (i64, i64) = sqlx::query_as(
+                "SELECT assist_requests_used,audio_requests_used FROM subscriptions",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            assert_eq!(counts, (used, 0));
+        }
+    }
+    sqlx::query("UPDATE subscriptions SET tier='free',assist_requests_remaining=0")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (status, body) = request(&app, "POST", "/v1/assist", context(), Some(token)).await;
+    assert_eq!(status, StatusCode::PAYMENT_REQUIRED);
+    assert_eq!(body["code"], "assist_quota_exhausted");
+    assert_eq!(model.calls.load(Ordering::SeqCst), used as usize);
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -379,4 +434,107 @@ async fn cookie_assist_enforces_origin_and_consumes_one_credit(pool: PgPool) {
     }
     assert_eq!(model.calls.load(Ordering::SeqCst), 1);
     assert_eq!(remaining(&pool).await, 9);
+}
+
+fn audio_context() -> Value {
+    use base64::Engine;
+    let mut bytes = std::io::Cursor::new(Vec::new());
+    {
+        let mut wav = hound::WavWriter::new(
+            &mut bytes,
+            hound::WavSpec {
+                channels: 1,
+                sample_rate: 24000,
+                bits_per_sample: 16,
+                sample_format: hound::SampleFormat::Int,
+            },
+        )
+        .unwrap();
+        for i in 0..240000 {
+            wav.write_sample(((i as f32 * 0.1).sin() * 1000.0) as i16)
+                .unwrap();
+        }
+        wav.finalize().unwrap();
+    }
+    let mut body = context();
+    body["prompt"] = json!(""); // Attachment alone is sufficient.
+    body["audio"] =
+        json!({"wav_base64":base64::engine::general_purpose::STANDARD.encode(bytes.into_inner())});
+    body
+}
+async fn audio_used(pool: &PgPool) -> i64 {
+    sqlx::query_scalar("SELECT audio_requests_used FROM subscriptions")
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL in DATABASE_URL; CI runs this explicitly"]
+async fn audio_has_separate_usage_and_two_passes_count_once(pool: PgPool) {
+    let model = Model::new();
+    let app = app(&pool, model.clone()).await;
+    let user = register(&app).await;
+    let token = user["token"].as_str().unwrap();
+    assert_eq!(user["user"]["audio_requests_used"], 0);
+    let (status, body) = request(&app, "POST", "/v1/assist", audio_context(), Some(token)).await;
+    assert_eq!(status, StatusCode::PAYMENT_REQUIRED);
+    assert_eq!(body["code"], "audio_requires_plan");
+    assert_eq!(model.calls.load(Ordering::SeqCst), 0);
+    sqlx::query("UPDATE subscriptions SET tier='plus',assist_requests_remaining=0")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let mut turbo = audio_context();
+    turbo["turbo"] = json!(true);
+    assert_eq!(
+        request(&app, "POST", "/v1/assist", turbo, Some(token))
+            .await
+            .1["code"],
+        "audio_turbo_unavailable"
+    );
+    let mut invalid = audio_context();
+    invalid["audio"]["wav_base64"] = json!("invalid");
+    assert_eq!(
+        request(&app, "POST", "/v1/assist", invalid, Some(token))
+            .await
+            .1["code"],
+        "invalid_audio"
+    );
+    assert_eq!(model.calls.load(Ordering::SeqCst), 0);
+    model.fail.store(true, Ordering::SeqCst);
+    assert_eq!(
+        request(&app, "POST", "/v1/assist", audio_context(), Some(token))
+            .await
+            .0,
+        StatusCode::GATEWAY_TIMEOUT
+    );
+    assert_eq!(audio_used(&pool).await, 0);
+    model.fail.store(false, Ordering::SeqCst);
+    for expected in [1, 2] {
+        let before = model.calls.load(Ordering::SeqCst);
+        let (status, body) =
+            request(&app, "POST", "/v1/assist", audio_context(), Some(token)).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(model.calls.load(Ordering::SeqCst) - before, 2);
+        assert_eq!(audio_used(&pool).await, expected);
+        assert_eq!(remaining(&pool).await, 0);
+    }
+    sqlx::query("UPDATE subscriptions SET assist_requests_remaining=1")
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        request(&app, "POST", "/v1/assist", context(), Some(token))
+            .await
+            .0,
+        StatusCode::OK
+    );
+    assert_eq!(audio_used(&pool).await, 2);
+    assert_eq!(remaining(&pool).await, 1);
+    let text_used: i64 = sqlx::query_scalar("SELECT assist_requests_used FROM subscriptions")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(text_used, 1);
 }

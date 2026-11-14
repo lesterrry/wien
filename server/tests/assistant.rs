@@ -26,6 +26,7 @@ impl Provider for Stub {
         &self,
         request: &wien_server::providers::turn::TurnRequest,
     ) -> Result<wien_server::providers::turn::TurnResponse, ProviderError> {
+        assert_eq!(request.output_format.as_ref().unwrap()["strict"], true);
         let text = request.input[0]["content"][0]["text"].as_str().unwrap();
         Ok(wien_server::providers::turn::TurnResponse {
             response: self.send(text, &request.options).await?,
@@ -164,6 +165,8 @@ async fn validates_context_and_origin_before_model_call() {
 async fn rejects_malformed_or_oversized_model_output_without_exposing_it() {
     for output in [
         "test-only-secret".to_string(),
+        // A real Turbo response added prose before otherwise valid JSON.
+        "Added controls.\n\n{\"message\":\"Added controls.\",\"code\":\"note('c4')\"}".into(),
         json!({"message":"", "code":"x"}).to_string(),
         json!({"message":"ok", "code":42}).to_string(),
         json!({"message":"ok", "code":"x".repeat(128 * 1024 + 1)}).to_string(),

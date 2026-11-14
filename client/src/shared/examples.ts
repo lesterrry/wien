@@ -23,7 +23,10 @@ if (!defaultExampleFiles || Object.keys(defaultExampleFiles).length === 0) {
   throw new Error("The default example project is missing or empty.");
 }
 
-export const exampleNames = Object.keys(exampleProjects).sort();
+// The empty template is reserved for New project, not the examples picker.
+export const exampleNames = Object.keys(exampleProjects)
+  .filter((name) => name !== "empty")
+  .sort();
 
 export function getExampleFiles(id: string): Record<string, string> {
   if (typeof id !== "string" || !Object.hasOwn(exampleProjects, id)) {

@@ -63,6 +63,9 @@ impl Codex {
         if !request.tools.is_empty() {
             body["include"] = json!(["reasoning.encrypted_content"]);
         }
+        if let Some(format) = &request.output_format {
+            body["text"] = json!({"format": format});
+        }
         if let Some(effort) = &options.reasoning_effort {
             body["reasoning"] = json!({ "effort": effort });
         }
@@ -165,6 +168,7 @@ impl Provider for Codex {
             .turn(&TurnRequest {
                 input: vec![user_input(text)],
                 tools: vec![],
+                output_format: None,
                 options: options.clone(),
             })
             .await?;

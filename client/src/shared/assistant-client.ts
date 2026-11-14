@@ -1,6 +1,9 @@
 import type { AssistRequest, AssistResponse } from "./assistant";
 
 const errors: Record<string, string> = {
+  audio_requires_plan: "Audio attachments are available on paid plans.",
+  audio_turbo_unavailable: "Turbo is unavailable with audio attachments.",
+  invalid_audio: "Choose an MP3 excerpt between 0.1 and 10 seconds.",
   assistant_busy: "The assistant is still busy. Try again shortly.",
   rag_not_ready:
     "The music reference index is not ready. Build the RAG index and restart skill.",

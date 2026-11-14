@@ -1,3 +1,4 @@
+pub mod audio;
 pub mod error;
 pub mod tools;
 
@@ -46,11 +47,14 @@ pub struct AssistRequest {
     /// Answer directly without reference lookup or tool calls. Defaults to false.
     #[serde(default)]
     pub turbo: bool,
+    /// Locally trimmed mono PCM WAV, at most ten seconds; billed separately.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audio: Option<audio::AudioAttachment>,
 }
 
 impl AssistRequest {
     pub fn is_valid(&self) -> bool {
-        !self.prompt.trim().is_empty()
+        (!self.prompt.trim().is_empty() || self.audio.is_some())
             && self.prompt.len() <= 16 * 1024
             && !self.file.path.trim().is_empty()
             && self.file.path.len() <= 4096
@@ -159,6 +163,11 @@ async fn run(
     tools: &dyn AssistantTools,
     request: &AssistRequest,
 ) -> Result<AssistResponse, AssistError> {
+    if let Some(audio) = &request.audio {
+        return audio::recreate(provider, request, audio)
+            .await
+            .map_err(Into::into);
+    }
     let mut options = config.options();
     options.instructions = Some(if request.turbo {
         format!(
@@ -185,6 +194,21 @@ async fn run(
         } else {
             tools::definitions()
         },
+        // A prompt alone cannot prevent prose or Markdown around the JSON.
+        output_format: Some(json!({
+            "type": "json_schema",
+            "name": "assist_response",
+            "strict": true,
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "message": {"type": "string"},
+                    "code": {"type": ["string", "null"]}
+                },
+                "required": ["message", "code"],
+                "additionalProperties": false
+            }
+        })),
         options,
     };
     let mut call_ids = HashSet::new();

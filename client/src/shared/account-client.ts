@@ -43,7 +43,15 @@ function profile(value: unknown): UserProfile {
     !("assist_requests_remaining" in value) ||
     typeof value.assist_requests_remaining !== "number" ||
     !Number.isSafeInteger(value.assist_requests_remaining) ||
-    value.assist_requests_remaining < 0
+    value.assist_requests_remaining < 0 ||
+    ("assist_requests_used" in value &&
+      (typeof value.assist_requests_used !== "number" ||
+        !Number.isSafeInteger(value.assist_requests_used) ||
+        value.assist_requests_used < 0)) ||
+    ("audio_requests_used" in value &&
+      (typeof value.audio_requests_used !== "number" ||
+        !Number.isSafeInteger(value.audio_requests_used) ||
+        value.audio_requests_used < 0))
   ) {
     throw new Error("Invalid account response.");
   }
@@ -53,6 +61,15 @@ function profile(value: unknown): UserProfile {
     created_at: value.created_at,
     tier: value.tier as UserProfile["tier"],
     assist_requests_remaining: value.assist_requests_remaining,
+    // Usage counters were introduced later; keep text Assist usable during rollout.
+    assist_requests_used:
+      "assist_requests_used" in value
+        ? (value.assist_requests_used as number)
+        : 0,
+    audio_requests_used:
+      "audio_requests_used" in value
+        ? (value.audio_requests_used as number)
+        : 0,
   };
 }
 

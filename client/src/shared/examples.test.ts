@@ -36,7 +36,10 @@ test("bundled examples preserve complete projects and their local imports", asyn
     .map((entry) => entry.name);
   assert.deepEqual(Object.keys(exampleProjects).sort(), directories.sort());
   assert.equal(defaultExampleFiles, exampleProjects.default);
-  assert.deepEqual(exampleNames, directories.sort());
+  assert.deepEqual(
+    exampleNames,
+    directories.filter((name) => name !== "empty").sort(),
+  );
   assert.equal(getExampleFiles("default"), defaultExampleFiles);
   for (const id of ["missing", "../default", "__proto__", null]) {
     assert.throws(() => getExampleFiles(id), /Example project not found/);

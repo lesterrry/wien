@@ -521,6 +521,17 @@
           "file"
         ],
         "properties": {
+          "audio": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AudioAttachment",
+                "description": "Locally trimmed mono PCM WAV, at most ten seconds; billed separately."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "file": {
             "$ref": "#/components/schemas/FileContext"
           },
@@ -549,6 +560,19 @@
           },
           "message": {
             "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AudioAttachment": {
+        "type": "object",
+        "required": [
+          "wav_base64"
+        ],
+        "properties": {
+          "wav_base64": {
+            "type": "string",
+            "description": "Base64 PCM16 mono WAV at 24 kHz; 0.1–10 seconds. No source file or URL."
           }
         },
         "additionalProperties": false
@@ -648,12 +672,22 @@
           "username",
           "created_at",
           "tier",
-          "assist_requests_remaining"
+          "assist_requests_remaining",
+          "audio_requests_used",
+          "assist_requests_used"
         ],
         "properties": {
           "assist_requests_remaining": {
             "type": "integer",
             "format": "int32"
+          },
+          "assist_requests_used": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "audio_requests_used": {
+            "type": "integer",
+            "format": "int64"
           },
           "created_at": {
             "type": "string"

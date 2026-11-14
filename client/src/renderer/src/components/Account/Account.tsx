@@ -31,8 +31,8 @@ interface AccountContextValue {
   dialogOpen: boolean;
   refresh: () => Promise<UserProfile | null>;
   openProfile: () => void;
-  openUpgrade: () => void;
-  ensureAssist: () => Promise<boolean>;
+  openUpgrade: (reason?: "audio") => void;
+  ensureAssist: (audio?: boolean) => Promise<boolean>;
   assistBlocked: (action: "sign_in" | "upgrade") => void;
 }
 const AccountContext = createContext<AccountContextValue | null>(null);
@@ -60,6 +60,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   const [notice, setNotice] = useState("");
 
   const [plansOpen, setPlansOpen] = useState(false);
+  const [upgradeReason, setUpgradeReason] = useState<"audio">();
   const refreshVersion = useRef(0);
   const refresh = useCallback(async () => {
     const version = ++refreshVersion.current;
@@ -81,8 +82,9 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     setPlansOpen(false);
     setOpen(true);
   }
-  function openUpgrade() {
+  function openUpgrade(reason?: "audio") {
     close();
+    setUpgradeReason(reason);
     setPlansOpen(true);
   }
   function assistBlocked(action: "sign_in" | "upgrade") {
@@ -99,13 +101,20 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       openUpgrade();
     }
   }
-  async function ensureAssist() {
+  async function ensureAssist(audio = false) {
     const profile = await refresh();
     if (!profile) {
       assistBlocked("sign_in");
       return false;
     }
-    if (profile.assist_requests_remaining <= 0) {
+    if (audio && profile.tier === "free") {
+      throw new Error("Audio attachments are available on paid plans.");
+    }
+    if (
+      !audio &&
+      profile.tier === "free" &&
+      profile.assist_requests_remaining <= 0
+    ) {
       assistBlocked("upgrade");
       return false;
     }
@@ -216,7 +225,10 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       {children}
       {plansOpen && (
         <SubscriptionPlans
-          exhausted={user?.assist_requests_remaining === 0}
+          exhausted={
+            user?.tier === "free" && user.assist_requests_remaining === 0
+          }
+          audio={upgradeReason === "audio"}
           onClose={() => setPlansOpen(false)}
         />
       )}

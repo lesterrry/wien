@@ -4,6 +4,21 @@
 .intro {
   margin: 0 0 24px;
 }
+.audio {
+  margin-bottom: 24px;
+  padding: 16px;
+  border-radius: 10px;
+  background: var(--color-background);
+}
+.audio h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+.audio p {
+  margin: 8px 0 0;
+  color: var(--color-secondary);
+  line-height: 1.5;
+}
 .plans {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

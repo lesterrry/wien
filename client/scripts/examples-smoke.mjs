@@ -10,7 +10,7 @@ const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "wien-examples-"));
 const output = path.resolve("out-web");
 const registry = path.resolve("../examples");
 const examples = (await fs.readdir(registry, { withFileTypes: true }))
-  .filter((entry) => entry.isDirectory())
+  .filter((entry) => entry.isDirectory() && entry.name !== "empty")
   .map((entry) => entry.name)
   .sort();
 const server = http.createServer(async (req, res) => {

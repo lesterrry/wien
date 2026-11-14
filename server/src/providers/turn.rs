@@ -5,6 +5,8 @@ use super::{ModelOptions, ModelResponse};
 pub struct TurnRequest {
     pub input: Vec<Value>,
     pub tools: Vec<Value>,
+    /// Optional Responses text format; plain provider requests leave this unset.
+    pub output_format: Option<Value>,
     pub options: ModelOptions,
 }
 

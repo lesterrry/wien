@@ -177,3 +177,80 @@
     transition: none;
   }
 }
+
+.attachment {
+  margin: 12px 12px 0;
+  padding: 10px;
+  border-radius: 14px;
+  background: #ffffff08;
+  font-size: 12px;
+}
+
+.attachment p {
+  margin: 8px 0 0;
+  color: var(--color-secondary);
+  line-height: 1.5;
+}
+
+.audioHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.audioHeader span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.audioHeader button,
+.trimControls button {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  padding: 4px;
+}
+
+.waveform {
+  min-height: 64px;
+}
+
+.trimControls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.trimControls label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.trimControls input {
+  width: 64px;
+  min-width: 0;
+  border: 1px solid #ffffff20;
+  border-radius: 5px;
+  background: #0002;
+  padding: 3px;
+  color: var(--color-primary);
+  font: inherit;
+}
+
+.trimControls > span {
+  color: var(--color-secondary);
+  margin-left: auto;
+}
+
+.chooseAudio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+}

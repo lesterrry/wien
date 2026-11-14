@@ -89,7 +89,9 @@ export function ProjectMenu({
                   {user.tier === "free" ? "Free" : user.tier.toUpperCase()}
                 </strong>
                 <span>
-                  {user.assist_requests_remaining} assist requests left
+                  {user.tier === "free"
+                    ? `${user.assist_requests_remaining} assist requests left`
+                    : "Subscription active"}
                 </span>
               </div>
               <button
@@ -99,7 +101,10 @@ export function ProjectMenu({
                   openUpgrade();
                 }}
               >
-                <span>Explore plans</span> <ArrowRight size={13} />
+                <span>
+                  {user.tier === "free" ? "Explore plans" : "Manage billing"}
+                </span>{" "}
+                <ArrowRight size={13} />
               </button>
             </div>
           )}

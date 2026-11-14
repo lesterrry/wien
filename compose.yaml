@@ -40,6 +40,8 @@ services:
       POSTGRES_USER: wien
       POSTGRES_DB: wien
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wien-local-only}
+    ports:
+      - "127.0.0.1:${WIEN_POSTGRES_PORT:-5433}:5432"
     volumes:
       - users-data:/var/lib/postgresql
     healthcheck:

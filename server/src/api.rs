@@ -48,6 +48,11 @@ impl From<crate::subscriptions::ReserveError> for ApiError {
     fn from(error: crate::subscriptions::ReserveError) -> Self {
         use crate::subscriptions::ReserveError;
         match error {
+            ReserveError::AudioRequiresPlan => Self::new(
+                StatusCode::PAYMENT_REQUIRED,
+                "audio_requires_plan",
+                "Audio attachments are available on paid plans.",
+            ),
             ReserveError::Exhausted => Self::new(
                 StatusCode::PAYMENT_REQUIRED,
                 "assist_quota_exhausted",
@@ -159,7 +164,7 @@ pub fn router_with_database(
     let (router, spec) = documented_routes();
     router
         .merge(SwaggerUi::new("/docs").url("/openapi.json", spec))
-        .layer(DefaultBodyLimit::max(256 * 1024))
+        .layer(DefaultBodyLimit::max(1024 * 1024))
         .with_state(AppState {
             provider,
             tools,
@@ -238,7 +243,7 @@ fn parse_body<T>(body: Result<Json<T>, JsonRejection>) -> Result<T, ApiError> {
             ApiError::new(
                 StatusCode::PAYLOAD_TOO_LARGE,
                 "request_too_large",
-                "The JSON body exceeds 256 KiB.",
+                "The JSON body exceeds 1 MiB.",
             )
         } else {
             ApiError::new(
@@ -291,6 +296,24 @@ async fn assist(
             "Expected a prompt up to 16 KiB, file content up to 128 KiB, and valid UTF-16 cursor offsets.",
         ));
     }
+    if request.audio.is_some() && request.turbo {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "audio_turbo_unavailable",
+            "Turbo is unavailable with audio attachments.",
+        ));
+    }
+    if request
+        .audio
+        .as_ref()
+        .is_some_and(|audio| audio.samples().is_none())
+    {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "invalid_audio",
+            "Expected a 0.1–10 second mono PCM16 WAV at 24 kHz.",
+        ));
+    }
     // Reject before any RAG/model work, so only this error is safe to retry.
     // The permit is released on success, failure, timeout, or handler cancellation.
     let _permit = state.assist_slots.try_acquire().map_err(|_| {
@@ -301,9 +324,14 @@ async fn assist(
         )
     })?;
     let reservation = match (&state.database, user_id.as_deref()) {
-        (Some(database), Some(user_id)) => {
-            Some(crate::subscriptions::Reservation::begin(database, user_id).await?)
-        }
+        (Some(database), Some(user_id)) => Some(
+            crate::subscriptions::Reservation::begin_request(
+                database,
+                user_id,
+                request.audio.is_some(),
+            )
+            .await?,
+        ),
         _ => None,
     };
     let response = assistant::send(

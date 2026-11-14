@@ -47,6 +47,17 @@ impl Provider for DirectModel {
     async fn turn(&self, request: &TurnRequest) -> Result<TurnResponse, ProviderError> {
         self.calls.fetch_add(1, Ordering::SeqCst);
         assert!(request.tools.is_empty());
+        assert_eq!(
+            request.output_format,
+            Some(json!({
+                "type":"json_schema", "name":"assist_response", "strict":true,
+                "schema":{
+                    "type":"object",
+                    "properties":{"message":{"type":"string"},"code":{"type":["string","null"]}},
+                    "required":["message","code"], "additionalProperties":false
+                }
+            }))
+        );
         let instructions = request.options.instructions.as_deref().unwrap();
         assert!(instructions.contains(MASTER_PROMPT));
         assert!(!instructions.contains("strudel_rag_search"));

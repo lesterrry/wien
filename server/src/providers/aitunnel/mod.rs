@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use async_trait::async_trait;
+use eventsource_stream::Eventsource;
 use futures_util::StreamExt;
 use reqwest::{Client, StatusCode, header};
 use serde_json::{Value, json};
@@ -50,6 +51,91 @@ impl Aitunnel {
 
 #[async_trait]
 impl Provider for Aitunnel {
+    async fn audio(&self, prompt: &str, wav_base64: &str) -> Result<String, ProviderError> {
+        let endpoint = self
+            .endpoint
+            .strip_suffix("/responses")
+            .ok_or(ProviderError::Rejected)?;
+        let response = self
+            .client
+            .post(format!("{endpoint}/chat/completions"))
+            .header(header::AUTHORIZATION, self.authorization.clone())
+            .json(&json!({
+                "model": "gemini-4-argon",
+                "messages": [{"role":"user", "content":[
+                    {"type":"text", "text":prompt},
+                    {"type":"input_audio", "input_audio":{"data":wav_base64,"format":"wav"}}
+                ]}],
+                "max_tokens": 4096, "tools":[], "tool_choice":"none",
+                "stream": true, "stream_options":{"include_usage":true}
+            }))
+            .send()
+            .await
+            .map_err(transport_error)?;
+        if !response.status().is_success() {
+            return Err(match response.status() {
+                StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => ProviderError::AuthRequired,
+                StatusCode::PAYMENT_REQUIRED | StatusCode::TOO_MANY_REQUESTS => {
+                    ProviderError::RateLimited
+                }
+                StatusCode::REQUEST_TIMEOUT | StatusCode::GATEWAY_TIMEOUT => ProviderError::Timeout,
+                status if status.is_client_error() => ProviderError::Rejected,
+                _ => ProviderError::Unavailable,
+            });
+        }
+        // Bound the raw stream before the SSE parser, including unterminated events.
+        let mut size = 0usize;
+        let stream = response.bytes_stream().map(move |chunk| {
+            let chunk = chunk.map_err(transport_error)?;
+            size = size.saturating_add(chunk.len());
+            if size > MAX_RESPONSE_BYTES {
+                return Err(ProviderError::ResponseTooLarge);
+            }
+            Ok(chunk)
+        });
+        let mut events = stream.eventsource();
+        let mut text = String::new();
+        let mut stopped = false;
+        while let Some(event) = events.next().await {
+            let event = event.map_err(|_| ProviderError::Incomplete)?;
+            if event.data == "[DONE]" {
+                return if stopped && !text.trim().is_empty() {
+                    Ok(text)
+                } else {
+                    Err(ProviderError::Incomplete)
+                };
+            }
+            let value: Value =
+                serde_json::from_str(&event.data).map_err(|_| ProviderError::InvalidResponse)?;
+            if value.get("error").is_some() {
+                return Err(ProviderError::Incomplete);
+            }
+            if let Some(choices) = value["choices"].as_array() {
+                for choice in choices {
+                    if choice["index"] != 0
+                        || choice["delta"].get("tool_calls").is_some()
+                        || choice["delta"].get("function_call").is_some()
+                    {
+                        return Err(ProviderError::InvalidResponse);
+                    }
+                    if let Some(content) = choice["delta"]["content"].as_str() {
+                        text.push_str(content);
+                    }
+                    if text.len() > 160 * 1024 {
+                        return Err(ProviderError::ResponseTooLarge);
+                    }
+                    if let Some(reason) = choice["finish_reason"].as_str() {
+                        if reason != "stop" {
+                            return Err(ProviderError::Incomplete);
+                        }
+                        stopped = true;
+                    }
+                }
+            }
+        }
+        Err(ProviderError::Incomplete)
+    }
+
     async fn send(
         &self,
         text: &str,
@@ -59,6 +145,7 @@ impl Provider for Aitunnel {
             .turn(&TurnRequest {
                 input: vec![user_input(text)],
                 tools: vec![],
+                output_format: None,
                 options: options.clone(),
             })
             .await?;
@@ -83,6 +170,9 @@ impl Provider for Aitunnel {
         });
         if !request.tools.is_empty() {
             body["include"] = json!(["reasoning.encrypted_content"]);
+        }
+        if let Some(format) = &request.output_format {
+            body["text"] = json!({"format": format});
         }
         if let Some(effort) = &options.reasoning_effort {
             body["reasoning"] = json!({"effort": effort});

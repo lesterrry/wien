@@ -56,6 +56,9 @@ jobs:
       - name: Test browser workspace
         run: pnpm test:web
 
+      - name: Test audio attachments in Assist
+        run: WIEN_AUDIO_WEB_ONLY=1 node scripts/assist-audio-smoke.mjs
+
   rust:
     name: Rust workspace checks and build
     runs-on: ubuntu-latest

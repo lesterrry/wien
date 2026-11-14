@@ -1157,6 +1157,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "hound"
+version = "3.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62adaabb884c94955b19907d60019f4e145d091c75345379e70d1ee696f7854f"
+
+[[package]]
 name = "html5ever"
 version = "0.35.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1771,10 +1777,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "num-complex"
+version = "0.4.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "73f88a1307638156682bada9d7604135552957b7818057dcef22705b4d509495"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "num-conv"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "521739c6d2bac4aa25192232afe6841231376b2b26d4d9fae5ecf8ca5772e441"
+
+[[package]]
+name = "num-integer"
+version = "0.1.47"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ce2d95d4b3734dc35aa2f45e1aa22cd416814592a4f9d9205e11affd5b8e10b"
+dependencies = [
+ "num-traits",
+]
 
 [[package]]
 name = "num-traits"
@@ -2034,6 +2058,15 @@ checksum = "2bfe0f4c752e450fc2faf62654f1c134747922825d5b04ca717b8874f41a40c0"
 dependencies = [
  "proc-macro2",
  "syn 3.0.10",
+]
+
+[[package]]
+name = "primal-check"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dc0d895b311e3af9902528fbb8f928688abbd95872819320517cc24ca6b2bd08"
+dependencies = [
+ "num-integer",
 ]
 
 [[package]]
@@ -2476,6 +2509,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cfcb3a22ef46e85b45de6ee7e79d063319ebb6594faafcf1c225ea92ab6e9b92"
 dependencies = [
  "semver",
+]
+
+[[package]]
+name = "rustfft"
+version = "6.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "21db5f9893e91f41798c88680037dba611ca6674703c1a18601b01a72c8adb89"
+dependencies = [
+ "num-complex",
+ "num-integer",
+ "num-traits",
+ "primal-check",
+ "strength_reduce",
+ "transpose",
 ]
 
 [[package]]
@@ -3079,6 +3126,12 @@ name = "streaming-iterator"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b2231b7c3057d5e4ad0156fb3dc807d900806020c5ffa3ee6ff2c8c76fb8520"
+
+[[package]]
+name = "strength_reduce"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe895eb47f22e2ddd4dabc02bce419d2e643c8e3b585c78158b349195bc24d82"
 
 [[package]]
 name = "string_cache"
@@ -3796,6 +3849,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "transpose"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1ad61aed86bc3faea4300c7aee358b4c6d0c8d6ccc36524c96e4c92ccf26e77e"
+dependencies = [
+ "num-integer",
+ "strength_reduce",
+]
+
+[[package]]
 name = "tree-sitter"
 version = "0.25.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4179,11 +4242,14 @@ dependencies = [
  "argon2",
  "async-trait",
  "axum",
+ "base64 0.22.1",
  "eventsource-stream",
  "futures-util",
  "getrandom 0.4.3",
+ "hound",
  "rag-protocol",
  "reqwest",
+ "rustfft",
  "serde",
  "serde_json",
  "service-runtime",

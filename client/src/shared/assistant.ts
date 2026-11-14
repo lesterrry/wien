@@ -1,6 +1,7 @@
 export interface AssistRequest {
   prompt: string;
   turbo?: boolean;
+  audio?: { wav_base64: string };
   file: {
     path: string;
     content: string;

@@ -1,6 +1,6 @@
 import classNames from "classnames";
-import { ArrowUp, Square, X, Zap } from "lucide-react";
-import type { Ref } from "react";
+import { ArrowUp, Paperclip, Square, X, Zap } from "lucide-react";
+import type { ReactNode, Ref } from "react";
 import { AnimatedBorder } from "../AnimatedBorder/AnimatedBorder";
 import { MarkdownAnswer } from "../MarkdownAnswer/MarkdownAnswer";
 import styles from "./AssistantPopover.module.css";
@@ -15,6 +15,9 @@ export function AssistantContent({
   showComposer = true,
   turbo = false,
   onTurboChange,
+  attachment,
+  hasAudio = false,
+  onAttach,
   inputRef,
   placeholder = "What would you like to make?",
   onPromptChange,
@@ -30,6 +33,9 @@ export function AssistantContent({
   showComposer?: boolean;
   turbo?: boolean;
   onTurboChange?: (enabled: boolean) => void;
+  attachment?: ReactNode;
+  hasAudio?: boolean;
+  onAttach?: () => void;
   inputRef?: Ref<HTMLTextAreaElement>;
   placeholder?: string;
   onPromptChange: (value: string) => void;
@@ -56,78 +62,97 @@ export function AssistantContent({
         {pending ? "Working on it…" : ""}
       </span>
       {showComposer && (
-        <form
-          className={styles.composer}
-          onSubmit={(event) => {
-            event.preventDefault();
-            onSubmit();
-          }}
-        >
-          <textarea
-            ref={inputRef}
-            aria-label="Ask Assist"
-            placeholder={placeholder}
-            value={prompt}
-            readOnly={pending}
-            maxLength={16000}
-            rows={1}
-            onChange={(event) => onPromptChange(event.target.value)}
-            onKeyDown={(event) => {
-              if (
-                event.key === "Enter" &&
-                !event.shiftKey &&
-                !event.nativeEvent.isComposing
-              ) {
-                event.preventDefault();
-                onSubmit();
-              }
+        <>
+          {attachment}
+          <form
+            className={styles.composer}
+            onSubmit={(event) => {
+              event.preventDefault();
+              onSubmit();
             }}
-          />
-          <div className={styles.actions}>
-            {onTurboChange && (
-              <button
-                type="button"
-                className={styles.turbo}
-                aria-label="Turbo"
-                aria-pressed={turbo}
-                title="Быстрее ответы, меньше точность"
-                disabled={pending || disabled}
-                onClick={() => onTurboChange(!turbo)}
-              >
-                <Zap size={13} fill={turbo ? "currentColor" : "none"} />
-              </button>
-            )}
-            {pending ? (
-              <button
-                type="button"
-                className={styles.send}
-                aria-label="Cancel request"
-                onClick={onCancel}
-              >
-                <Square size={12} fill="currentColor" />
-              </button>
-            ) : prompt.trim() ? (
-              <button
-                type="submit"
-                className={styles.send}
-                aria-label="Send request"
-                disabled={disabled}
-              >
-                <ArrowUp size={17} />
-              </button>
-            ) : onClose ? (
-              <button
-                type="button"
-                className={styles.closeButton}
-                aria-label="Close assistant"
-                title="Close (Esc)"
-                onClick={onClose}
-              >
-                <X size={14} />
-              </button>
-            ) : null}
-          </div>
-        </form>
+          >
+            <textarea
+              ref={inputRef}
+              aria-label="Ask Assist"
+              placeholder={placeholder}
+              value={prompt}
+              readOnly={pending}
+              maxLength={16000}
+              rows={1}
+              onChange={(event) => onPromptChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (
+                  event.key === "Enter" &&
+                  !event.shiftKey &&
+                  !event.nativeEvent.isComposing
+                ) {
+                  event.preventDefault();
+                  onSubmit();
+                }
+              }}
+            />
+            <div className={styles.actions}>
+              {onAttach && (
+                <button
+                  type="button"
+                  className={styles.turbo}
+                  aria-label="Add audio"
+                  title="Add MP3"
+                  disabled={pending || disabled}
+                  onClick={onAttach}
+                >
+                  <Paperclip size={15} />
+                </button>
+              )}
+              {onTurboChange && (
+                <button
+                  type="button"
+                  className={styles.turbo}
+                  aria-label="Turbo"
+                  aria-pressed={turbo}
+                  title={
+                    hasAudio
+                      ? "Turbo is unavailable with audio"
+                      : "Быстрее ответы, меньше точность"
+                  }
+                  disabled={pending || disabled || hasAudio}
+                  onClick={() => onTurboChange(!turbo)}
+                >
+                  <Zap size={13} fill={turbo ? "currentColor" : "none"} />
+                </button>
+              )}
+              {pending ? (
+                <button
+                  type="button"
+                  className={styles.send}
+                  aria-label="Cancel request"
+                  onClick={onCancel}
+                >
+                  <Square size={12} fill="currentColor" />
+                </button>
+              ) : prompt.trim() || hasAudio ? (
+                <button
+                  type="submit"
+                  className={styles.send}
+                  aria-label="Send request"
+                  disabled={disabled}
+                >
+                  <ArrowUp size={17} />
+                </button>
+              ) : onClose ? (
+                <button
+                  type="button"
+                  className={styles.closeButton}
+                  aria-label="Close assistant"
+                  title="Close (Esc)"
+                  onClick={onClose}
+                >
+                  <X size={14} />
+                </button>
+              ) : null}
+            </div>
+          </form>
+        </>
       )}
     </>
   );

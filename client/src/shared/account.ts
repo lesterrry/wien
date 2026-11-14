@@ -7,6 +7,8 @@ export interface UserProfile {
   created_at: string;
   tier: Tier;
   assist_requests_remaining: number;
+  audio_requests_used: number;
+  assist_requests_used: number;
 }
 
 export interface Credentials {

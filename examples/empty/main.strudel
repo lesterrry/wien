@@ -1,0 +1,2 @@
+// A new idea
+note("c3 e3 g3 b3").s("triangle").gain(0.3)

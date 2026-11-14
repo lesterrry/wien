@@ -275,7 +275,7 @@ function registerIpc() {
     return result.canceled ? null : selectProject(result.filePaths[0]);
   });
   handle("project:create", async (example?: string) => {
-    const files = getExampleFiles(example ?? "default");
+    const files = getExampleFiles(example ?? "empty");
     if (!window) return null;
     const defaultPath = example
       ? path.join(path.dirname(project.root), example)

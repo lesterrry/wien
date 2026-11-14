@@ -52,6 +52,11 @@ pub struct ModelResponse {
 /// Providers implement inference only: no agent loop, filesystem tools, or conversation store.
 #[async_trait]
 pub trait Provider: Send + Sync {
+    /// A bounded audio inference without tools or automatic retries.
+    async fn audio(&self, _prompt: &str, _wav_base64: &str) -> Result<String, ProviderError> {
+        Err(ProviderError::Rejected)
+    }
+
     async fn send(
         &self,
         text: &str,

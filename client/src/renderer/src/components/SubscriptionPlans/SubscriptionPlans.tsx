@@ -9,9 +9,11 @@ const plans = [
 
 export function SubscriptionPlans({
   exhausted,
+  audio = false,
   onClose,
 }: {
   exhausted: boolean;
+  audio?: boolean;
   onClose: () => void;
 }) {
   return (
@@ -21,11 +23,24 @@ export function SubscriptionPlans({
       className={styles.dialog}
     >
       <p className={styles.intro}>
-        {exhausted
+        {exhausted && !audio
           ? "You've used all your assist requests."
           : "Find your next plan."}{" "}
         Upgrade for more usage.
       </p>
+      {audio && (
+        <section className={styles.audio} aria-label="Audio attachments">
+          <h3>Audio attachments</h3>
+          <p>
+            Available on Plus, Pro and Ultra. Upload an MP3, select up to 10
+            seconds and let Assist recreate it as an editable snippet.
+          </p>
+          <p>
+            Audio requests are counted separately from text requests. Turbo is
+            unavailable with audio attachments.
+          </p>
+        </section>
+      )}
       <div className={styles.plans}>
         {plans.map((plan) => (
           <section

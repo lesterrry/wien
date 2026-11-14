@@ -47,6 +47,9 @@ importers:
       acorn:
         specifier: ^8.19.0
         version: 8.19.0
+      audiobuffer-to-wav:
+        specifier: ^1.0.0
+        version: 1.0.0
       classnames:
         specifier: ^2.5.1
         version: 2.5.1
@@ -77,6 +80,9 @@ importers:
       remark-gfm:
         specifier: ^4.0.1
         version: 4.0.1(supports-color@7.2.0)
+      wavesurfer.js:
+        specifier: ^8.1.0
+        version: 8.1.0
       yaml:
         specifier: ^2.9.1
         version: 2.9.1
@@ -87,6 +93,9 @@ importers:
       '@playwright/test':
         specifier: ^1.65.0
         version: 1.65.0
+      '@types/audiobuffer-to-wav':
+        specifier: ^1.0.4
+        version: 1.0.4
       '@types/node':
         specifier: ^22.20.5
         version: 22.20.5
@@ -1025,6 +1034,9 @@ packages:
   '@tonaljs/tonal@4.10.0':
     resolution: {integrity: sha512-F2T9Fiy+j0MVped89kCrX1XF68mQOLUnny4pDOHrIf+OkrjtLQOzzaSOrX1tx0o72WUwQm1knz6D1d57b9X1HA==}
 
+  '@types/audiobuffer-to-wav@1.0.4':
+    resolution: {integrity: sha512-lxIdj8z6koV3CEVW6wEXQiH2XBeTzxq1WWa3BtNtCtH++LO7ivWkciki4to0gmphhDKhSSxlce1zJaHIKJMolw==}
+
   '@types/babel__core@7.20.5':
     resolution: {integrity: sha512-qoQprZvz5wQFJwMDqeseRXWv3rqMvhgpbXFfVyWhbx9X47POIA6i/+dXefEmZKoAgOaTdaIgNSMqMIU61yRyzA==}
 
@@ -1194,6 +1206,9 @@ packages:
   at-least-node@1.0.0:
     resolution: {integrity: sha512-+q/t7Ekv1EDY2l6Gda6LLiX14rU9TV20Wa3ofeQmwPFZbOMo9DXrLbOjFaaclkXKWidIaopwAObQDqwWtGUjqg==}
     engines: {node: '>= 4.0.0'}
+
+  audiobuffer-to-wav@1.0.0:
+    resolution: {integrity: sha512-CAoir4NRrAzAgYo20tEMiKZR84coE8bq/L+H2kwAaULVY4+0xySsEVtNT5raqpzmH6y0pqzY6EmoViLd9W8F/w==}
 
   available-typed-arrays@1.0.7:
     resolution: {integrity: sha512-wvUjBtSGN7+7SjNpq/9M2Tg350UZD3q62IFZLbRAR1bSMlCo1ZaeW+BJ+D090e4hIIZLBcTDWe4Mh4jvUDajzQ==}
@@ -2710,6 +2725,9 @@ packages:
   w3c-keyname@2.2.8:
     resolution: {integrity: sha512-dpojBhNsCNN7T82Tm7k26A6G9ML3NkhDsnw9n/eoxSRlVBB4CEtIQ/KTCLI2Fwf3ataSXRhYFkQi3SlnFwPvPQ==}
 
+  wavesurfer.js@8.1.0:
+    resolution: {integrity: sha512-7/FFjqZxrtZ5pYyjTbb5HPmMAwq5vx4qZRKFsMz1E1wLDVVkueKatR9RW3FjpKQTHFgCpc7VUYUpwTjyIZKLwQ==}
+
   webcrypto-core@1.9.2:
     resolution: {integrity: sha512-gsXecm82UQNlTBURJGuqOWy1Ww08S3kZUcr3aOJS02Pk0xLtkfeUAVC0u0xhgdonFme80edSJUIJyuvL/7250Q==}
 
@@ -3721,6 +3739,8 @@ snapshots:
       '@tonaljs/scale-type': 4.9.4
       '@tonaljs/time-signature': 4.10.1
 
+  '@types/audiobuffer-to-wav@1.0.4': {}
+
   '@types/babel__core@7.20.5':
     dependencies:
       '@babel/parser': 7.29.13
@@ -3953,6 +3973,8 @@ snapshots:
   asynckit@0.4.0: {}
 
   at-least-node@1.0.0: {}
+
+  audiobuffer-to-wav@1.0.0: {}
 
   available-typed-arrays@1.0.7:
     dependencies:
@@ -5809,6 +5831,8 @@ snapshots:
       yaml: 2.9.1
 
   w3c-keyname@2.2.8: {}
+
+  wavesurfer.js@8.1.0: {}
 
   webcrypto-core@1.9.2:
     dependencies:

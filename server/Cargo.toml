@@ -27,6 +27,9 @@ utoipa.workspace = true
 utoipa-axum.workspace = true
 utoipa-swagger-ui = { workspace = true, features = ["axum", "vendored"] }
 tonic.workspace = true
+base64 = "0.22"
+hound = "3.5"
+rustfft = "6.4"
 
 [dev-dependencies]
 tempfile.workspace = true

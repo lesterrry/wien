@@ -10,6 +10,8 @@ pub struct Profile {
     pub created_at: String,
     pub tier: crate::subscriptions::Tier,
     pub assist_requests_remaining: i32,
+    pub audio_requests_used: i64,
+    pub assist_requests_used: i64,
 }
 
 #[derive(FromRow)]
@@ -26,6 +28,8 @@ impl User {
         Ok(Profile {
             tier: subscription.tier,
             assist_requests_remaining: subscription.assist_requests_remaining,
+            audio_requests_used: subscription.audio_requests_used,
+            assist_requests_used: subscription.assist_requests_used,
             id: self.id.clone(),
             username: self.username.clone(),
             created_at: self
