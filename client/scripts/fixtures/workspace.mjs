@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { skipOnboarding } from "./onboarding.mjs";
 
 // Synthetic tones for UI regressions. Keep these independent of the musical
 // examples: changing a composition must not change a control or filesystem test.
@@ -56,9 +57,9 @@ export async function seedWorkspace(userData) {
 }
 
 export async function seedBrowserWorkspace(page) {
+  await skipOnboarding(page);
   await page.getByLabel("Strudel code editor", { exact: true }).waitFor();
   await page.evaluate(async (files) => {
-    localStorage.setItem("wien:onboarding-seen", "1");
     await new Promise((resolve, reject) => {
       const request = indexedDB.open("wien-projects", 1);
       request.onerror = () => reject(request.error);
