@@ -7,5 +7,6 @@ pub mod genres;
 pub mod plans;
 pub mod providers;
 pub mod rag;
+pub mod storefront;
 pub mod subscriptions;
 pub mod users;

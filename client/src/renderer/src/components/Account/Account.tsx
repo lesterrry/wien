@@ -32,6 +32,7 @@ interface AccountContextValue {
   refresh: () => Promise<UserProfile | null>;
   openProfile: () => void;
   openUpgrade: (reason?: "audio") => void;
+  openTerms: (tab?: "plans" | "offer" | "privacy") => void;
   ensureAssist: (audio?: boolean) => Promise<boolean>;
   assistBlocked: (action: "sign_in" | "upgrade") => void;
 }
@@ -60,6 +61,9 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   const [notice, setNotice] = useState("");
 
   const [plansOpen, setPlansOpen] = useState(false);
+  const [plansTab, setPlansTab] = useState<"plans" | "offer" | "privacy">(
+    "plans",
+  );
   const [upgradeReason, setUpgradeReason] = useState<"audio">();
   const refreshVersion = useRef(0);
   const refresh = useCallback(async () => {
@@ -84,7 +88,13 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   }
   function openUpgrade(reason?: "audio") {
     close();
+    setPlansTab("plans");
     setUpgradeReason(reason);
+    setPlansOpen(true);
+  }
+  function openTerms(tab: "plans" | "offer" | "privacy" = "plans") {
+    setPlansTab(tab);
+    setUpgradeReason(undefined);
     setPlansOpen(true);
   }
   function assistBlocked(action: "sign_in" | "upgrade") {
@@ -109,7 +119,6 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       throw new Error("Audio attachments are not included in your plan.");
     }
     if (
-      !audio &&
       profile.plan.initial_assist_requests !== null &&
       profile.assist_requests_remaining <= 0
     ) {
@@ -216,6 +225,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
         refresh,
         openProfile,
         openUpgrade,
+        openTerms,
         ensureAssist,
         assistBlocked,
       }}
@@ -228,6 +238,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
             user.plan.initial_assist_requests !== null &&
             user.assist_requests_remaining === 0
           }
+          initialTab={plansTab}
           audio={upgradeReason === "audio"}
           currentPlanId={user?.plan.id}
           onClose={() => setPlansOpen(false)}
@@ -331,6 +342,18 @@ export function AccountProvider({ children }: { children: ReactNode }) {
                       </label>
                       <p>12–128 characters.</p>
                     </>
+                  )}
+                  {mode === "register" && (
+                    <p>
+                      Как мы обрабатываем данные:{" "}
+                      <button
+                        type="button"
+                        onClick={() => openTerms("privacy")}
+                      >
+                        политика конфиденциальности
+                      </button>
+                      .
+                    </p>
                   )}
                   {mode === "register" && api.platform === "web" && (
                     <Turnstile key={captchaAttempt} onToken={setCaptchaToken} />

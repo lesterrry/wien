@@ -60,6 +60,7 @@ impl Provider for Aitunnel {
             .client
             .post(format!("{endpoint}/chat/completions"))
             .header(header::AUTHORIZATION, self.authorization.clone())
+            .header("X-AITunnel-Log", "off")
             .json(&json!({
                 "model": "gemini-4-argon",
                 "messages": [{"role":"user", "content":[
@@ -182,6 +183,7 @@ impl Provider for Aitunnel {
             .client
             .post(&self.endpoint)
             .header(header::AUTHORIZATION, self.authorization.clone())
+            .header("X-AITunnel-Log", "off")
             .json(&body)
             .send()
             .await

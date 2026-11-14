@@ -71,6 +71,7 @@ async fn sends_bounded_stateless_request_and_preserves_tool_history() {
     Mock::given(method("POST"))
         .and(path("/responses"))
         .and(header("authorization", "Bearer test-key"))
+        .and(header("X-AITunnel-Log", "off"))
         .and(body_partial_json(
             json!({"model":"test-model","store":false,"stream":false,
             "max_output_tokens":4096,"parallel_tool_calls":false,"reasoning":{"effort":"low"},
@@ -210,6 +211,7 @@ async fn audio_uses_argon_streaming_and_never_returns_partial_or_tool_output() {
         server.reset().await;
         Mock::given(method("POST")).and(path("/chat/completions"))
             .and(header("authorization", "Bearer test-key"))
+        .and(header("X-AITunnel-Log", "off"))
             .and(body_partial_json(json!({"model":"gemini-4-argon","stream":true,"tools":[],"tool_choice":"none","messages":[{"role":"user","content":[{"type":"text","text":"listen"},{"type":"input_audio","input_audio":{"data":"audio-data","format":"wav"}}]}]})))
             .respond_with(ResponseTemplate::new(200).insert_header("content-type","text/event-stream").set_body_string(format!("data: {{\"choices\":[{{\"index\":0,\"delta\":{{\"content\":\"complete text\"}}}}]}}\n\n{tail}")))
             .expect(1).mount(&server).await;

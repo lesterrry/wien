@@ -10,6 +10,10 @@ export interface SubscriptionPlan {
   initial_assist_requests: number | null;
   audio_enabled: boolean;
   is_default: boolean;
+  ai_usage_multiplier?: number | null;
+  name_ru?: string | null;
+  description_ru?: string | null;
+  features_ru?: string[] | null;
 }
 
 export interface UserProfile {

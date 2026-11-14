@@ -170,7 +170,7 @@ async fn remaining(pool: &PgPool) -> i32 {
 
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL in DATABASE_URL; CI runs this explicitly"]
-async fn paid_tiers_ignore_free_allowance_and_keep_usage_counts(pool: PgPool) {
+async fn paid_tiers_enforce_request_allowance_and_keep_usage_counts(pool: PgPool) {
     let model = Model::new();
     let app = app(&pool, model.clone()).await;
     let user = register(&app).await;
@@ -185,9 +185,14 @@ async fn paid_tiers_ignore_free_allowance_and_keep_usage_counts(pool: PgPool) {
                 .await
                 .unwrap();
             let (status, body) = request(&app, "POST", "/v1/assist", context(), Some(token)).await;
-            assert_eq!(status, StatusCode::OK, "{tier}: {body}");
-            used += 1;
-            assert_eq!(remaining(&pool).await, allowance);
+            if allowance == 0 {
+                assert_eq!(status, StatusCode::PAYMENT_REQUIRED, "{tier}: {body}");
+                assert_eq!(remaining(&pool).await, 0);
+            } else {
+                assert_eq!(status, StatusCode::OK, "{tier}: {body}");
+                used += 1;
+                assert_eq!(remaining(&pool).await, allowance - 1);
+            }
             let counts: (i64, i64) = sqlx::query_as(
                 "SELECT assist_requests_used,audio_requests_used FROM subscriptions",
             )
@@ -471,7 +476,7 @@ async fn audio_used(pool: &PgPool) -> i64 {
 
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL in DATABASE_URL; CI runs this explicitly"]
-async fn audio_has_separate_usage_and_two_passes_count_once(pool: PgPool) {
+async fn audio_shares_allowance_and_two_passes_count_once(pool: PgPool) {
     let model = Model::new();
     let app = app(&pool, model.clone()).await;
     let user = register(&app).await;
@@ -481,7 +486,7 @@ async fn audio_has_separate_usage_and_two_passes_count_once(pool: PgPool) {
     assert_eq!(status, StatusCode::PAYMENT_REQUIRED);
     assert_eq!(body["code"], "audio_requires_plan");
     assert_eq!(model.calls.load(Ordering::SeqCst), 0);
-    sqlx::query("UPDATE subscriptions SET tier='plus',assist_requests_remaining=0")
+    sqlx::query("UPDATE subscriptions SET tier='plus',assist_requests_remaining=3")
         .execute(&pool)
         .await
         .unwrap();
@@ -518,7 +523,7 @@ async fn audio_has_separate_usage_and_two_passes_count_once(pool: PgPool) {
         assert_eq!(status, StatusCode::OK, "{body}");
         assert_eq!(model.calls.load(Ordering::SeqCst) - before, 2);
         assert_eq!(audio_used(&pool).await, expected);
-        assert_eq!(remaining(&pool).await, 0);
+        assert_eq!(remaining(&pool).await, 3 - expected as i32);
     }
     sqlx::query("UPDATE subscriptions SET assist_requests_remaining=1")
         .execute(&pool)
@@ -531,12 +536,18 @@ async fn audio_has_separate_usage_and_two_passes_count_once(pool: PgPool) {
         StatusCode::OK
     );
     assert_eq!(audio_used(&pool).await, 2);
-    assert_eq!(remaining(&pool).await, 1);
+    assert_eq!(remaining(&pool).await, 0);
+    assert_eq!(
+        request(&app, "POST", "/v1/assist", audio_context(), Some(token))
+            .await
+            .0,
+        StatusCode::PAYMENT_REQUIRED
+    );
     let text_used: i64 = sqlx::query_scalar("SELECT assist_requests_used FROM subscriptions")
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(text_used, 1);
+    assert_eq!(text_used, 3);
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -553,9 +564,9 @@ async fn catalog_is_public_ordered_and_uses_live_database_values(pool: PgPool) {
             .collect::<Vec<_>>(),
         ["free", "plus", "pro", "ultra"]
     );
-    assert_eq!(plans[1]["price_minor"], 19900);
+    assert_eq!(plans[1]["price_minor"], 39900);
     assert_eq!(plans[1]["currency"], "RUB");
-    assert_eq!(plans[1]["initial_assist_requests"], Value::Null);
+    assert_eq!(plans[1]["initial_assist_requests"], 500);
     sqlx::query("UPDATE plans SET visible=false WHERE id='plus'")
         .execute(&pool)
         .await
@@ -608,8 +619,8 @@ async fn custom_plan_controls_registration_and_access_without_code_changes(pool:
         .commit()
         .await
         .unwrap();
-    assert_eq!(remaining(&pool).await, 2);
-    for _ in 0..2 {
+    assert_eq!(remaining(&pool).await, 1);
+    for _ in 0..1 {
         Reservation::begin(&pool, &user_id)
             .await
             .unwrap()
@@ -677,7 +688,139 @@ async fn catalog_migration_preserves_existing_tiers_balances_and_usage(pool: PgP
         .await
         .unwrap();
     let id: String = sqlx::query_scalar("INSERT INTO users (username,password_hash) VALUES ('new_user','unused') RETURNING id::text").fetch_one(&pool).await.unwrap();
+    // Continue to the current schema before calling the current subscription reader.
+    for migration in [
+        include_str!("../migrations/202611150002_storefront.sql"),
+        include_str!("../migrations/202611150003_request_limits.sql"),
+    ] {
+        sqlx::raw_sql(migration).execute(&pool).await.unwrap();
+    }
     let subscription = wien_server::subscriptions::get(&pool, &id).await.unwrap();
     assert_eq!(subscription.tier, "free");
     assert_eq!(subscription.assist_requests_remaining, 25);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL in DATABASE_URL; CI runs this explicitly"]
+async fn storefront_exposes_public_seller_details_and_request_limits(pool: PgPool) {
+    let app = app(&pool, Model::new()).await;
+    let (status, details) = request(&app, "GET", "/v1/storefront", Value::Null, None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(details["seller_inn"], "774313113437");
+    assert_eq!(details["seller_name"], "Насибуллин Айдар Амирович");
+    assert_eq!(details["support_email"], "mail@aydar.media");
+    assert_eq!(details["support_phone"], Value::Null);
+    assert_eq!(details["renewal_mode"], "manual");
+    assert_eq!(details["documents_published"], false);
+    assert!(details.get("singleton").is_none());
+    sqlx::query("UPDATE storefront SET support_email='support@example.com'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (_, updated) = request(&app, "GET", "/v1/storefront", Value::Null, None).await;
+    assert_eq!(updated["support_email"], "support@example.com");
+    let (_, catalog) = request(&app, "GET", "/v1/plans", Value::Null, None).await;
+    for (id, count, price) in [
+        ("plus", 500, 39900),
+        ("pro", 2500, 89900),
+        ("ultra", 5000, 599000),
+    ] {
+        let plan = catalog
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| p["id"] == id)
+            .unwrap();
+        assert_eq!(plan["ai_usage_multiplier"], Value::Null);
+        assert_eq!(plan["initial_assist_requests"], count);
+        assert_eq!(plan["price_minor"], price);
+        assert!(
+            plan["name_ru"]
+                .as_str()
+                .is_some_and(|name| !name.is_empty())
+        );
+        assert!(!plan["description"].as_str().unwrap().contains("Unlimited"));
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL in DATABASE_URL; CI runs this explicitly"]
+async fn paid_period_grants_current_limit_and_expiry_never_renews_it(pool: PgPool) {
+    let user_id: String = sqlx::query_scalar("INSERT INTO users (username,password_hash) VALUES ('paid_user','unused') RETURNING id::text").fetch_one(&pool).await.unwrap();
+    for (tier, limit) in [("plus", 500), ("pro", 2500), ("ultra", 5000)] {
+        sqlx::query("SELECT activate_subscription($1::uuid,$2)")
+            .bind(&user_id)
+            .bind(tier)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(remaining(&pool).await, limit);
+        let reservation = Reservation::begin_request(&pool, &user_id, true)
+            .await
+            .unwrap();
+        assert!(matches!(
+            Reservation::begin(&pool, &user_id).await,
+            Err(ReserveError::Busy)
+        ));
+        drop(reservation);
+        // Rollback returns the reserved audio request.
+        let reservation = Reservation::begin(&pool, &user_id).await.unwrap();
+        reservation.commit().await.unwrap();
+        assert_eq!(remaining(&pool).await, limit - 1);
+    }
+    sqlx::query(
+        "SELECT activate_subscription($1::uuid,'plus','2024-01-31 12:00:00+00'::timestamptz)",
+    )
+    .bind(&user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let clamped: bool = sqlx::query_scalar(
+        "SELECT period_ends_at='2024-02-29 12:00:00+00'::timestamptz FROM subscriptions",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(clamped);
+    assert_eq!(
+        wien_server::subscriptions::get(&pool, &user_id)
+            .await
+            .unwrap()
+            .assist_requests_remaining,
+        0
+    );
+    assert!(matches!(
+        Reservation::begin(&pool, &user_id).await,
+        Err(ReserveError::Exhausted)
+    ));
+    assert!(matches!(
+        Reservation::begin_request(&pool, &user_id, true).await,
+        Err(ReserveError::Exhausted)
+    ));
+    // Changing the catalog never refills an existing balance. A new activation uses it.
+    sqlx::query("UPDATE plans SET initial_assist_requests=17 WHERE id='plus'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(remaining(&pool).await, 500);
+    sqlx::query("SELECT activate_subscription($1::uuid,'plus')")
+        .bind(&user_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(remaining(&pool).await, 17);
+    sqlx::query("UPDATE subscriptions SET assist_requests_remaining=1")
+        .execute(&pool)
+        .await
+        .unwrap();
+    Reservation::begin_request(&pool, &user_id, true)
+        .await
+        .unwrap()
+        .commit()
+        .await
+        .unwrap();
+    assert!(matches!(
+        Reservation::begin(&pool, &user_id).await,
+        Err(ReserveError::Exhausted)
+    ));
 }

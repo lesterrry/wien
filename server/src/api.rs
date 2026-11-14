@@ -134,6 +134,7 @@ fn documented_routes() -> (Router<AppState>, OpenApi) {
     let (router, mut spec) = OpenApiRouter::new()
         .routes(routes!(assist))
         .routes(routes!(plans))
+        .routes(routes!(storefront))
         .routes(routes!(health))
         .routes(routes!(ready))
         .split_for_parts();
@@ -359,6 +360,21 @@ async fn assist(
 async fn plans(State(state): State<AppState>) -> Result<Json<Vec<crate::plans::Plan>>, ApiError> {
     let pool = state.database.as_ref().ok_or_else(ApiError::database)?;
     crate::plans::list(pool)
+        .await
+        .map(Json)
+        .map_err(|_| ApiError::database())
+}
+
+/// Public seller details and purchase terms, without credentials.
+#[utoipa::path(get, path = "/v1/storefront", responses(
+    (status = 200, description = "Seller details and purchase terms", body = crate::storefront::Storefront),
+    (status = 503, description = "Storefront unavailable", body = ApiError)
+))]
+async fn storefront(
+    State(state): State<AppState>,
+) -> Result<Json<crate::storefront::Storefront>, ApiError> {
+    let pool = state.database.as_ref().ok_or_else(ApiError::database)?;
+    crate::storefront::get(pool)
         .await
         .map(Json)
         .map_err(|_| ApiError::database())

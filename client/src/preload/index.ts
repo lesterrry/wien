@@ -14,6 +14,7 @@ const api: WorkspaceApi = {
   },
   updateMenuState: (state) => ipcRenderer.send("menu:state", state),
   subscriptionPlans: () => ipcRenderer.invoke("account:plans"),
+  storefront: () => ipcRenderer.invoke("account:storefront"),
   accountCurrent: () => ipcRenderer.invoke("account:current"),
   accountLogin: (credentials) =>
     ipcRenderer.invoke("account:login", credentials),

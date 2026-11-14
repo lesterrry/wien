@@ -5,6 +5,7 @@ import type {
   SubscriptionPlan,
   UserProfile,
 } from "./account";
+import { parseStorefront, type Storefront } from "./storefront";
 
 export interface TokenStore {
   read(): Promise<string | null>;
@@ -171,6 +172,9 @@ export class AccountClient {
   changePassword(request: PasswordChange) {
     return this.signedIn("/users/me/password", request, true);
   }
+  async storefront(): Promise<Storefront> {
+    return parseStorefront(await this.call("/v1/storefront", "GET"));
+  }
   async plans(): Promise<SubscriptionPlan[]> {
     const result = await this.call("/v1/plans", "GET");
     if (!Array.isArray(result))
@@ -225,7 +229,16 @@ function parsePlan(value: unknown): SubscriptionPlan {
         !Number.isSafeInteger(p.initial_assist_requests) ||
         p.initial_assist_requests < 0)) ||
     typeof p.audio_enabled !== "boolean" ||
-    typeof p.is_default !== "boolean"
+    typeof p.is_default !== "boolean" ||
+    (p.ai_usage_multiplier != null &&
+      (typeof p.ai_usage_multiplier !== "number" ||
+        !Number.isSafeInteger(p.ai_usage_multiplier) ||
+        p.ai_usage_multiplier <= 0)) ||
+    (p.name_ru != null && typeof p.name_ru !== "string") ||
+    (p.description_ru != null && typeof p.description_ru !== "string") ||
+    (p.features_ru != null &&
+      (!Array.isArray(p.features_ru) ||
+        !p.features_ru.every((item) => typeof item === "string")))
   )
     throw invalid();
   return value as SubscriptionPlan;

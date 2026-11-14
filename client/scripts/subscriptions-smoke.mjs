@@ -6,6 +6,7 @@ import path from "node:path";
 import { _electron as electron, expect } from "@playwright/test";
 import { workspaceWindow } from "./fixtures/onboarding.mjs";
 import { plans as catalog } from "./fixtures/plans.mjs";
+import { storefront } from "./fixtures/storefront.mjs";
 import { seedWorkspace } from "./fixtures/workspace.mjs";
 
 const temporary = await fs.mkdtemp(
@@ -29,7 +30,9 @@ const server = http.createServer(async (req, res) => {
   for await (const chunk of req) source += chunk;
   let status = 200;
   let body;
-  if (req.url === "/v1/plans") {
+  if (req.url === "/v1/storefront") {
+    body = storefront;
+  } else if (req.url === "/v1/plans") {
     status = catalogUnavailable ? 503 : 200;
     body = catalogUnavailable ? { code: "accounts_unavailable" } : offeredPlans;
   } else if (req.url === "/auth/login") {
@@ -155,18 +158,18 @@ try {
   profile.plan = catalog[0];
   profile.assist_requests_remaining = 0;
   await submit();
-  const plans = page.getByRole("dialog", { name: "Explore subscriptions" });
-  await expect(plans).toContainText("used all your assist requests");
+  const plans = page.getByRole("dialog", { name: "Тарифы" });
+  await expect(plans).toContainText("использовали доступные запросы");
   for (const [name, price] of [
-    ["PLUS", "199"],
-    ["PRO", "699"],
-    ["ULTRA", /3[ ,\u00a0\u202f]990/],
+    ["PLUS", "399"],
+    ["PRO", "899"],
+    ["ULTRA", /5[ ,\u00a0\u202f]990/],
   ]) {
-    const card = plans.getByRole("region", { name: `${name} subscription` });
+    const card = plans.getByRole("region", { name: `Тариф ${name}` });
     await expect(card).toContainText(price);
     await expect(
-      card.getByRole("button", { name: "Coming soon" }),
-    ).toBeDisabled();
+      card.getByRole("button", { name: "Посмотреть условия" }),
+    ).toBeEnabled();
   }
   assert.equal(assists, 1);
   await fs.mkdir("../.local", { recursive: true });
@@ -189,9 +192,9 @@ try {
   await page
     .getByRole("button", { name: "Explore plans", exact: true })
     .click();
-  const studio = plans.getByRole("region", { name: "Studio subscription" });
+  const studio = plans.getByRole("region", { name: "Тариф Studio" });
   await expect(studio).toContainText(/123[.,]45/);
-  await expect(studio).toContainText("year");
+  await expect(studio).toContainText("год");
   await expect(studio).toContainText("A server-defined plan");
   await expect(studio).toContainText("Custom feature");
   await expect(plans.getByRole("region")).toHaveCount(1);
@@ -201,12 +204,12 @@ try {
   await page
     .getByRole("button", { name: "Explore plans", exact: true })
     .click();
-  await expect(plans.getByRole("alert")).toContainText("Unable to load");
+  await expect(plans.getByRole("alert")).toContainText("Не удалось загрузить");
   await expect(plans.getByRole("region")).toHaveCount(0);
   catalogUnavailable = false;
   offeredPlans = [];
-  await plans.getByRole("button", { name: "Try again" }).click();
-  await expect(plans).toContainText("No plans are currently available");
+  await plans.getByRole("button", { name: "Попробовать снова" }).click();
+  await expect(plans).toContainText("Тарифы пока недоступны");
   await plans.getByRole("button", { name: "Close dialog" }).click();
   offeredPlans = catalog;
   // A stale local balance cannot bypass the server's quota decision.

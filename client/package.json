@@ -24,6 +24,7 @@
     "test:modules": "esbuild src/renderer/src/module-compiler.test.ts --bundle --platform=node --main-fields=module,main --format=cjs --outfile=out/tests/modules.cjs && node --test out/tests/modules.cjs",
     "dev:web": "vite --config vite.web.config.ts",
     "build:web": "pnpm typecheck && vite build --config vite.web.config.ts",
+    "test:storefront": "pnpm build:web && node scripts/storefront-smoke.mjs",
     "test:web": "node scripts/web-smoke.mjs",
     "test:audio-export": "pnpm build && pnpm build:web && node scripts/audio-export-smoke.mjs",
     "test:onboarding": "pnpm build && pnpm build:web && node scripts/onboarding-smoke.mjs"

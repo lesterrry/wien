@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { plans as catalog } from "./fixtures/plans.mjs";
+import { storefront } from "./fixtures/storefront.mjs";
 import { seedBrowserWorkspace } from "./fixtures/workspace.mjs";
 
 const output = path.resolve("out-web");
@@ -46,6 +47,10 @@ const server = http.createServer(async (req, res) => {
           `wien_session=${token}; Path=/; HttpOnly; SameSite=Strict`,
         );
         res.end(JSON.stringify({ user }));
+        return;
+      }
+      if (req.url === "/v1/storefront") {
+        res.end(JSON.stringify(storefront));
         return;
       }
       if (req.url === "/v1/plans") {
@@ -351,12 +356,12 @@ try {
     .getByRole("button", { name: "Explore plans", exact: true })
     .click();
   const plansDialog = page.getByRole("dialog", {
-    name: "Explore subscriptions",
+    name: "Тарифы",
   });
   await expect(plansDialog.getByRole("region")).toHaveCount(catalog.length);
   await expect(
-    plansDialog.getByRole("region", { name: "PLUS subscription" }),
-  ).toContainText("199");
+    plansDialog.getByRole("region", { name: "Тариф PLUS" }),
+  ).toContainText("399");
   await expect(plansDialog).toContainText(catalog[1].description);
   await plansDialog.getByRole("button", { name: "Close dialog" }).click();
 

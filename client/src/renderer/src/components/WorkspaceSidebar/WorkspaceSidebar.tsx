@@ -3,6 +3,7 @@ import {
   ArrowRight,
   CircleHelp,
   FilePlus2,
+  FileText,
   FolderPlus,
   Network,
   Search,
@@ -19,6 +20,7 @@ export function WorkspaceSidebar({
   onCreate,
   onGraph,
   onHelp,
+  onTerms,
   projectMenu,
   explorer,
   versions,
@@ -30,6 +32,7 @@ export function WorkspaceSidebar({
   onCreate: (folder: boolean) => void;
   onGraph: () => void;
   onHelp: () => void;
+  onTerms: () => void;
   projectMenu: ReactNode;
   explorer: ReactNode;
   versions: ReactNode;
@@ -107,6 +110,10 @@ export function WorkspaceSidebar({
             Graph View<small>Explore project dependencies</small>
           </span>
           <ArrowRight size={13} />
+        </button>
+        <button type="button" className={styles.helpButton} onClick={onTerms}>
+          <FileText size={14} aria-hidden="true" />
+          Тарифы и условия
         </button>
         <button type="button" className={styles.helpButton} onClick={onHelp}>
           <CircleHelp size={14} />

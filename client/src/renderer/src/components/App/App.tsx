@@ -62,6 +62,7 @@ export function App() {
     user,
     resolved: accountResolved,
     dialogOpen: accountDialogOpen,
+    openTerms,
   } = useAccount();
   const navigationBack = useRef(
     new Map<
@@ -1292,6 +1293,7 @@ export function App() {
           }
           onGraph={() => openGraph()}
           onHelp={() => showModal({ kind: "help" })}
+          onTerms={() => openTerms()}
           projectMenu={projectMenuContent}
           versions={versionsContent}
           explorer={explorerContent}

@@ -13,10 +13,14 @@ pub struct Plan {
     pub currency: String,
     pub currency_minor_units: i16,
     pub billing_period: String,
-    /// One-time allowance; null means unlimited. Existing balances are preserved.
+    /// Requests granted at registration (free) or activation of a paid period. Null means unlimited.
     pub initial_assist_requests: Option<i32>,
     pub audio_enabled: bool,
     pub is_default: bool,
+    pub ai_usage_multiplier: Option<i32>,
+    pub name_ru: Option<String>,
+    pub description_ru: Option<String>,
+    pub features_ru: Option<Vec<String>>,
 }
 
 pub async fn list(pool: &PgPool) -> Result<Vec<Plan>, sqlx::Error> {

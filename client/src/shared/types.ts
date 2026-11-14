@@ -9,6 +9,7 @@ import type { AssistRequest, AssistResult } from "./assistant";
 import type { CommandId, CommandState } from "./commands";
 import type { PanelPreferences } from "./control-tree";
 import type { ModuleGraph } from "./modules";
+import type { Storefront } from "./storefront";
 
 export interface Entry {
   id: string;
@@ -41,6 +42,7 @@ export interface WorkspaceApi {
   updateMenuState?(state: CommandState): void;
   exportProject?(): Promise<void>;
   saveAudio(name: string, data: ArrayBuffer): Promise<boolean>;
+  storefront(): Promise<Storefront>;
   subscriptionPlans(): Promise<SubscriptionPlan[]>;
   accountCurrent(): Promise<UserProfile | null>;
   accountRegister?(credentials: Registration): Promise<UserProfile>;
