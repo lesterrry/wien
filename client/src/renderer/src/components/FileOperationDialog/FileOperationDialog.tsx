@@ -37,12 +37,12 @@ export function FileOperationDialog({
     const input = modalNameInput.current;
     if (!input || !modal) return;
     input.focus();
+    const isFile =
+      (modal.kind === "create" && !modal.folder) ||
+      (modal.kind === "rename" && !modal.entry.children);
+    const extensionStart = input.value.lastIndexOf(".");
     const selectionEnd =
-      modal.kind === "create" &&
-      !modal.folder &&
-      input.value.endsWith(".strudel")
-        ? input.value.length - ".strudel".length
-        : input.value.length;
+      isFile && extensionStart > 0 ? extensionStart : input.value.length;
     input.setSelectionRange(0, selectionEnd);
   }, [modal]);
 
