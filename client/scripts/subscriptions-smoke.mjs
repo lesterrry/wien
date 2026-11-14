@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { _electron as electron, expect } from "@playwright/test";
 import { workspaceWindow } from "./fixtures/onboarding.mjs";
+import { plans as catalog } from "./fixtures/plans.mjs";
 import { seedWorkspace } from "./fixtures/workspace.mjs";
 
 const temporary = await fs.mkdtemp(
@@ -16,16 +17,22 @@ const profile = {
   username: "music_maker_with_a_long_username",
   created_at: "2026-11-12T00:00:00Z",
   tier: "free",
+  plan: catalog[0],
   assist_requests_remaining: 10,
 };
 let assists = 0;
 let rejection = 0;
+let catalogUnavailable = false;
+let offeredPlans = catalog;
 const server = http.createServer(async (req, res) => {
   let source = "";
   for await (const chunk of req) source += chunk;
   let status = 200;
   let body;
-  if (req.url === "/auth/login") {
+  if (req.url === "/v1/plans") {
+    status = catalogUnavailable ? 503 : 200;
+    body = catalogUnavailable ? { code: "accounts_unavailable" } : offeredPlans;
+  } else if (req.url === "/auth/login") {
     assert.equal(JSON.parse(source).username, profile.username);
     body = { user: profile, token };
   } else {
@@ -107,7 +114,7 @@ try {
     await page.evaluate(() => typeof window.workspace.accountRegister),
     "undefined",
   );
-  await expect(signin).toContainText("10 free requests");
+  await expect(signin).toContainText("Sign in to use Assist.");
   assert.equal(assists, 0);
   await signin.getByLabel("Username", { exact: true }).fill(profile.username);
   await signin
@@ -137,6 +144,7 @@ try {
   await menu.click();
   for (const tier of ["plus", "pro", "ultra"]) {
     profile.tier = tier;
+    profile.plan = catalog.find((plan) => plan.id === tier);
     await menu.click();
     await expect(menu.locator(`[data-tier="${tier}"]`)).toHaveText(
       tier.toUpperCase(),
@@ -144,6 +152,7 @@ try {
     await menu.click();
   }
   profile.tier = "free";
+  profile.plan = catalog[0];
   profile.assist_requests_remaining = 0;
   await submit();
   const plans = page.getByRole("dialog", { name: "Explore subscriptions" });
@@ -151,7 +160,7 @@ try {
   for (const [name, price] of [
     ["PLUS", "199"],
     ["PRO", "699"],
-    ["ULTRA", "3 990"],
+    ["ULTRA", /3[ ,\u00a0\u202f]990/],
   ]) {
     const card = plans.getByRole("region", { name: `${name} subscription` });
     await expect(card).toContainText(price);
@@ -163,6 +172,43 @@ try {
   await fs.mkdir("../.local", { recursive: true });
   await plans.screenshot({ path: "../.local/subscriptions.png" });
   await plans.getByRole("button", { name: "Close dialog" }).click();
+  // Catalog data, including unknown IDs, money and descriptions, comes from the API.
+  offeredPlans = [
+    {
+      ...catalog[1],
+      id: "studio",
+      name: "Studio",
+      description: "A server-defined plan",
+      price_minor: 12345,
+      currency: "USD",
+      billing_period: "year",
+      features: ["Custom feature"],
+    },
+  ];
+  await menu.click();
+  await page
+    .getByRole("button", { name: "Explore plans", exact: true })
+    .click();
+  const studio = plans.getByRole("region", { name: "Studio subscription" });
+  await expect(studio).toContainText(/123[.,]45/);
+  await expect(studio).toContainText("year");
+  await expect(studio).toContainText("A server-defined plan");
+  await expect(studio).toContainText("Custom feature");
+  await expect(plans.getByRole("region")).toHaveCount(1);
+  await plans.getByRole("button", { name: "Close dialog" }).click();
+  catalogUnavailable = true;
+  await menu.click();
+  await page
+    .getByRole("button", { name: "Explore plans", exact: true })
+    .click();
+  await expect(plans.getByRole("alert")).toContainText("Unable to load");
+  await expect(plans.getByRole("region")).toHaveCount(0);
+  catalogUnavailable = false;
+  offeredPlans = [];
+  await plans.getByRole("button", { name: "Try again" }).click();
+  await expect(plans).toContainText("No plans are currently available");
+  await plans.getByRole("button", { name: "Close dialog" }).click();
+  offeredPlans = catalog;
   // A stale local balance cannot bypass the server's quota decision.
   profile.assist_requests_remaining = 1;
   rejection = 402;
@@ -178,7 +224,7 @@ try {
   assert.equal(assists, 3);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: guest sign-in, free allowance, refreshed balance, paid tier badges, exhausted quota, POC plans, server quota rejection and expired session.",
+    "PASS: guest sign-in, free allowance, refreshed balance, paid tier badges, exhausted quota, server catalog, new tiers, catalog failure and retry, server quota rejection and expired session.",
   );
 } finally {
   app?.process().kill("SIGKILL");

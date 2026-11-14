@@ -61,9 +61,9 @@ export function ProjectMenu({
             <span title={user?.username}>
               {user?.username ?? "Not signed in"}
             </span>
-            {user && user.tier !== "free" && (
+            {user && !user.plan.is_default && (
               <span className={styles.tierBadge} data-tier={user.tier}>
-                {user.tier.toUpperCase()}
+                {user.plan.name}
               </span>
             )}
           </small>
@@ -85,11 +85,9 @@ export function ProjectMenu({
           {user && (
             <div className={styles.subscription}>
               <div>
-                <strong>
-                  {user.tier === "free" ? "Free" : user.tier.toUpperCase()}
-                </strong>
+                <strong>{user.plan.name}</strong>
                 <span>
-                  {user.tier === "free"
+                  {user.plan.initial_assist_requests !== null
                     ? `${user.assist_requests_remaining} assist requests left`
                     : "Subscription active"}
                 </span>
@@ -102,7 +100,7 @@ export function ProjectMenu({
                 }}
               >
                 <span>
-                  {user.tier === "free" ? "Explore plans" : "Manage billing"}
+                  {user.plan.is_default ? "Explore plans" : "Manage billing"}
                 </span>{" "}
                 <ArrowRight size={13} />
               </button>

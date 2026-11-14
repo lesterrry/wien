@@ -4,6 +4,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { chromium, _electron as electron, expect } from "@playwright/test";
+import { plans as catalog } from "./fixtures/plans.mjs";
 
 const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "wien-onboarding-"));
 const output = path.resolve("out-web");
@@ -13,6 +14,7 @@ const user = {
   username: "tour_user",
   created_at: "2026-11-14T00:00:00Z",
   tier: "free",
+  plan: catalog[0],
   assist_requests_remaining: 10,
 };
 const server = http.createServer(async (req, res) => {

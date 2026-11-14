@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { _electron as electron, expect } from "@playwright/test";
 import { workspaceWindow } from "./fixtures/onboarding.mjs";
+import { plans as catalog } from "./fixtures/plans.mjs";
 import { seedWorkspace } from "./fixtures/workspace.mjs";
 
 const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "wien-assistant-"));
@@ -16,12 +17,17 @@ const profile = {
   username: "music_maker",
   created_at: "2026-11-12T00:00:00Z",
   tier: "free",
+  plan: catalog[0],
   assist_requests_remaining: 10,
 };
 const server = http.createServer(async (req, res) => {
   let body = "";
   for await (const chunk of req) body += chunk;
-  if (req.url === "/auth/login") {
+  if (req.url === "/v1/plans") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(catalog));
+    return;
+  } else if (req.url === "/auth/login") {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ user: profile, token }));
     return;

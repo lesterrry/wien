@@ -538,3 +538,146 @@ async fn audio_has_separate_usage_and_two_passes_count_once(pool: PgPool) {
         .unwrap();
     assert_eq!(text_used, 1);
 }
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL in DATABASE_URL; CI runs this explicitly"]
+async fn catalog_is_public_ordered_and_uses_live_database_values(pool: PgPool) {
+    let app = app(&pool, Model::new()).await;
+    let (status, catalog) = request(&app, "GET", "/v1/plans", Value::Null, None).await;
+    assert_eq!(status, StatusCode::OK);
+    let plans = catalog.as_array().unwrap();
+    assert_eq!(
+        plans
+            .iter()
+            .map(|p| p["id"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["free", "plus", "pro", "ultra"]
+    );
+    assert_eq!(plans[1]["price_minor"], 19900);
+    assert_eq!(plans[1]["currency"], "RUB");
+    assert_eq!(plans[1]["initial_assist_requests"], Value::Null);
+    sqlx::query("UPDATE plans SET visible=false WHERE id='plus'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE plans SET name='Studio',description='Updated description',price_minor=12345,currency='USD',billing_period='year',display_order=-1 WHERE id='pro'").execute(&pool).await.unwrap();
+    let (_, catalog) = request(&app, "GET", "/v1/plans", Value::Null, None).await;
+    assert_eq!(catalog.as_array().unwrap().len(), 3);
+    assert_eq!(catalog[0]["name"], "Studio");
+    assert_eq!(catalog[0]["description"], "Updated description");
+    assert_eq!(catalog[0]["price_minor"], 12345);
+    assert_eq!(catalog[0]["currency"], "USD");
+    assert_eq!(catalog[0]["billing_period"], "year");
+    assert!(catalog[0].get("visible").is_none());
+    let user = register(&app).await;
+    sqlx::query("UPDATE subscriptions SET tier='plus'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (_, profile) = request(
+        &app,
+        "GET",
+        "/users/me",
+        Value::Null,
+        user["token"].as_str(),
+    )
+    .await;
+    assert_eq!(
+        profile["plan"]["id"], "plus",
+        "Hidden plans still resolve for existing subscribers"
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL in DATABASE_URL; CI runs this explicitly"]
+async fn custom_plan_controls_registration_and_access_without_code_changes(pool: PgPool) {
+    sqlx::query("UPDATE plans SET is_default=false WHERE is_default")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO plans (id,name,description,price_minor,currency,billing_period,initial_assist_requests,audio_enabled,is_default) VALUES ('trial','Trial','Custom default',0,'EUR','none',2,true,true)").execute(&pool).await.unwrap();
+    let user_id: String = sqlx::query_scalar("INSERT INTO users (username,password_hash) VALUES ('custom_user','unused') RETURNING id::text").fetch_one(&pool).await.unwrap();
+    let subscription = wien_server::subscriptions::get(&pool, &user_id)
+        .await
+        .unwrap();
+    assert_eq!(subscription.tier, "trial");
+    assert_eq!(subscription.assist_requests_remaining, 2);
+    Reservation::begin_request(&pool, &user_id, true)
+        .await
+        .unwrap()
+        .commit()
+        .await
+        .unwrap();
+    assert_eq!(remaining(&pool).await, 2);
+    for _ in 0..2 {
+        Reservation::begin(&pool, &user_id)
+            .await
+            .unwrap()
+            .commit()
+            .await
+            .unwrap();
+    }
+    assert!(matches!(
+        Reservation::begin(&pool, &user_id).await,
+        Err(ReserveError::Exhausted)
+    ));
+    sqlx::query(
+        "UPDATE plans SET initial_assist_requests=NULL,audio_enabled=false WHERE id='trial'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    Reservation::begin(&pool, &user_id)
+        .await
+        .unwrap()
+        .commit()
+        .await
+        .unwrap();
+    assert!(matches!(
+        Reservation::begin_request(&pool, &user_id, true).await,
+        Err(ReserveError::AudioRequiresPlan)
+    ));
+    assert!(
+        sqlx::query("UPDATE subscriptions SET tier='missing'")
+            .execute(&pool)
+            .await
+            .is_err()
+    );
+    assert!(
+        sqlx::query("UPDATE plans SET is_default=true WHERE id='free'")
+            .execute(&pool)
+            .await
+            .is_err()
+    );
+}
+
+#[sqlx::test(migrations = false)]
+#[ignore = "requires PostgreSQL in DATABASE_URL; CI runs this explicitly"]
+async fn catalog_migration_preserves_existing_tiers_balances_and_usage(pool: PgPool) {
+    for migration in [
+        include_str!("../migrations/202611120001_accounts.sql"),
+        include_str!("../migrations/202611120002_subscriptions.sql"),
+        include_str!("../migrations/202611140001_audio_requests.sql"),
+    ] {
+        sqlx::raw_sql(migration).execute(&pool).await.unwrap();
+    }
+    sqlx::query("INSERT INTO users (username,password_hash) VALUES ('existing_user','unused')")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE subscriptions SET tier='pro',assist_requests_remaining=3,assist_requests_used=7,audio_requests_used=2").execute(&pool).await.unwrap();
+    sqlx::raw_sql(include_str!("../migrations/202611150001_plan_catalog.sql"))
+        .execute(&pool)
+        .await
+        .unwrap();
+    let before: (String,i32,i64,i64) = sqlx::query_as("SELECT tier,assist_requests_remaining,assist_requests_used,audio_requests_used FROM subscriptions").fetch_one(&pool).await.unwrap();
+    assert_eq!(before, ("pro".into(), 3, 7, 2));
+    sqlx::query("UPDATE plans SET initial_assist_requests=25 WHERE is_default")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let id: String = sqlx::query_scalar("INSERT INTO users (username,password_hash) VALUES ('new_user','unused') RETURNING id::text").fetch_one(&pool).await.unwrap();
+    let subscription = wien_server::subscriptions::get(&pool, &id).await.unwrap();
+    assert_eq!(subscription.tier, "free");
+    assert_eq!(subscription.assist_requests_remaining, 25);
+}

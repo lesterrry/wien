@@ -495,6 +495,37 @@
           }
         ]
       }
+    },
+    "/v1/plans": {
+      "get": {
+        "summary": "Visible subscription plans, ordered by the server. No authentication required.",
+        "operationId": "plans",
+        "responses": {
+          "200": {
+            "description": "Subscription catalog",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Plan"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Catalog unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -665,6 +696,67 @@
         },
         "additionalProperties": false
       },
+      "Plan": {
+        "type": "object",
+        "description": "Public catalog and access policy. Prices use the currency's minor units.",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "features",
+          "price_minor",
+          "currency",
+          "currency_minor_units",
+          "billing_period",
+          "audio_enabled",
+          "is_default"
+        ],
+        "properties": {
+          "audio_enabled": {
+            "type": "boolean"
+          },
+          "billing_period": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "currency_minor_units": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "description": {
+            "type": "string"
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "initial_assist_requests": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "One-time allowance; null means unlimited. Existing balances are preserved."
+          },
+          "is_default": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "price_minor": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "Profile": {
         "type": "object",
         "required": [
@@ -672,6 +764,7 @@
           "username",
           "created_at",
           "tier",
+          "plan",
           "assist_requests_remaining",
           "audio_requests_used",
           "assist_requests_used"
@@ -695,8 +788,11 @@
           "id": {
             "type": "string"
           },
+          "plan": {
+            "$ref": "#/components/schemas/Plan"
+          },
           "tier": {
-            "$ref": "#/components/schemas/Tier"
+            "type": "string"
           },
           "username": {
             "type": "string"
@@ -762,15 +858,6 @@
             "$ref": "#/components/schemas/Profile"
           }
         }
-      },
-      "Tier": {
-        "type": "string",
-        "enum": [
-          "free",
-          "plus",
-          "pro",
-          "ultra"
-        ]
       }
     },
     "securitySchemes": {

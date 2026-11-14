@@ -2,9 +2,9 @@ import type {
   Credentials,
   PasswordChange,
   Registration,
+  SubscriptionPlan,
   UserProfile,
 } from "./account";
-import { tiers } from "./account";
 
 export interface TokenStore {
   read(): Promise<string | null>;
@@ -39,7 +39,8 @@ function profile(value: unknown): UserProfile {
     typeof value.created_at !== "string" ||
     !Number.isFinite(Date.parse(value.created_at)) ||
     !("tier" in value) ||
-    !tiers.some((tier) => tier === value.tier) ||
+    typeof value.tier !== "string" ||
+    !("plan" in value) ||
     !("assist_requests_remaining" in value) ||
     typeof value.assist_requests_remaining !== "number" ||
     !Number.isSafeInteger(value.assist_requests_remaining) ||
@@ -55,7 +56,10 @@ function profile(value: unknown): UserProfile {
   ) {
     throw new Error("Invalid account response.");
   }
+  const plan = parsePlan(value.plan);
+  if (plan.id !== value.tier) throw new Error("Invalid account response.");
   return {
+    plan,
     id: value.id,
     username: value.username,
     created_at: value.created_at,
@@ -167,6 +171,15 @@ export class AccountClient {
   changePassword(request: PasswordChange) {
     return this.signedIn("/users/me/password", request, true);
   }
+  async plans(): Promise<SubscriptionPlan[]> {
+    const result = await this.call("/v1/plans", "GET");
+    if (!Array.isArray(result))
+      throw new Error("Invalid subscription catalog.");
+    const plans = result.map(parsePlan);
+    if (new Set(plans.map((plan) => plan.id)).size !== plans.length)
+      throw new Error("Invalid subscription catalog.");
+    return plans;
+  }
   async current(): Promise<UserProfile | null> {
     if (this.store && !(await this.store.read())) return null;
     try {
@@ -182,4 +195,38 @@ export class AccountClient {
       await this.call("/auth/logout", "POST", undefined, true);
     await this.store?.write(null);
   }
+}
+
+function parsePlan(value: unknown): SubscriptionPlan {
+  const invalid = () => new Error("Invalid subscription catalog.");
+  if (!value || typeof value !== "object") throw invalid();
+  const p = value as Record<string, unknown>;
+  if (
+    typeof p.id !== "string" ||
+    !/^[a-z][a-z0-9_]*$/.test(p.id) ||
+    typeof p.name !== "string" ||
+    !p.name.trim() ||
+    typeof p.description !== "string" ||
+    !Array.isArray(p.features) ||
+    !p.features.every((f) => typeof f === "string") ||
+    typeof p.price_minor !== "number" ||
+    !Number.isSafeInteger(p.price_minor) ||
+    p.price_minor < 0 ||
+    typeof p.currency !== "string" ||
+    !/^[A-Z]{3}$/.test(p.currency) ||
+    typeof p.currency_minor_units !== "number" ||
+    !Number.isInteger(p.currency_minor_units) ||
+    p.currency_minor_units < 0 ||
+    p.currency_minor_units > 4 ||
+    typeof p.billing_period !== "string" ||
+    !["none", "month", "year"].includes(p.billing_period) ||
+    (p.initial_assist_requests !== null &&
+      (typeof p.initial_assist_requests !== "number" ||
+        !Number.isSafeInteger(p.initial_assist_requests) ||
+        p.initial_assist_requests < 0)) ||
+    typeof p.audio_enabled !== "boolean" ||
+    typeof p.is_default !== "boolean"
+  )
+    throw invalid();
+  return value as SubscriptionPlan;
 }

@@ -4,6 +4,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { chromium, expect } from "@playwright/test";
+import { plans as catalog } from "./fixtures/plans.mjs";
 import { seedBrowserWorkspace } from "./fixtures/workspace.mjs";
 
 const output = path.resolve("out-web");
@@ -14,6 +15,7 @@ const user = {
   username: "browser_user",
   created_at: "2026-11-13T00:00:00Z",
   tier: "free",
+  plan: catalog[0],
   assist_requests_remaining: 10,
 };
 let assists = 0;
@@ -44,6 +46,10 @@ const server = http.createServer(async (req, res) => {
           `wien_session=${token}; Path=/; HttpOnly; SameSite=Strict`,
         );
         res.end(JSON.stringify({ user }));
+        return;
+      }
+      if (req.url === "/v1/plans") {
+        res.end(JSON.stringify(catalog));
         return;
       }
       if (!signedIn || !req.headers.cookie?.includes(token)) {
@@ -340,6 +346,20 @@ try {
     true,
   );
   await page.getByRole("button", { name: "Close dialog", exact: true }).click();
+  await menu.click();
+  await page
+    .getByRole("button", { name: "Explore plans", exact: true })
+    .click();
+  const plansDialog = page.getByRole("dialog", {
+    name: "Explore subscriptions",
+  });
+  await expect(plansDialog.getByRole("region")).toHaveCount(catalog.length);
+  await expect(
+    plansDialog.getByRole("region", { name: "PLUS subscription" }),
+  ).toContainText("199");
+  await expect(plansDialog).toContainText(catalog[1].description);
+  await plansDialog.getByRole("button", { name: "Close dialog" }).click();
+
   await page.reload();
   await editor.waitFor();
   await menu.click();

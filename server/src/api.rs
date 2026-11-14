@@ -51,7 +51,7 @@ impl From<crate::subscriptions::ReserveError> for ApiError {
             ReserveError::AudioRequiresPlan => Self::new(
                 StatusCode::PAYMENT_REQUIRED,
                 "audio_requires_plan",
-                "Audio attachments are available on paid plans.",
+                "Audio attachments are not included in your plan.",
             ),
             ReserveError::Exhausted => Self::new(
                 StatusCode::PAYMENT_REQUIRED,
@@ -133,6 +133,7 @@ struct AppState {
 fn documented_routes() -> (Router<AppState>, OpenApi) {
     let (router, mut spec) = OpenApiRouter::new()
         .routes(routes!(assist))
+        .routes(routes!(plans))
         .routes(routes!(health))
         .routes(routes!(ready))
         .split_for_parts();
@@ -348,4 +349,17 @@ async fn assist(
             .map_err(|_| ApiError::database())?;
     }
     Ok(Json(response))
+}
+
+/// Visible subscription plans, ordered by the server. No authentication required.
+#[utoipa::path(get, path = "/v1/plans", responses(
+    (status = 200, description = "Subscription catalog", body = Vec<crate::plans::Plan>),
+    (status = 503, description = "Catalog unavailable", body = ApiError)
+))]
+async fn plans(State(state): State<AppState>) -> Result<Json<Vec<crate::plans::Plan>>, ApiError> {
+    let pool = state.database.as_ref().ok_or_else(ApiError::database)?;
+    crate::plans::list(pool)
+        .await
+        .map(Json)
+        .map_err(|_| ApiError::database())
 }

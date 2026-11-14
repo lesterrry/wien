@@ -7,6 +7,19 @@ const user = {
   username: "music_maker",
   created_at: "2026-11-12T00:00:00Z",
   tier: "free",
+  plan: {
+    id: "free",
+    name: "Free",
+    description: "Try Assist",
+    features: [],
+    price_minor: 0,
+    currency: "RUB",
+    currency_minor_units: 2,
+    billing_period: "none",
+    initial_assist_requests: 10,
+    audio_enabled: false,
+    is_default: true,
+  },
   assist_requests_remaining: 10,
   audio_requests_used: 0,
   assist_requests_used: 0,
@@ -134,4 +147,63 @@ test("browser sessions use cookies without exposing or storing a bearer token", 
   assert.deepEqual(await client.current(), user);
   await client.logout();
   assert.equal(await client.current(), null);
+});
+
+test("catalog accepts server-defined tiers and validates prices and policies", async () => {
+  const plan = {
+    ...user.plan,
+    id: "studio",
+    name: "Studio",
+    price_minor: 12345,
+    currency: "USD",
+    billing_period: "year",
+    initial_assist_requests: null,
+  };
+  let body: unknown = [plan];
+  const client = new AccountClient(
+    "https://wien.example",
+    new MemoryStore(),
+    async (url, init) => {
+      assert.equal(url, "https://wien.example/v1/plans");
+      assert.equal(new Headers(init?.headers).has("Authorization"), false);
+      return Response.json(body);
+    },
+  );
+  assert.deepEqual(await client.plans(), [plan]);
+  for (const change of [
+    { price_minor: -1 },
+    { price_minor: 1.5 },
+    { currency: "rub" },
+    { currency_minor_units: 8 },
+    { billing_period: "week" },
+    { initial_assist_requests: -1 },
+    { audio_enabled: "yes" },
+    { features: [42] },
+  ]) {
+    body = [{ ...plan, ...change }];
+    await assert.rejects(client.plans(), /Invalid subscription catalog/);
+  }
+  body = [plan, plan];
+  await assert.rejects(client.plans(), /Invalid subscription catalog/);
+});
+
+test("profile accepts a new backend plan but rejects a mismatched tier", async () => {
+  const store = new MemoryStore();
+  const updated = {
+    ...user,
+    tier: "studio",
+    plan: { ...user.plan, id: "studio", name: "Studio" },
+  };
+  const client = new AccountClient("https://wien.example", store, async () =>
+    Response.json({ user: updated, token }),
+  );
+  assert.deepEqual(
+    await client.login({ username: user.username, password: "test password" }),
+    updated,
+  );
+  updated.plan.id = "other";
+  await assert.rejects(
+    client.login({ username: user.username, password: "test password" }),
+    /Invalid account response/,
+  );
 });

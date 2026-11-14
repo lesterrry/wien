@@ -304,7 +304,7 @@ export function AssistantPopover({
           if (!account.user) {
             close(false);
             account.openProfile();
-          } else if (account.user.tier === "free") {
+          } else if (!account.user.plan.audio_enabled) {
             close(false);
             account.openUpgrade("audio");
           } else {

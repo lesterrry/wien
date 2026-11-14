@@ -13,6 +13,7 @@ const api: WorkspaceApi = {
     return () => ipcRenderer.removeListener("menu:command", listener);
   },
   updateMenuState: (state) => ipcRenderer.send("menu:state", state),
+  subscriptionPlans: () => ipcRenderer.invoke("account:plans"),
   accountCurrent: () => ipcRenderer.invoke("account:current"),
   accountLogin: (credentials) =>
     ipcRenderer.invoke("account:login", credentials),

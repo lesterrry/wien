@@ -4,6 +4,7 @@ pub mod auth;
 pub mod config;
 pub mod database;
 pub mod genres;
+pub mod plans;
 pub mod providers;
 pub mod rag;
 pub mod subscriptions;

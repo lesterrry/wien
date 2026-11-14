@@ -8,7 +8,8 @@ pub struct Profile {
     pub id: String,
     pub username: String,
     pub created_at: String,
-    pub tier: crate::subscriptions::Tier,
+    pub tier: String,
+    pub plan: crate::plans::Plan,
     pub assist_requests_remaining: i32,
     pub audio_requests_used: i64,
     pub assist_requests_used: i64,
@@ -26,6 +27,7 @@ impl User {
     pub async fn profile(&self, pool: &PgPool) -> Result<Profile, sqlx::Error> {
         let subscription = crate::subscriptions::get(pool, &self.id).await?;
         Ok(Profile {
+            plan: crate::plans::get(pool, &subscription.tier).await?,
             tier: subscription.tier,
             assist_requests_remaining: subscription.assist_requests_remaining,
             audio_requests_used: subscription.audio_requests_used,

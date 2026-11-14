@@ -141,6 +141,7 @@ function registerIpc() {
   const account = new AccountClient(origin, accountStorage);
   let accountQueue: Promise<unknown> = Promise.resolve();
   const accountHandlers = {
+    "account:plans": () => account.plans(),
     "account:current": () => account.current(),
     "account:login": (value: Parameters<AccountClient["login"]>[0]) =>
       account.login(value),

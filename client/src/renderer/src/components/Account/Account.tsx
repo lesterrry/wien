@@ -94,9 +94,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       setResolved(true);
       close();
       openProfile();
-      setNotice(
-        "Sign in to use assist. New accounts include 10 free requests.",
-      );
+      setNotice("Sign in to use Assist.");
     } else {
       openUpgrade();
     }
@@ -107,12 +105,12 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       assistBlocked("sign_in");
       return false;
     }
-    if (audio && profile.tier === "free") {
-      throw new Error("Audio attachments are available on paid plans.");
+    if (audio && !profile.plan.audio_enabled) {
+      throw new Error("Audio attachments are not included in your plan.");
     }
     if (
       !audio &&
-      profile.tier === "free" &&
+      profile.plan.initial_assist_requests !== null &&
       profile.assist_requests_remaining <= 0
     ) {
       assistBlocked("upgrade");
@@ -226,9 +224,12 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       {plansOpen && (
         <SubscriptionPlans
           exhausted={
-            user?.tier === "free" && user.assist_requests_remaining === 0
+            !!user &&
+            user.plan.initial_assist_requests !== null &&
+            user.assist_requests_remaining === 0
           }
           audio={upgradeReason === "audio"}
+          currentPlanId={user?.plan.id}
           onClose={() => setPlansOpen(false)}
         />
       )}
@@ -248,7 +249,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
               <div className={styles.profile}>
                 <UserRound size={28} />
                 <strong>@{user.username}</strong>
-                <span className={styles.tier}>{user.tier.toUpperCase()}</span>
+                <span className={styles.tier}>{user.plan.name}</span>
                 <span>
                   Joined {new Date(user.created_at).toLocaleDateString()}
                 </span>

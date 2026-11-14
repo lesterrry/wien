@@ -1,20 +1,8 @@
-use serde::Serialize;
 use sqlx::{FromRow, PgPool, Postgres, Transaction};
-use utoipa::ToSchema;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema, sqlx::Type)]
-#[serde(rename_all = "lowercase")]
-#[sqlx(type_name = "text", rename_all = "lowercase")]
-pub enum Tier {
-    Free,
-    Plus,
-    Pro,
-    Ultra,
-}
 
 #[derive(FromRow)]
 pub struct Subscription {
-    pub tier: Tier,
+    pub tier: String,
     pub assist_requests_remaining: i32,
     pub audio_requests_used: i64,
     pub assist_requests_used: i64,
@@ -64,19 +52,18 @@ impl Reservation {
         audio: bool,
     ) -> Result<Self, ReserveError> {
         let mut tx = pool.begin().await?;
-        let subscription: Subscription = sqlx::query_as(
-            "SELECT tier,assist_requests_remaining,audio_requests_used,assist_requests_used FROM subscriptions WHERE user_id=$1::uuid FOR UPDATE NOWAIT",
+        let (remaining, allowance, audio_enabled): (i32, Option<i32>, bool) = sqlx::query_as(
+            "SELECT s.assist_requests_remaining,p.initial_assist_requests,p.audio_enabled FROM subscriptions s JOIN plans p ON p.id=s.tier WHERE s.user_id=$1::uuid FOR UPDATE OF s NOWAIT",
         ).bind(user_id).fetch_one(&mut *tx).await?;
-        if audio && subscription.tier == Tier::Free {
+        if audio && !audio_enabled {
             return Err(ReserveError::AudioRequiresPlan);
         }
-        if !audio && subscription.tier == Tier::Free && subscription.assist_requests_remaining <= 0
-        {
+        if !audio && allowance.is_some() && remaining <= 0 {
             return Err(ReserveError::Exhausted);
         }
         let update = if audio {
             "UPDATE subscriptions SET audio_requests_used=audio_requests_used+1 WHERE user_id=$1::uuid"
-        } else if subscription.tier == Tier::Free {
+        } else if allowance.is_some() {
             "UPDATE subscriptions SET assist_requests_remaining=assist_requests_remaining-1,assist_requests_used=assist_requests_used+1 WHERE user_id=$1::uuid"
         } else {
             "UPDATE subscriptions SET assist_requests_used=assist_requests_used+1 WHERE user_id=$1::uuid"

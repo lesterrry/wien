@@ -2,6 +2,7 @@ import type {
   Credentials,
   PasswordChange,
   Registration,
+  SubscriptionPlan,
   UserProfile,
 } from "./account";
 import type { AssistRequest, AssistResult } from "./assistant";
@@ -40,6 +41,7 @@ export interface WorkspaceApi {
   updateMenuState?(state: CommandState): void;
   exportProject?(): Promise<void>;
   saveAudio(name: string, data: ArrayBuffer): Promise<boolean>;
+  subscriptionPlans(): Promise<SubscriptionPlan[]>;
   accountCurrent(): Promise<UserProfile | null>;
   accountRegister?(credentials: Registration): Promise<UserProfile>;
   accountLogin(credentials: Credentials): Promise<UserProfile>;
