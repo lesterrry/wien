@@ -703,9 +703,6 @@
   text-underline-offset: 3px;
 }
 
-.app.webApp {
-  grid-template-rows: auto 52px minmax(0, 1fr);
-}
 
 .fileName {
   display: block;

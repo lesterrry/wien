@@ -9,6 +9,10 @@
   z-index: 30;
 }
 
+.bar[hidden] {
+  display: none;
+}
+
 .group {
   position: relative;
 }

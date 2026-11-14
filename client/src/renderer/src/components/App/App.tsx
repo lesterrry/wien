@@ -1612,6 +1612,7 @@ export function App() {
     >
       {api.platform === "web" && (
         <AppMenu
+          hidden
           state={menuState}
           onCommand={(command) => commandHandler.current(command)}
         />

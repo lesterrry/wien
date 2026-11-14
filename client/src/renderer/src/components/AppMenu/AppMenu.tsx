@@ -11,9 +11,11 @@ import styles from "./AppMenu.module.css";
 export function AppMenu({
   onCommand,
   state,
+  hidden = false,
 }: {
   onCommand: (command: CommandId) => void;
   state: CommandState;
+  hidden?: boolean;
 }) {
   const [open, setOpen] = useState<number | null>(null);
   const root = useRef<HTMLElement>(null);
@@ -41,7 +43,12 @@ export function AppMenu({
         ?.focus();
   }, [open]);
   return (
-    <nav className={styles.bar} aria-label="Application menu" ref={root}>
+    <nav
+      className={styles.bar}
+      aria-label="Application menu"
+      ref={root}
+      hidden={hidden}
+    >
       {menus.map((menu, index) => (
         <div className={styles.group} key={menu.label}>
           <button
