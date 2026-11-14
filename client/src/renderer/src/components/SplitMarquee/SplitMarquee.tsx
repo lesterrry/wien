@@ -141,10 +141,7 @@ export function SplitMarquee({
       const textWidth = remainder
         ? remainderX + source.measureText(remainder).width
         : firstWordWidth;
-      period = Math.max(
-        1,
-        Math.ceil(textWidth + parseFloat(style.fontSize)),
-      );
+      period = Math.max(1, Math.ceil(textWidth + parseFloat(style.fontSize)));
       texture.width = Math.ceil(period * pixelRatio);
       texture.height = canvas.height;
       source.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);

@@ -244,7 +244,7 @@ export function AssistantPopover({
           ),
         );
     } finally {
-      void account.refresh().catch(() => { });
+      void account.refresh().catch(() => {});
       if (request.current === id) {
         request.current = null;
         setPending(false);
