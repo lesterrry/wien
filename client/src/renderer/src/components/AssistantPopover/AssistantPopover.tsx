@@ -239,8 +239,7 @@ export function AssistantPopover({
         try {
           parseModule(result.code, path);
         } catch (error) {
-          const detail =
-            error instanceof Error ? ` ${error.message}` : "";
+          const detail = error instanceof Error ? ` ${error.message}` : "";
           throw new Error(
             `The model returned invalid code. Your file is unchanged.${detail}`,
           );
