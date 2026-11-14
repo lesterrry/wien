@@ -763,7 +763,20 @@ async fn paid_period_grants_current_limit_and_expiry_never_renews_it(pool: PgPoo
             Err(ReserveError::Busy)
         ));
         drop(reservation);
-        // Rollback returns the reserved audio request.
+        // SQLx queues ROLLBACK on drop; it need not have reached PostgreSQL yet.
+        // Wait for the row lock and verify the refund before trying NOWAIT again.
+        let refunded: i32 = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            sqlx::query_scalar(
+                "SELECT assist_requests_remaining FROM subscriptions WHERE user_id=$1::uuid FOR UPDATE",
+            )
+            .bind(&user_id)
+            .fetch_one(&pool),
+        )
+        .await
+        .expect("Dropped reservation did not release the row lock")
+        .unwrap();
+        assert_eq!(refunded, limit);
         let reservation = Reservation::begin(&pool, &user_id).await.unwrap();
         reservation.commit().await.unwrap();
         assert_eq!(remaining(&pool).await, limit - 1);
