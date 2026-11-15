@@ -82,12 +82,12 @@ try {
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(origin);
-  await seedBrowserWorkspace(page);
+  await seedBrowserWorkspace(page, "ru");
   const original = await page.evaluate(() =>
     window.workspace.read("first-light.strudel"),
   );
   const menu = page.getByRole("button", {
-    name: "Project and account",
+    name: "Проект и аккаунт",
     exact: true,
   });
   const dialog = page.getByRole("dialog", { name: "Тарифы", exact: true });
@@ -155,7 +155,7 @@ try {
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
   await expect(
-    page.getByLabel("Strudel code editor", { exact: true }),
+    page.getByLabel("Редактор кода Strudel", { exact: true }),
   ).toBeVisible();
   assert.equal(
     await page.evaluate(() => window.workspace.read("first-light.strudel")),
@@ -163,15 +163,17 @@ try {
   );
   // Registration stays open and preserves input while reading the policy.
   await menu.click();
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await page.getByRole("button", { name: "Войти", exact: true }).click();
   await page
-    .getByRole("button", { name: "Create an account", exact: true })
+    .getByRole("button", { name: "Создать аккаунт", exact: true })
     .click();
   const register = page.getByRole("dialog", {
-    name: "Create an account",
+    name: "Создать аккаунт",
     exact: true,
   });
-  await register.getByLabel("Username", { exact: true }).fill("test_musician");
+  await register
+    .getByLabel("Имя пользователя", { exact: true })
+    .fill("test_musician");
   await register
     .getByRole("button", { name: "политика конфиденциальности" })
     .click();
@@ -180,11 +182,11 @@ try {
       name: "Политика обработки персональных данных",
     }),
   ).toBeVisible();
-  await dialog.getByRole("button", { name: "Close dialog" }).click();
-  await expect(register.getByLabel("Username", { exact: true })).toHaveValue(
-    "test_musician",
-  );
-  await register.getByRole("button", { name: "Close dialog" }).click();
+  await dialog.getByRole("button", { name: "Закрыть диалог" }).click();
+  await expect(
+    register.getByLabel("Имя пользователя", { exact: true }),
+  ).toHaveValue("test_musician");
+  await register.getByRole("button", { name: "Закрыть диалог" }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   await open();
   await expect(dialog.getByRole("region")).toHaveCount(4);
@@ -200,7 +202,7 @@ try {
   await page.screenshot({
     path: path.join(artifacts, "checkout-modal-mobile.png"),
   });
-  await dialog.getByRole("button", { name: "Close dialog" }).click();
+  await dialog.getByRole("button", { name: "Закрыть диалог" }).click();
   catalog = [
     {
       ...plans[1],
@@ -215,7 +217,7 @@ try {
   await expect(dialog.getByRole("region")).toHaveCount(1);
   await expect(dialog.getByRole("region")).toContainText("777 запросов");
   await expect(dialog.getByRole("region")).toContainText("123,45");
-  await dialog.getByRole("button", { name: "Close dialog" }).click();
+  await dialog.getByRole("button", { name: "Закрыть диалог" }).click();
   fail = true;
   await open();
   await expect(dialog.getByRole("alert")).toContainText("Не удалось загрузить");
@@ -246,9 +248,9 @@ try {
         path: path.join(artifacts, `${query}-published-mobile.png`),
       });
     }
-    await dialog.getByRole("button", { name: "Close dialog" }).click();
+    await dialog.getByRole("button", { name: "Закрыть диалог" }).click();
     await expect(
-      page.getByLabel("Strudel code editor", { exact: true }),
+      page.getByLabel("Редактор кода Strudel", { exact: true }),
     ).toBeVisible();
   }
   assert.equal(page.context().pages().length, 1);

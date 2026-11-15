@@ -147,7 +147,7 @@ try {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto(origin);
-  await seedBrowserWorkspace(page);
+  await seedBrowserWorkspace(page, "ru");
   const original = await page.evaluate(() =>
     window.workspace.read("first-light.strudel"),
   );
@@ -186,7 +186,7 @@ try {
   await popup.close();
   assert.equal(profile.assist_requests_remaining, 10);
   await page.screenshot({ path: path.join(artifacts, "pending-desktop.png") });
-  await dialog.getByRole("button", { name: "Close dialog" }).click();
+  await dialog.getByRole("button", { name: "Закрыть диалог" }).click();
   await open();
   await dialog.getByRole("tab", { name: "Платежи", exact: true }).click();
   await expect(dialog.getByRole("article", { name: "Заказ 1" })).toContainText(
@@ -214,12 +214,14 @@ try {
     dialog.getByRole("tab", { name: "Платежи", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
   await dialog.getByRole("button", { name: "Войти для оплаты" }).click();
-  const login = page.getByRole("dialog", { name: "Sign in", exact: true });
-  await login.getByLabel("Username", { exact: true }).fill("payment_tester");
+  const login = page.getByRole("dialog", { name: "Войти", exact: true });
   await login
-    .getByLabel("Password", { exact: true })
+    .getByLabel("Имя пользователя", { exact: true })
+    .fill("payment_tester");
+  await login
+    .getByLabel("Пароль", { exact: true })
     .fill("test password long enough");
-  await login.getByRole("button", { name: "Sign in", exact: true }).click();
+  await login.getByRole("button", { name: "Войти", exact: true }).click();
   await expect(dialog.getByRole("article", { name: "Заказ 2" })).toContainText(
     "Ожидаем подтверждения",
   );
@@ -269,11 +271,11 @@ try {
     "подписка активирована",
   );
   mode = "disabled";
-  await dialog.getByRole("button", { name: "Close dialog" }).click();
+  await dialog.getByRole("button", { name: "Закрыть диалог" }).click();
   await open();
   await dialog.getByRole("tab", { name: "Платежи", exact: true }).click();
   await expect(dialog).toContainText("Оплата пока недоступна");
-  await dialog.getByRole("button", { name: "Close dialog" }).click();
+  await dialog.getByRole("button", { name: "Закрыть диалог" }).click();
   assert.equal(
     await page.evaluate(() => window.workspace.read("first-light.strudel")),
     original,

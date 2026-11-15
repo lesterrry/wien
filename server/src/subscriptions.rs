@@ -56,9 +56,13 @@ impl Reservation {
             "SELECT s.assist_requests_remaining,COALESCE(s.period_request_limit,p.initial_assist_requests),COALESCE(s.period_audio_enabled,p.audio_enabled),COALESCE(s.period_ends_at <= now(), false) FROM subscriptions s JOIN plans p ON p.id=s.tier WHERE s.user_id=$1::uuid FOR UPDATE OF s NOWAIT",
         ).bind(user_id).fetch_one(&mut *tx).await?;
         if audio && !audio_enabled {
+            // A rejected request must release its lock before the caller can retry.
+            // Transaction::drop only queues rollback and can cause a spurious Busy.
+            tx.rollback().await?;
             return Err(ReserveError::AudioRequiresPlan);
         }
         if expired || (allowance.is_some() && remaining <= 0) {
+            tx.rollback().await?;
             return Err(ReserveError::Exhausted);
         }
         sqlx::query("UPDATE subscriptions SET assist_requests_remaining=CASE WHEN $2 THEN assist_requests_remaining-1 ELSE assist_requests_remaining END, assist_requests_used=assist_requests_used+1, audio_requests_used=audio_requests_used+CASE WHEN $3 THEN 1 ELSE 0 END WHERE user_id=$1::uuid")

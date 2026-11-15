@@ -1,8 +1,11 @@
-// Existing workspace regressions start as returning visitors. The dedicated
-// onboarding smoke keeps fresh storage and checks the first-visit experience.
-export async function skipOnboarding(page) {
+// Workspace regressions choose their language explicitly. The localization smoke
+// keeps fresh storage and verifies the Russian default independently.
+export async function skipOnboarding(page, locale = "en") {
   await page.waitForFunction(() => Boolean(window.workspace));
-  await page.evaluate(() => localStorage.setItem("wien:onboarding-seen", "1"));
+  await page.evaluate((language) => {
+    localStorage.setItem("wien:onboarding-seen", "1");
+    localStorage.setItem("wien:locale", language);
+  }, locale);
   await page.reload();
 }
 

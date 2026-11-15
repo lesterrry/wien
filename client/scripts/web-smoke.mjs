@@ -352,11 +352,11 @@ try {
     .getByRole("button", { name: "Explore plans", exact: true })
     .click();
   const plansDialog = page.getByRole("dialog", {
-    name: "Тарифы",
+    name: "Plans",
   });
   await expect(plansDialog.getByRole("region")).toHaveCount(catalog.length);
   await expect(
-    plansDialog.getByRole("region", { name: "Тариф PLUS" }),
+    plansDialog.getByRole("region", { name: "Plan PLUS" }),
   ).toContainText("399");
   await expect(plansDialog).toContainText(catalog[1].description);
   await plansDialog.getByRole("button", { name: "Close dialog" }).click();

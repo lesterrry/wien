@@ -774,6 +774,51 @@ async fn storefront_exposes_public_seller_details_and_request_limits(pool: PgPoo
 
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL in DATABASE_URL; CI runs this explicitly"]
+async fn rejected_reservations_release_the_lock_before_returning(pool: PgPool) {
+    let user_id: String = sqlx::query_scalar(
+        "INSERT INTO users (username,password_hash) VALUES ('rejected_user','unused') RETURNING id::text",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    for audio in [true, false] {
+        if !audio {
+            sqlx::query("UPDATE subscriptions SET assist_requests_remaining=0")
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+        let balance = remaining(&pool).await;
+        for _ in 0..20 {
+            let error = Reservation::begin_request(&pool, &user_id, audio)
+                .await
+                .err()
+                .expect("The request must be rejected");
+            assert!(
+                matches!(
+                    (&error, audio),
+                    (ReserveError::AudioRequiresPlan, true) | (ReserveError::Exhausted, false)
+                ),
+                "Unexpected rejection: {error:?}"
+            );
+            // An independent transaction must acquire the lock immediately after
+            // the rejection, without waiting for a background SQLx rollback.
+            let mut probe = pool.begin().await.unwrap();
+            let state: (i32, i64, i64) = sqlx::query_as(
+                "SELECT assist_requests_remaining,assist_requests_used,audio_requests_used FROM subscriptions WHERE user_id=$1::uuid FOR UPDATE NOWAIT",
+            )
+            .bind(&user_id)
+            .fetch_one(&mut *probe)
+            .await
+            .expect("Rejected request left the subscription locked");
+            assert_eq!(state, (balance, 0, 0));
+            probe.commit().await.unwrap();
+        }
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL in DATABASE_URL; CI runs this explicitly"]
 async fn paid_period_grants_current_limit_and_expiry_never_renews_it(pool: PgPool) {
     let user_id: String = sqlx::query_scalar("INSERT INTO users (username,password_hash) VALUES ('paid_user','unused') RETURNING id::text").fetch_one(&pool).await.unwrap();
     for (tier, limit) in [("plus", 500), ("pro", 2500), ("ultra", 5000)] {

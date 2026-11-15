@@ -56,6 +56,9 @@ jobs:
       - name: Test browser workspace
         run: pnpm test:web
 
+      - name: Test localization
+        run: node scripts/localization-smoke.mjs
+
       - name: Test storefront and payment UI
         run: node scripts/storefront-smoke.mjs && node scripts/payments-smoke.mjs
 

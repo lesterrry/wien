@@ -56,9 +56,11 @@ export async function seedWorkspace(userData) {
   );
 }
 
-export async function seedBrowserWorkspace(page) {
-  await skipOnboarding(page);
-  await page.getByLabel("Strudel code editor", { exact: true }).waitFor();
+export async function seedBrowserWorkspace(page, locale = "en") {
+  await skipOnboarding(page, locale);
+  const editorLabel =
+    locale === "ru" ? "Редактор кода Strudel" : "Strudel code editor";
+  await page.getByLabel(editorLabel, { exact: true }).waitFor();
   await page.evaluate(async (files) => {
     await new Promise((resolve, reject) => {
       const request = indexedDB.open("wien-projects", 1);
@@ -89,5 +91,5 @@ export async function seedBrowserWorkspace(page) {
     localStorage.setItem("wien:active-project", "ui-test-project");
   }, workspaceFiles);
   await page.reload();
-  await page.getByLabel("Strudel code editor", { exact: true }).waitFor();
+  await page.getByLabel(editorLabel, { exact: true }).waitFor();
 }
