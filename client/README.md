@@ -98,7 +98,7 @@ WIEN_BACKEND_URL=https://wien.aydar.media just run-client
 форматирование и организация импортов включены при сохранении поддерживаемых файлов.
 
 ```sh
-just test          # проверки клиента и Rust-сервера
+just test          # полный CI: сборки, unit/browser-тесты, Rust и временный PostgreSQL
 just build-client  # сборка приложения; полный путь выводится в конце
 ```
 
@@ -108,6 +108,12 @@ just build-client  # сборка приложения; полный путь в
 pnpm --dir client format   # применить форматирование и исправления Biome
 pnpm --dir client package  # приложение в client/release (на macOS — .app)
 ```
+
+`just test` запускает общий с CI сценарий `scripts/test.sh`; нужны Node.js 22
+и работающий Docker/Colima. Chromium устанавливается автоматически. Только
+клиентскую часть того же набора можно запустить через `bash scripts/test.sh client`.
+Обычный `pnpm --dir client test` выполняет линты, проверку типов и unit-тесты;
+браузерные проверки и сборки в эту короткую команду не входят.
 
 `pnpm --dir client package` создаёт локальную неподписанную сборку. Подпись сертификатом
 Developer ID и notarization для распространения здесь не настроены.

@@ -217,7 +217,7 @@ HTTP-слой получает готовый `Arc<dyn Provider>`. Новый п
 
 ```sh
 just generate       # OpenAPI + запросы server/http/*.http, без запуска сервера
-just test           # клиент + rustfmt --check + Clippy + Rust-тесты
+just test           # полный CI, включая браузер и PostgreSQL-тесты
 docker compose build server
 # Альтернативный запуск из корня без Docker (Rust из rust-toolchain.toml):
 cargo run -p wien-server --locked
@@ -361,16 +361,26 @@ Free — 10 текстовых запросов без аудио однокра
 backend origin. При отсутствии защищённого системного хранилища сессия живёт только
 до закрытия приложения; пароль не сохраняется.
 
-Интеграционные тесты используют отдельные временные базы и требуют пользователя
-PostgreSQL с правом CREATE DATABASE (не направляй их на production):
+`just test` и CI запускают все Rust-тесты, включая DB-тесты, через общий
+`scripts/test.sh`. Нужен работающий Docker/Colima: сценарий сам поднимает отдельный
+PostgreSQL 18 на свободном локальном порту, подменяет `DATABASE_URL` только для
+тестового процесса и удаляет контейнер с данными после завершения, ошибки или
+прерывания. Только Rust-часть можно запустить так:
+
+```sh
+bash scripts/test.sh rust
+```
+
+Для точечного ручного запуска DB-теста можно указать свою тестовую PostgreSQL
+с правом CREATE DATABASE (не направляй её на production):
 
 ```sh
 DATABASE_URL=postgresql://test:password@127.0.0.1:5432/test \
-  cargo test --locked -p wien-server --test accounts_db --test subscriptions_db -- --ignored
+  cargo test --locked -p wien-server --test accounts_db --test subscriptions_db --test payments_db -- --ignored
 ```
 
-Обычный `cargo test` пропускает только эти явно помеченные DB-тесты; GitHub CI
-поднимает PostgreSQL и запускает их отдельным обязательным шагом.
+Обычный `cargo test` пропускает явно помеченные DB-тесты. Полный `just test` и CI
+используют `--include-ignored`, поэтому эти тесты обязательны в обоих запусках.
 
 Проверка форм Electron с одноразовой локальной БД и запущенным бэком:
 

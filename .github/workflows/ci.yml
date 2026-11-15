@@ -18,10 +18,6 @@ jobs:
     name: Client checks and build
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: client
-
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -38,29 +34,8 @@ jobs:
           cache: true
           cache_dependency_path: client/pnpm-lock.yaml
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Check lint, formatting, types, and tests
-        run: pnpm test
-
-      - name: Build client
-        run: pnpm build
-
-      - name: Build web client
-        run: pnpm build:web
-
-      - name: Install test browser
-        run: pnpm exec playwright install --with-deps chromium
-
-      - name: Test browser workspace
-        run: pnpm test:web
-
-      - name: Test localization
-        run: node scripts/localization-smoke.mjs
-
-      - name: Test storefront and payment UI
-        run: node scripts/storefront-smoke.mjs && node scripts/payments-smoke.mjs
+      - name: Run client checks (same as just test)
+        run: bash scripts/test.sh client
 
   rust:
     name: Rust workspace checks and build
@@ -68,18 +43,6 @@ jobs:
     timeout-minutes: 30
     env:
       WIEN_HTTPGENERATOR_ROOT: ${{ github.workspace }}/.cache/httpgenerator
-    services:
-      postgres:
-        image: postgres:18-alpine
-        env:
-          POSTGRES_USER: wien_test
-          POSTGRES_PASSWORD: test-only-password
-          POSTGRES_DB: wien_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U wien_test -d wien_test"
-          --health-interval 5s --health-timeout 3s --health-retries 12
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -98,19 +61,5 @@ jobs:
           path: .cache/httpgenerator
           key: httpgenerator-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('rust-toolchain.toml', 'server/scripts/generate-http.sh') }}
 
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-
-      - name: Run Clippy
-        run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
-
-      - name: Run tests
-        run: cargo test --locked --workspace --all-features
-
-      - name: Test account lifecycle with PostgreSQL
-        env:
-          DATABASE_URL: postgresql://wien_test:test-only-password@127.0.0.1:5432/wien_test
-        run: cargo test --locked -p wien-server --test accounts_db --test subscriptions_db --test payments_db -- --ignored
-
-      - name: Check generated HTTP contract
-        run: bash server/scripts/generate-http.sh --check
+      - name: Run Rust checks (same as just test)
+        run: bash scripts/test.sh rust

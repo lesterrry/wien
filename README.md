@@ -23,7 +23,8 @@ just run-server
 - `just run-server` — сборка и запуск `server` + `skill` через Docker Compose,
   общие логи в терминале; Ctrl+C останавливает оба сервиса.
   HTTP-сервер на `127.0.0.1:3001`, Swagger UI на `/docs/`.
-- `just test` — линты, форматирование, типы и тесты клиента; rustfmt, Clippy и тесты сервера.
+- `just test` — полный набор CI: проверки и сборки клиента, браузерные тесты,
+  rustfmt, Clippy, Rust-тесты с временным PostgreSQL и проверка HTTP-контракта.
 - `just build-client` — сборка приложения в `client/release`; в конце выводится полный путь к `.app` на macOS или каталогу приложения на Windows/Linux.
 - `just generate` — экспорт OpenAPI и генерация `server/http/*.http` для REST Client в VS Code.
 
@@ -134,10 +135,24 @@ docker compose exec skill strudel-rag remote health
 (логирование и завершение процесса). Версии задаются в `workspace.dependencies`,
 используется один `Cargo.lock` и каталог `target/`.
 
-- `just test` проверяет клиент, Rust-форматирование, Clippy, тесты всего workspace
-  и актуальность сгенерированного HTTP-контракта.
-- `just build-server` собирает оба production-бинарника.
-- CI выполняет те же проверки и отдельно собирает клиент и production-бинарники.
+`just test` и GitHub CI используют один сценарий — [scripts/test.sh](scripts/test.sh).
+Он устанавливает зависимости клиента по lockfile, проверяет линты, форматирование
+и типы, запускает unit-тесты, собирает Electron и веб-клиент, затем выполняет
+браузерные проверки рабочего пространства, EN/RU, тарифов и платежей. Rust-часть
+проверяет rustfmt и Clippy, запускает весь workspace с `--include-ignored`
+(включая тесты аккаунтов, подписок и платежей на PostgreSQL) и сверяет HTTP-контракт.
+
+Для запуска нужны Node.js 22, pnpm из `client/package.json`, Rust из
+`rust-toolchain.toml` и работающий Docker/Colima. Chromium и образ PostgreSQL 18
+скачиваются автоматически при необходимости. База каждый раз создаётся в отдельном
+контейнере на свободном локальном порту и удаляется вместе с данными после тестов,
+в том числе при ошибке или прерывании. `DATABASE_URL` из окружения не используется.
+Если инфраструктура недоступна, команда завершается с ошибкой, а не пропускает тесты.
+
+CI запускает части сценария параллельно в двух jobs; локально `just test` выполняет
+их последовательно. Для отдельной части можно вызвать `bash scripts/test.sh client`
+или `bash scripts/test.sh rust`. Набор проверок общий; ОС локальной машины и CI
+по-прежнему могут отличаться. `just build-server` отдельно собирает production-бинарники.
 
 Корневой Dockerfile имеет targets `server` и `skill`, общий закреплённый компилятор
 и runtime. Оба процесса работают под UID/GID 10001. Конфиги `server/config.toml`

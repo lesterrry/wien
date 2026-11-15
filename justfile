@@ -36,10 +36,6 @@ build-server:
 generate:
     bash server/scripts/generate-http.sh
 
-# Check lint, formatting, types, and run tests for all components
+# Run the complete CI suite, including browser and disposable PostgreSQL tests
 test:
-    pnpm --dir client test
-    cargo fmt --all -- --check
-    cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
-    cargo test --locked --workspace --all-features
-    bash server/scripts/generate-http.sh --check
+    bash scripts/test.sh
