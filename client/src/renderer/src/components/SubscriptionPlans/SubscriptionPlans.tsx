@@ -1,5 +1,5 @@
 import { FileText } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { SubscriptionPlan } from "../../../../shared/account";
 import type { Storefront } from "../../../../shared/storefront";
 import { Dialog } from "../Dialog/Dialog";
@@ -11,13 +11,16 @@ import {
   RefundTerms,
   Seller,
 } from "./Documents";
+import { Payments } from "./Payments";
 import styles from "./SubscriptionPlans.module.css";
 
-type Tab = "plans" | "offer" | "privacy";
+export type BillingTab = "plans" | "offer" | "privacy" | "payments";
+type Tab = BillingTab;
 const names: Record<Tab, string> = {
   plans: "Тарифы",
   offer: "Условия покупки",
   privacy: "Политика данных",
+  payments: "Платежи",
 };
 const name = (plan: SubscriptionPlan) => plan.name_ru || plan.name;
 const price = (plan: SubscriptionPlan) =>
@@ -36,17 +39,36 @@ export function SubscriptionPlans({
   exhausted,
   audio = false,
   currentPlanId,
+  userId,
+  returnOrderId,
+  onSignIn,
+  onPaid,
   initialTab = "plans",
   onClose,
 }: {
   exhausted: boolean;
   audio?: boolean;
   currentPlanId?: string;
+  userId?: string;
+  returnOrderId?: string;
+  onSignIn: () => void;
+  onPaid: () => Promise<unknown>;
   initialTab?: Tab;
   onClose: () => void;
 }) {
   const [tab, setTab] = useState<Tab>(initialTab);
-  const [plans, setPlans] = useState<SubscriptionPlan[] | null>(null);
+  const selectedTab = useRef<HTMLButtonElement>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keep the selected tab visible after navigation and resizing.
+  useEffect(() => {
+    const reveal = () =>
+      selectedTab.current?.scrollIntoView({
+        block: "nearest",
+        inline: "nearest",
+      });
+    reveal();
+    window.addEventListener("resize", reveal);
+    return () => window.removeEventListener("resize", reveal);
+  }, [tab]);
   const [store, setStore] = useState<Storefront | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [accepted, setAccepted] = useState(false);
@@ -56,16 +78,10 @@ export function SubscriptionPlans({
   useEffect(() => {
     let active = true;
     setError(false);
-    setPlans(null);
-    void Promise.all([
-      window.workspace.subscriptionPlans(),
-      window.workspace.storefront(),
-    ]).then(
-      ([catalog, details]) => {
-        if (active) {
-          setPlans(catalog);
-          setStore(details);
-        }
+    setStore(null);
+    void window.workspace.storefront().then(
+      (details) => {
+        if (active) setStore(details);
       },
       () => {
         if (active) setError(true);
@@ -75,6 +91,7 @@ export function SubscriptionPlans({
       active = false;
     };
   }, [attempt]);
+  const plans = store?.plans;
   const plan = plans?.find((item) => item.id === selected);
   function navigate(next: Tab) {
     setTab(next);
@@ -118,6 +135,7 @@ export function SubscriptionPlans({
             <button
               type="button"
               role="tab"
+              ref={tab === item ? selectedTab : undefined}
               id={`billing-tab-${item}`}
               aria-selected={tab === item}
               aria-controls="billing-panel"
@@ -149,6 +167,17 @@ export function SubscriptionPlans({
           </div>
         ) : !plans || !store ? (
           <p role="status">Загружаем тарифы…</p>
+        ) : tab === "payments" ? (
+          <Payments
+            config={store.payments}
+            key={userId || "guest"}
+            userId={userId}
+            documentVersion={store.terms.document_version}
+            returnOrderId={returnOrderId}
+            supportEmail={store.seller.support_email}
+            onSignIn={onSignIn}
+            onPaid={onPaid}
+          />
         ) : tab === "offer" ? (
           <Offer store={store} onNavigate={navigate} />
         ) : tab === "privacy" ? (
@@ -173,7 +202,7 @@ export function SubscriptionPlans({
             <p className={styles.allowance}>{allowance(plan)}</p>
             <p>{plan.description_ru || plan.description}</p>
             <PurchaseTerms period={plan.billing_period} />
-            <p>{store.ai_usage_policy}</p>
+            <p>{store.terms.ai_usage_policy}</p>
             <RefundTerms store={store} />
             <label className={styles.consent}>
               <input
@@ -193,9 +222,17 @@ export function SubscriptionPlans({
                 .
               </span>
             </label>
-            <button type="button" className={styles.pay} disabled>
-              Оплата пока недоступна
-            </button>
+            <Payments
+              config={store.payments}
+              key={`${userId}:${plan.id}:${plan.price_minor}:${plan.initial_assist_requests}:${store.terms.document_version}`}
+              userId={userId}
+              plan={plan}
+              documentVersion={store.terms.document_version}
+              accepted={accepted}
+              supportEmail={store.seller.support_email}
+              onSignIn={onSignIn}
+              onPaid={onPaid}
+            />
           </section>
         ) : (
           <>
@@ -251,12 +288,11 @@ export function SubscriptionPlans({
                 ))}
               </div>
             )}
-            <p className={styles.note}>{store.ai_usage_policy}</p>
+            <p className={styles.note}>{store.terms.ai_usage_policy}</p>
           </>
         )}
         {store && (
           <footer className={styles.footer}>
-            <p>Продажи ещё не открыты. Оплата пока недоступна.</p>
             <Seller store={store} />
           </footer>
         )}

@@ -31,6 +31,10 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(turnstile) = wien_server::auth::turnstile::Turnstile::from_env()? {
         auth = auth.with_registration(std::sync::Arc::new(turnstile));
     }
+    let payments = wien_server::payments::Payments::new(
+        database.clone(),
+        wien_server::robokassa::TestConfig::from_env()?,
+    );
     let _cleanup = wien_server::auth::start_cleanup(database.clone());
     let tools = std::sync::Arc::new(wien_server::assistant::tools::Tools(
         wien_server::rag::RagClient::from_env()?,
@@ -49,8 +53,15 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!(address = %listener.local_addr()?, "HTTP server listening");
     axum::serve(
         listener,
-        api::router_with_database(provider, config.generation, tools, Some(database))
-            .merge(wien_server::auth::router(auth)),
+        api::router_with_database(
+            provider,
+            config.generation,
+            tools,
+            Some(database),
+            payments.mode(),
+        )
+        .merge(wien_server::auth::router(auth))
+        .merge(wien_server::payments::router(payments)),
     )
     .with_graceful_shutdown(service_runtime::shutdown_signal())
     .await?;

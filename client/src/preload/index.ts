@@ -13,8 +13,12 @@ const api: WorkspaceApi = {
     return () => ipcRenderer.removeListener("menu:command", listener);
   },
   updateMenuState: (state) => ipcRenderer.send("menu:state", state),
-  subscriptionPlans: () => ipcRenderer.invoke("account:plans"),
   storefront: () => ipcRenderer.invoke("account:storefront"),
+  paymentOrders: () => ipcRenderer.invoke("account:payment-orders"),
+  paymentOrder: (id) => ipcRenderer.invoke("account:payment-order", id),
+  paymentCreate: (request) =>
+    ipcRenderer.invoke("account:payment-create", request),
+  paymentCancel: (id) => ipcRenderer.invoke("account:payment-cancel", id),
   accountCurrent: () => ipcRenderer.invoke("account:current"),
   accountLogin: (credentials) =>
     ipcRenderer.invoke("account:login", credentials),

@@ -10,8 +10,12 @@ import {
   useState,
 } from "react";
 import type { UserProfile } from "../../../../shared/account";
+import { paymentId } from "../../../../shared/payments";
 import { Dialog } from "../Dialog/Dialog";
-import { SubscriptionPlans } from "../SubscriptionPlans/SubscriptionPlans";
+import {
+  type BillingTab,
+  SubscriptionPlans,
+} from "../SubscriptionPlans/SubscriptionPlans";
 import styles from "./Account.module.css";
 import { Turnstile } from "./Turnstile";
 
@@ -19,6 +23,20 @@ const api = window.workspace;
 const registrationRequested =
   api.platform === "web" &&
   new URLSearchParams(window.location.search).has("register");
+const paymentQuery =
+  api.platform === "web"
+    ? new URLSearchParams(window.location.search)
+    : new URLSearchParams();
+const returnOrderId = (() => {
+  const value = paymentQuery.get("payment");
+  try {
+    return value ? paymentId(value) : undefined;
+  } catch {
+    return undefined;
+  }
+})();
+const paymentReturned =
+  paymentQuery.has("payment") || paymentQuery.has("billing");
 const errorMessage = (error: unknown) =>
   String(error instanceof Error ? error.message : error).replace(
     /^Error invoking remote method '[^']+': Error: /,
@@ -60,11 +78,12 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
-  const [plansOpen, setPlansOpen] = useState(false);
-  const [plansTab, setPlansTab] = useState<"plans" | "offer" | "privacy">(
-    "plans",
+  const [plansOpen, setPlansOpen] = useState(paymentReturned);
+  const [plansTab, setPlansTab] = useState<BillingTab>(
+    paymentReturned ? "payments" : "plans",
   );
   const [upgradeReason, setUpgradeReason] = useState<"audio">();
+  const resumePayment = useRef(false);
   const refreshVersion = useRef(0);
   const refresh = useCallback(async () => {
     const version = ++refreshVersion.current;
@@ -135,6 +154,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     setConfirmation("");
   }
   function close() {
+    resumePayment.current = false;
     setOpen(false);
     clearPasswords();
     setError("");
@@ -181,6 +201,12 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       refreshVersion.current++;
       setUser(profile);
       setResolved(true);
+      if (resumePayment.current) {
+        resumePayment.current = false;
+        setOpen(false);
+        setPlansTab("payments");
+        setPlansOpen(true);
+      }
       clearPasswords();
       setNotice(
         mode === "password"
@@ -241,6 +267,13 @@ export function AccountProvider({ children }: { children: ReactNode }) {
           initialTab={plansTab}
           audio={upgradeReason === "audio"}
           currentPlanId={user?.plan.id}
+          userId={user?.id}
+          returnOrderId={returnOrderId}
+          onPaid={refresh}
+          onSignIn={() => {
+            resumePayment.current = true;
+            openProfile();
+          }}
           onClose={() => setPlansOpen(false)}
         />
       )}
@@ -261,6 +294,14 @@ export function AccountProvider({ children }: { children: ReactNode }) {
                 <UserRound size={28} />
                 <strong>@{user.username}</strong>
                 <span className={styles.tier}>{user.plan.name}</span>
+                {user.subscription_expires_at && (
+                  <span>
+                    Действует до{" "}
+                    {new Date(user.subscription_expires_at).toLocaleString(
+                      "ru-RU",
+                    )}
+                  </span>
+                )}
                 <span>
                   Joined {new Date(user.created_at).toLocaleDateString()}
                 </span>

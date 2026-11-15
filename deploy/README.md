@@ -111,3 +111,5 @@ Registration currently has no CAPTCHA. Limits shared through PostgreSQL allow
 per 15 minutes, plus 240 expensive auth attempts globally per 15 minutes and two
 concurrent password hashing operations per server. These initial limits are for
 small-scale use; they do not replace per-client abuse controls for public growth.
+
+Payment configuration and test checkout setup: [server/PAYMENTS.md](../server/PAYMENTS.md). Payments remain disabled unless explicitly configured.

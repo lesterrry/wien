@@ -23,6 +23,7 @@ export interface UserProfile {
   tier: string;
   plan: SubscriptionPlan;
   assist_requests_remaining: number;
+  subscription_expires_at?: string | null;
   audio_requests_used: number;
   assist_requests_used: number;
 }

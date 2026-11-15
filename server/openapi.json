@@ -496,30 +496,263 @@
         ]
       }
     },
-    "/v1/plans": {
+    "/v1/payments/orders": {
       "get": {
-        "summary": "Visible subscription plans, ordered by the server. No authentication required.",
-        "operationId": "plans",
+        "operationId": "payment_orders",
         "responses": {
           "200": {
-            "description": "Subscription catalog",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/Plan"
+                    "$ref": "#/components/schemas/Order"
                   }
                 }
               }
             }
           },
-          "503": {
-            "description": "Catalog unavailable",
+          "401": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiError"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "browser_session": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "create_order",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOrder"
+              },
+              "example": {
+                "accepted": true,
+                "document_version": "copy-current-version-from-v1-storefront",
+                "plan_id": "plus",
+                "price_minor": 39900,
+                "request_id": "00000000-0000-4000-8000-000000000001",
+                "request_limit": 500
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Order"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "browser_session": []
+          }
+        ]
+      }
+    },
+    "/v1/payments/orders/{id}": {
+      "get": {
+        "operationId": "payment_order",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Order UUID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Order"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "browser_session": []
+          }
+        ]
+      }
+    },
+    "/v1/payments/orders/{id}/cancel": {
+      "post": {
+        "operationId": "cancel_order",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Order"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "browser_session": []
+          }
+        ]
+      }
+    },
+    "/v1/payments/robokassa/fail": {
+      "get": {
+        "operationId": "payment_fail",
+        "responses": {
+          "303": {
+            "description": "Return to editor; a failed/cancelled browser return never changes the order"
+          }
+        }
+      }
+    },
+    "/v1/payments/robokassa/result": {
+      "post": {
+        "summary": "Configure ResultURL as POST. Form values are checked for duplicates before signature verification.",
+        "operationId": "robokassa_result",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "string"
+              },
+              "example": "OutSum=399.00&InvId=1&Shp_mode=test&Shp_order=00000000-0000-4000-8000-000000000001&SignatureValue=replace-with-sha256-test-password2-signature"
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -527,13 +760,23 @@
         }
       }
     },
+    "/v1/payments/robokassa/success": {
+      "get": {
+        "operationId": "payment_success",
+        "responses": {
+          "303": {
+            "description": "Return to editor; status is verified through the authenticated order API"
+          }
+        }
+      }
+    },
     "/v1/storefront": {
       "get": {
-        "summary": "Public seller details and purchase terms, without credentials.",
+        "summary": "Public plans, seller details, purchase terms and payment mode. No credentials.",
         "operationId": "storefront",
         "responses": {
           "200": {
-            "description": "Seller details and purchase terms",
+            "description": "Complete storefront for the subscription dialog",
             "content": {
               "application/json": {
                 "schema": {
@@ -652,6 +895,40 @@
         },
         "additionalProperties": false
       },
+      "CreateOrder": {
+        "type": "object",
+        "required": [
+          "request_id",
+          "plan_id",
+          "document_version",
+          "price_minor",
+          "request_limit",
+          "accepted"
+        ],
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
+          "document_version": {
+            "type": "string"
+          },
+          "plan_id": {
+            "type": "string"
+          },
+          "price_minor": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "request_limit": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
       "Credentials": {
         "type": "object",
         "required": [
@@ -723,6 +1000,96 @@
           }
         },
         "additionalProperties": false
+      },
+      "Mode": {
+        "type": "string",
+        "enum": [
+          "disabled",
+          "test"
+        ]
+      },
+      "Order": {
+        "type": "object",
+        "required": [
+          "id",
+          "invoice_id",
+          "plan_id",
+          "plan_name",
+          "price_minor",
+          "currency",
+          "request_limit",
+          "document_version",
+          "status",
+          "is_test",
+          "created_at"
+        ],
+        "properties": {
+          "checkout_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "document_version": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "invoice_id": {
+            "type": "string",
+            "description": "Decimal string, not a JavaScript number."
+          },
+          "is_test": {
+            "type": "boolean"
+          },
+          "paid_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "period_ends_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "plan_id": {
+            "type": "string"
+          },
+          "plan_name": {
+            "type": "string"
+          },
+          "price_minor": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "request_limit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "PaymentSettings": {
+        "type": "object",
+        "required": [
+          "mode"
+        ],
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/Mode"
+          }
+        }
       },
       "Plan": {
         "type": "object",
@@ -847,6 +1214,12 @@
           "plan": {
             "$ref": "#/components/schemas/Plan"
           },
+          "subscription_expires_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "tier": {
             "type": "string"
           },
@@ -897,6 +1270,35 @@
           }
         }
       },
+      "Seller": {
+        "type": "object",
+        "required": [
+          "name",
+          "inn",
+          "city",
+          "support_email"
+        ],
+        "properties": {
+          "city": {
+            "type": "string"
+          },
+          "inn": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "support_email": {
+            "type": "string"
+          },
+          "support_phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "SignedIn": {
         "type": "object",
         "required": [
@@ -917,12 +1319,34 @@
       },
       "Storefront": {
         "type": "object",
-        "description": "Public seller details and purchase terms. Payment credentials are never exposed.",
+        "description": "One public response for the subscription dialog. Never includes payment credentials.",
         "required": [
-          "seller_name",
-          "seller_inn",
-          "seller_city",
-          "support_email",
+          "plans",
+          "seller",
+          "terms",
+          "payments"
+        ],
+        "properties": {
+          "payments": {
+            "$ref": "#/components/schemas/PaymentSettings"
+          },
+          "plans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Plan"
+            }
+          },
+          "seller": {
+            "$ref": "#/components/schemas/Seller"
+          },
+          "terms": {
+            "$ref": "#/components/schemas/Terms"
+          }
+        }
+      },
+      "Terms": {
+        "type": "object",
+        "required": [
           "accounts_location",
           "document_version",
           "documents_published",
@@ -944,24 +1368,6 @@
           },
           "renewal_mode": {
             "type": "string"
-          },
-          "seller_city": {
-            "type": "string"
-          },
-          "seller_inn": {
-            "type": "string"
-          },
-          "seller_name": {
-            "type": "string"
-          },
-          "support_email": {
-            "type": "string"
-          },
-          "support_phone": {
-            "type": [
-              "string",
-              "null"
-            ]
           }
         }
       }

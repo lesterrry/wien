@@ -12,6 +12,8 @@ const artifacts = path.resolve("../.local/storefront");
 await fs.mkdir(artifacts, { recursive: true });
 let catalog = plans;
 let fail = false;
+let storefrontReads = 0;
+const obsoleteReads = [];
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, "http://localhost");
@@ -31,10 +33,11 @@ const server = http.createServer(async (req, res) => {
         res.end("{}");
         return;
       }
-      if (url.pathname === "/v1/plans") res.end(JSON.stringify(catalog));
-      else if (url.pathname === "/v1/storefront")
-        res.end(JSON.stringify(storefront));
-      else {
+      if (url.pathname === "/v1/storefront") {
+        storefrontReads++;
+        res.end(JSON.stringify({ ...storefront, plans: catalog }));
+      } else {
+        obsoleteReads.push(url.pathname);
         res.writeHead(404);
         res.end("{}");
       }
@@ -96,6 +99,7 @@ try {
   await page.screenshot({ path: path.join(artifacts, "billing-sidebar.png") });
   await open();
   await expect(dialog.getByRole("region")).toHaveCount(4);
+  assert.equal(storefrontReads, 1);
   for (const [tier, count, price] of [
     ["PLUS", "500", "399"],
     ["PRO", /2\s500/, "899"],
@@ -108,7 +112,7 @@ try {
     await expect(card).toContainText(count);
     await expect(card).toContainText(price);
   }
-  await expect(dialog).toContainText(storefront.seller_name);
+  await expect(dialog).toContainText(storefront.seller.name);
   await page.screenshot({
     path: path.join(artifacts, "plans-modal-desktop.png"),
   });
@@ -218,6 +222,7 @@ try {
     "Тарифы пока недоступны.",
   );
   assert.deepEqual(errors, []);
+  assert.deepEqual(obsoleteReads, []);
   console.log(
     `PASS: modal plans, limits, checkout, terms, registration preservation, editor continuity, mobile, API updates/retry. Artifacts: ${artifacts}`,
   );

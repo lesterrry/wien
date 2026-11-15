@@ -180,6 +180,9 @@ async fn serves_openapi_and_offline_swagger_without_credentials() {
     assert_eq!(spec, serde_json::to_value(api::openapi()).unwrap());
     assert!(spec["paths"]["/v1/assist"]["post"]["responses"]["200"].is_object());
     assert!(spec["paths"].get("/v1/generate").is_none());
+    assert!(spec["paths"].get("/v1/plans").is_none());
+    assert!(spec["paths"].get("/v1/payments/config").is_none());
+    assert!(spec["paths"]["/v1/storefront"]["get"].is_object());
 
     let schemas = spec["components"]["schemas"].as_object().unwrap();
     for name in ["AssistRequest", "AssistResponse"] {

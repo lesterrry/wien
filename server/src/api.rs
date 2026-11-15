@@ -128,17 +128,18 @@ struct AppState {
     tools: Arc<dyn AssistantTools>,
     assist_slots: Arc<Semaphore>,
     database: Option<sqlx::PgPool>,
+    payment_mode: crate::payments::Mode,
 }
 
 fn documented_routes() -> (Router<AppState>, OpenApi) {
     let (router, mut spec) = OpenApiRouter::new()
         .routes(routes!(assist))
-        .routes(routes!(plans))
         .routes(routes!(storefront))
         .routes(routes!(health))
         .routes(routes!(ready))
         .split_for_parts();
     spec.merge(crate::auth::openapi());
+    spec.merge(crate::payments::openapi());
     spec.info = Info::new("Wien AI server", env!("CARGO_PKG_VERSION"));
     spec.servers = Some(vec![Server::new("/")]);
     (router, spec)
@@ -154,7 +155,13 @@ pub fn router(
     generation: GenerationConfig,
     tools: Arc<dyn AssistantTools>,
 ) -> Router {
-    router_with_database(provider, generation, tools, None)
+    router_with_database(
+        provider,
+        generation,
+        tools,
+        None,
+        crate::payments::Mode::Disabled,
+    )
 }
 
 pub fn router_with_database(
@@ -162,6 +169,7 @@ pub fn router_with_database(
     generation: GenerationConfig,
     tools: Arc<dyn AssistantTools>,
     database: Option<sqlx::PgPool>,
+    payment_mode: crate::payments::Mode,
 ) -> Router {
     let (router, spec) = documented_routes();
     router
@@ -171,6 +179,7 @@ pub fn router_with_database(
             provider,
             tools,
             database,
+            payment_mode,
             generation: Arc::new(generation),
             assist_slots: Arc::new(Semaphore::new(MAX_ACTIVE_ASSISTS)),
         })
@@ -352,30 +361,19 @@ async fn assist(
     Ok(Json(response))
 }
 
-/// Visible subscription plans, ordered by the server. No authentication required.
-#[utoipa::path(get, path = "/v1/plans", responses(
-    (status = 200, description = "Subscription catalog", body = Vec<crate::plans::Plan>),
-    (status = 503, description = "Catalog unavailable", body = ApiError)
-))]
-async fn plans(State(state): State<AppState>) -> Result<Json<Vec<crate::plans::Plan>>, ApiError> {
-    let pool = state.database.as_ref().ok_or_else(ApiError::database)?;
-    crate::plans::list(pool)
-        .await
-        .map(Json)
-        .map_err(|_| ApiError::database())
-}
-
-/// Public seller details and purchase terms, without credentials.
+/// Public plans, seller details, purchase terms and payment mode. No credentials.
 #[utoipa::path(get, path = "/v1/storefront", responses(
-    (status = 200, description = "Seller details and purchase terms", body = crate::storefront::Storefront),
+    (status = 200, description = "Complete storefront for the subscription dialog", body = crate::storefront::Storefront),
     (status = 503, description = "Storefront unavailable", body = ApiError)
 ))]
-async fn storefront(
-    State(state): State<AppState>,
-) -> Result<Json<crate::storefront::Storefront>, ApiError> {
+async fn storefront(State(state): State<AppState>) -> Result<Response, ApiError> {
     let pool = state.database.as_ref().ok_or_else(ApiError::database)?;
-    crate::storefront::get(pool)
+    let storefront = crate::storefront::get(pool, state.payment_mode)
         .await
-        .map(Json)
-        .map_err(|_| ApiError::database())
+        .map_err(|_| ApiError::database())?;
+    Ok((
+        [(axum::http::header::CACHE_CONTROL, "no-store")],
+        Json(storefront),
+    )
+        .into_response())
 }

@@ -50,11 +50,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       if (req.url === "/v1/storefront") {
-        res.end(JSON.stringify(storefront));
-        return;
-      }
-      if (req.url === "/v1/plans") {
-        res.end(JSON.stringify(catalog));
+        res.end(JSON.stringify({ ...storefront, plans: catalog }));
         return;
       }
       if (!signedIn || !req.headers.cookie?.includes(token)) {

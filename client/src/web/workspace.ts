@@ -46,8 +46,11 @@ function delay(ms: number, signal: AbortSignal): Promise<void> {
 }
 export const workspace: WorkspaceApi = {
   platform: "web",
-  subscriptionPlans: () => account.plans(),
   storefront: () => account.storefront(),
+  paymentOrders: () => account.paymentOrders(),
+  paymentOrder: (id) => account.paymentOrder(id),
+  paymentCreate: (request) => account.paymentCreate(request),
+  paymentCancel: (id) => account.paymentCancel(id),
   accountCurrent: () => account.current(),
   accountRegister: (credentials) => account.register(credentials),
   accountLogin: (credentials) => account.login(credentials),

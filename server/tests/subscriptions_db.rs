@@ -100,6 +100,7 @@ async fn app(pool: &PgPool, model: Arc<Model>) -> Router {
         GenerationConfig::default(),
         Arc::new(ReadyTools),
         Some(pool.clone()),
+        wien_server::payments::Mode::Disabled,
     )
     .merge(auth::router(common::auth(pool.clone()).await))
 }
@@ -554,9 +555,9 @@ async fn audio_shares_allowance_and_two_passes_count_once(pool: PgPool) {
 #[ignore = "requires PostgreSQL in DATABASE_URL; CI runs this explicitly"]
 async fn catalog_is_public_ordered_and_uses_live_database_values(pool: PgPool) {
     let app = app(&pool, Model::new()).await;
-    let (status, catalog) = request(&app, "GET", "/v1/plans", Value::Null, None).await;
+    let (status, catalog) = request(&app, "GET", "/v1/storefront", Value::Null, None).await;
     assert_eq!(status, StatusCode::OK);
-    let plans = catalog.as_array().unwrap();
+    let plans = catalog["plans"].as_array().unwrap();
     assert_eq!(
         plans
             .iter()
@@ -572,14 +573,14 @@ async fn catalog_is_public_ordered_and_uses_live_database_values(pool: PgPool) {
         .await
         .unwrap();
     sqlx::query("UPDATE plans SET name='Studio',description='Updated description',price_minor=12345,currency='USD',billing_period='year',display_order=-1 WHERE id='pro'").execute(&pool).await.unwrap();
-    let (_, catalog) = request(&app, "GET", "/v1/plans", Value::Null, None).await;
-    assert_eq!(catalog.as_array().unwrap().len(), 3);
-    assert_eq!(catalog[0]["name"], "Studio");
-    assert_eq!(catalog[0]["description"], "Updated description");
-    assert_eq!(catalog[0]["price_minor"], 12345);
-    assert_eq!(catalog[0]["currency"], "USD");
-    assert_eq!(catalog[0]["billing_period"], "year");
-    assert!(catalog[0].get("visible").is_none());
+    let (_, catalog) = request(&app, "GET", "/v1/storefront", Value::Null, None).await;
+    assert_eq!(catalog["plans"].as_array().unwrap().len(), 3);
+    assert_eq!(catalog["plans"][0]["name"], "Studio");
+    assert_eq!(catalog["plans"][0]["description"], "Updated description");
+    assert_eq!(catalog["plans"][0]["price_minor"], 12345);
+    assert_eq!(catalog["plans"][0]["currency"], "USD");
+    assert_eq!(catalog["plans"][0]["billing_period"], "year");
+    assert!(catalog["plans"][0].get("visible").is_none());
     let user = register(&app).await;
     sqlx::query("UPDATE subscriptions SET tier='plus'")
         .execute(&pool)
@@ -704,28 +705,55 @@ async fn catalog_migration_preserves_existing_tiers_balances_and_usage(pool: PgP
 #[ignore = "requires PostgreSQL in DATABASE_URL; CI runs this explicitly"]
 async fn storefront_exposes_public_seller_details_and_request_limits(pool: PgPool) {
     let app = app(&pool, Model::new()).await;
+    let response = app
+        .clone()
+        .oneshot(Request::get("/v1/storefront").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.headers()["cache-control"], "no-store");
+    for removed in ["/v1/plans", "/v1/payments/config"] {
+        assert_eq!(
+            app.clone()
+                .oneshot(Request::get(removed).body(Body::empty()).unwrap())
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::NOT_FOUND
+        );
+    }
     let (status, details) = request(&app, "GET", "/v1/storefront", Value::Null, None).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(details["seller_inn"], "774313113437");
-    assert_eq!(details["seller_name"], "Насибуллин Айдар Амирович");
-    assert_eq!(details["support_email"], "mail@aydar.media");
-    assert_eq!(details["support_phone"], Value::Null);
-    assert_eq!(details["renewal_mode"], "manual");
-    assert_eq!(details["documents_published"], false);
+    assert_eq!(details["seller"]["inn"], "774313113437");
+    assert_eq!(details["seller"]["name"], "Насибуллин Айдар Амирович");
+    assert_eq!(details["seller"]["support_email"], "mail@aydar.media");
+    assert_eq!(details["seller"]["support_phone"], Value::Null);
+    assert_eq!(details["terms"]["renewal_mode"], "manual");
+    assert_eq!(details["terms"]["documents_published"], false);
     assert!(details.get("singleton").is_none());
+    assert_eq!(details["payments"], json!({"mode":"disabled"}));
+    assert_eq!(details.as_object().unwrap().len(), 4);
+    let test_app = api::router_with_database(
+        Model::new(),
+        GenerationConfig::default(),
+        Arc::new(ReadyTools),
+        Some(pool.clone()),
+        wien_server::payments::Mode::Test,
+    );
+    let (_, test_details) = request(&test_app, "GET", "/v1/storefront", Value::Null, None).await;
+    assert_eq!(test_details["payments"], json!({"mode":"test"}));
     sqlx::query("UPDATE storefront SET support_email='support@example.com'")
         .execute(&pool)
         .await
         .unwrap();
     let (_, updated) = request(&app, "GET", "/v1/storefront", Value::Null, None).await;
-    assert_eq!(updated["support_email"], "support@example.com");
-    let (_, catalog) = request(&app, "GET", "/v1/plans", Value::Null, None).await;
+    assert_eq!(updated["seller"]["support_email"], "support@example.com");
+    let (_, catalog) = request(&app, "GET", "/v1/storefront", Value::Null, None).await;
     for (id, count, price) in [
         ("plus", 500, 39900),
         ("pro", 2500, 89900),
         ("ultra", 5000, 599000),
     ] {
-        let plan = catalog
+        let plan = catalog["plans"]
             .as_array()
             .unwrap()
             .iter()

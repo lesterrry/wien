@@ -3,16 +3,21 @@ import type { Storefront } from "../../../../shared/storefront";
 export function Seller({ store }: { store: Storefront }) {
   return (
     <>
-      <p>Самозанятый {store.seller_name}</p>
+      <p>Самозанятый {store.seller.name}</p>
       <p>
-        ИНН {store.seller_inn} · {store.seller_city}
+        ИНН {store.seller.inn} · {store.seller.city}
       </p>
       <p>
-        <a href={`mailto:${store.support_email}`}>{store.support_email}</a>
-        {store.support_phone && (
+        <a href={`mailto:${store.seller.support_email}`}>
+          {store.seller.support_email}
+        </a>
+        {store.seller.support_phone && (
           <>
             {" "}
-            · <a href={`tel:${store.support_phone}`}>{store.support_phone}</a>
+            ·{" "}
+            <a href={`tel:${store.seller.support_phone}`}>
+              {store.seller.support_phone}
+            </a>
           </>
         )}
       </p>
@@ -49,9 +54,9 @@ export function RefundTerms({ store }: { store: Storefront }) {
       <p>
         Для отказа от услуги или возврата напишите на{" "}
         <a
-          href={`mailto:${store.support_email}?subject=${encodeURIComponent("Возврат оплаты Wien")}`}
+          href={`mailto:${store.seller.support_email}?subject=${encodeURIComponent("Возврат оплаты Wien")}`}
         >
-          {store.support_email}
+          {store.seller.support_email}
         </a>
         . Укажите имя пользователя, дату, сумму и номер платежа, если он есть.
         Данные банковской карты отправлять не нужно.
@@ -84,10 +89,10 @@ export function Offer({
   return (
     <article className="legal">
       <p className="eyebrow">
-        Условия сервиса · редакция {store.document_version}
+        Условия сервиса · редакция {store.terms.document_version}
       </p>
       <h1>Публичная оферта</h1>
-      {!store.documents_published && (
+      {!store.terms.documents_published && (
         <p className="notice">
           Проект условий. Продажи ещё не открыты; оплатить услугу по этому
           документу пока нельзя.
@@ -112,7 +117,7 @@ export function Offer({
         <button type="button" onClick={() => onNavigate("plans")}>
           в тарифах
         </button>{" "}
-        и повторяются перед оплатой. {store.ai_usage_policy}
+        и повторяются перед оплатой. {store.terms.ai_usage_policy}
       </p>
       <p>
         Ответы ИИ могут содержать ошибки и требуют проверки пользователем. Не
@@ -143,8 +148,10 @@ export function Offer({
       <h2>6. Связь и разрешение обращений</h2>
       <p>
         Обращения о работе сервиса, оплате и возвратах направляются на{" "}
-        <a href={`mailto:${store.support_email}`}>{store.support_email}</a>.
-        Применяется законодательство РФ. Эти условия не ограничивают
+        <a href={`mailto:${store.seller.support_email}`}>
+          {store.seller.support_email}
+        </a>
+        . Применяется законодательство РФ. Эти условия не ограничивают
         обязательные права потребителя.
       </p>
       <p>
@@ -162,10 +169,10 @@ export function Privacy({ store }: { store: Storefront }) {
   return (
     <article className="legal">
       <p className="eyebrow">
-        Данные и конфиденциальность · редакция {store.document_version}
+        Данные и конфиденциальность · редакция {store.terms.document_version}
       </p>
       <h1>Политика обработки персональных данных</h1>
-      {!store.documents_published && (
+      {!store.terms.documents_published && (
         <p className="notice">
           Проект документа. Условия работы внешних обработчиков уточняются перед
           запуском продаж.
@@ -175,9 +182,11 @@ export function Privacy({ store }: { store: Storefront }) {
       <Seller store={store} />
       <p>
         По вопросам обработки, уточнения и удаления данных обращайтесь на{" "}
-        <a href={`mailto:${store.support_email}`}>{store.support_email}</a>. В
-        обращении укажите имя пользователя и суть запроса. Для защиты аккаунта
-        может потребоваться подтверждение, что он принадлежит вам.
+        <a href={`mailto:${store.seller.support_email}`}>
+          {store.seller.support_email}
+        </a>
+        . В обращении укажите имя пользователя и суть запроса. Для защиты
+        аккаунта может потребоваться подтверждение, что он принадлежит вам.
       </p>
       <h2>2. Какие данные обрабатываются</h2>
       <ul>
@@ -216,10 +225,10 @@ export function Privacy({ store }: { store: Storefront }) {
       </p>
       <h2>4. Хранение и передача</h2>
       <p>
-        Основная база аккаунтов размещена в стране: {store.accounts_location}.
-        Проекты редактора хранятся локально: в браузере на устройстве либо в
-        выбранной папке настольного приложения. Контекст, отправленный
-        помощнику, передаётся серверу для обработки.
+        Основная база аккаунтов размещена в стране:{" "}
+        {store.terms.accounts_location}. Проекты редактора хранятся локально: в
+        браузере на устройстве либо в выбранной папке настольного приложения.
+        Контекст, отправленный помощнику, передаётся серверу для обработки.
       </p>
       <p>
         Для работы сервиса привлекаются внешние поставщики: инфраструктура

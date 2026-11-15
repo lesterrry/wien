@@ -21,6 +21,23 @@ const profile = {
   plan: catalog[0],
   assist_requests_remaining: 10,
 };
+const paymentOrder = {
+  id: "12345678-1234-4321-8234-123456789abc",
+  invoice_id: "1",
+  plan_id: "plus",
+  plan_name: "PLUS",
+  price_minor: 39900,
+  currency: "RUB",
+  request_limit: 500,
+  document_version: storefront.terms.document_version,
+  status: "pending",
+  is_test: true,
+  created_at: "2026-11-15T00:00:00Z",
+  paid_at: null,
+  period_ends_at: null,
+  checkout_url:
+    "https://auth.robokassa.ru/Merchant/Index.aspx?IsTest=1&Shp_mode=test&Shp_order=12345678-1234-4321-8234-123456789abc&InvId=1",
+};
 let assists = 0;
 let rejection = 0;
 let catalogUnavailable = false;
@@ -31,16 +48,25 @@ const server = http.createServer(async (req, res) => {
   let status = 200;
   let body;
   if (req.url === "/v1/storefront") {
-    body = storefront;
-  } else if (req.url === "/v1/plans") {
     status = catalogUnavailable ? 503 : 200;
-    body = catalogUnavailable ? { code: "accounts_unavailable" } : offeredPlans;
+    body = catalogUnavailable
+      ? { code: "accounts_unavailable" }
+      : { ...storefront, plans: offeredPlans, payments: { mode: "test" } };
   } else if (req.url === "/auth/login") {
     assert.equal(JSON.parse(source).username, profile.username);
     body = { user: profile, token };
   } else {
     assert.equal(req.headers.authorization, `Bearer ${token}`);
-    if (req.url === "/users/me") body = profile;
+    if (req.url === "/v1/payments/orders" && req.method === "GET")
+      body = [paymentOrder];
+    else if (req.url === "/v1/payments/orders" && req.method === "POST") {
+      assert.equal(JSON.parse(source).request_limit, 500);
+      body = paymentOrder;
+    } else if (req.url === `/v1/payments/orders/${paymentOrder.id}`)
+      body = paymentOrder;
+    else if (req.url === `/v1/payments/orders/${paymentOrder.id}/cancel`) {
+      body = { ...paymentOrder, status: "cancelled", checkout_url: null };
+    } else if (req.url === "/users/me") body = profile;
     else if (req.url === "/v1/assist") {
       assists++;
       if (rejection) {
@@ -133,6 +159,29 @@ try {
     page.getByText("10 assist requests left", { exact: true }),
   ).toBeVisible();
   await expect(menu).toContainText(profile.username);
+  const paymentIpc = await page.evaluate(async (order) => {
+    const api = window.workspace;
+    return [
+      (await api.storefront()).payments,
+      await api.paymentOrders(),
+      await api.paymentOrder(order.id),
+      await api.paymentCreate({
+        request_id: order.id,
+        plan_id: "plus",
+        price_minor: 39900,
+        request_limit: 500,
+        document_version: order.document_version,
+        accepted: true,
+      }),
+      await api.paymentCancel(order.id),
+    ];
+  }, paymentOrder);
+  assert.deepEqual(paymentIpc[0], { mode: "test" });
+  assert.deepEqual(paymentIpc[1], [paymentOrder]);
+  assert.deepEqual(paymentIpc[2], paymentOrder);
+  assert.deepEqual(paymentIpc[3], paymentOrder);
+  assert.equal(paymentIpc[4].status, "cancelled");
+
   await expect(menu.locator("[data-tier]")).toHaveCount(0);
   await menu.click();
   await submit();

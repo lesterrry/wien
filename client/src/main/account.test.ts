@@ -160,16 +160,33 @@ test("catalog accepts server-defined tiers and validates prices and policies", a
     initial_assist_requests: null,
   };
   let body: unknown = [plan];
+  const details = {
+    seller: {
+      name: "Test Seller",
+      inn: "123456789012",
+      city: "Москва",
+      support_email: "support@example.com",
+      support_phone: null,
+    },
+    terms: {
+      accounts_location: "РФ",
+      document_version: "v1",
+      documents_published: false,
+      renewal_mode: "manual",
+      ai_usage_policy: "One successful request consumes one credit",
+    },
+    payments: { mode: "test" },
+  };
   const client = new AccountClient(
     "https://wien.example",
     new MemoryStore(),
     async (url, init) => {
-      assert.equal(url, "https://wien.example/v1/plans");
+      assert.equal(url, "https://wien.example/v1/storefront");
       assert.equal(new Headers(init?.headers).has("Authorization"), false);
-      return Response.json(body);
+      return Response.json({ ...details, plans: body });
     },
   );
-  assert.deepEqual(await client.plans(), [plan]);
+  assert.deepEqual(await client.storefront(), { ...details, plans: [plan] });
   for (const change of [
     { price_minor: -1 },
     { price_minor: 1.5 },
@@ -181,10 +198,10 @@ test("catalog accepts server-defined tiers and validates prices and policies", a
     { features: [42] },
   ]) {
     body = [{ ...plan, ...change }];
-    await assert.rejects(client.plans(), /Invalid subscription catalog/);
+    await assert.rejects(client.storefront(), /Invalid subscription catalog/);
   }
   body = [plan, plan];
-  await assert.rejects(client.plans(), /Invalid subscription catalog/);
+  await assert.rejects(client.storefront(), /Invalid subscription catalog/);
 });
 
 test("profile accepts a new backend plan but rejects a mismatched tier", async () => {

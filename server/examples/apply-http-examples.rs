@@ -1,4 +1,4 @@
-//! Compatibility step for httpgenerator 1.1.0, which ignores JSON request examples.
+//! Compatibility step for httpgenerator 1.1.0, which ignores request examples.
 //! Routes, headers, variables, and filenames still come from httpgenerator.
 use std::{env, fs, io, path::Path};
 
@@ -52,8 +52,18 @@ fn apply_example(spec: &Value, path: &Path) -> Result<(), Box<dyn std::error::Er
     } else {
         source
     };
+    let content = &operation["requestBody"]["content"];
+    let form = content.get("application/x-www-form-urlencoded");
+    let source = if form.is_some() {
+        source.replace(
+            "@contentType = application/json",
+            "@contentType = application/x-www-form-urlencoded",
+        )
+    } else {
+        source
+    };
     let lines: Vec<_> = source.lines().collect();
-    let media = &operation["requestBody"]["content"]["application/json"];
+    let media = form.unwrap_or(&content["application/json"]);
     let Some(example) = media.get("example") else {
         fs::write(path, format!("{}\n", source.trim_end()))?;
         return Ok(());
@@ -73,7 +83,11 @@ fn apply_example(spec: &Value, path: &Path) -> Result<(), Box<dyn std::error::Er
         format!(
             "{}\n\n{}\n",
             lines[..end_headers].join("\n"),
-            serde_json::to_string_pretty(example)?
+            if form.is_some() {
+                example.as_str().ok_or_else(invalid)?.to_owned()
+            } else {
+                serde_json::to_string_pretty(example)?
+            }
         ),
     )?;
     Ok(())

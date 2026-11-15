@@ -1,0 +1,192 @@
+//! Robokassa protocol only; order ownership and fulfillment live in payments.
+use sha2::{Digest, Sha256};
+use std::collections::{BTreeMap, HashSet};
+use subtle::ConstantTimeEq;
+use url::Url;
+
+pub struct TestConfig {
+    pub merchant_login: String,
+    password1: String,
+    password2: String,
+    pub test_users: HashSet<String>,
+}
+impl TestConfig {
+    pub fn new(
+        merchant_login: String,
+        password1: String,
+        password2: String,
+        test_users: HashSet<String>,
+    ) -> Result<Self, &'static str> {
+        if merchant_login.is_empty()
+            || merchant_login.len() > 100
+            || !merchant_login
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-')
+            || password1.len() < 8
+            || password2.len() < 8
+            || password1 == password2
+            || [&password1, &password2]
+                .iter()
+                .any(|s| s.len() > 256 || s.contains(':') || s.chars().any(char::is_control))
+            || test_users.is_empty()
+            || test_users.iter().any(|s| !crate::users::valid_username(s))
+        {
+            return Err(
+                "Invalid Robokassa test configuration. Set merchant login, distinct test passwords (8+ characters), and test usernames.",
+            );
+        }
+        Ok(Self {
+            merchant_login,
+            password1,
+            password2,
+            test_users,
+        })
+    }
+    pub fn from_env() -> Result<Option<Self>, &'static str> {
+        match std::env::var("WIEN_PAYMENTS_MODE")
+            .as_deref()
+            .unwrap_or("disabled")
+        {
+            "disabled" | "" => Ok(None),
+            "test" => {
+                let get = |key| {
+                    std::env::var(key).map_err(|_| "Missing Robokassa test environment variables.")
+                };
+                Ok(Some(Self::new(
+                    get("ROBOKASSA_MERCHANT_LOGIN")?,
+                    get("ROBOKASSA_TEST_PASSWORD1")?,
+                    get("ROBOKASSA_TEST_PASSWORD2")?,
+                    get("ROBOKASSA_TEST_USERS")?
+                        .split(',')
+                        .map(str::trim)
+                        .map(str::to_owned)
+                        .collect(),
+                )?))
+            }
+            _ => Err(
+                "WIEN_PAYMENTS_MODE must be disabled or test. Live payments are not implemented.",
+            ),
+        }
+    }
+    pub fn checkout_url(&self, invoice: i64, id: &str, amount_minor: i64, name: &str) -> String {
+        let amount = format!("{}.{:02}", amount_minor / 100, amount_minor % 100);
+        let invoice = invoice.to_string();
+        let signature = hash(&format!(
+            "{}:{amount}:{invoice}:{}:Shp_mode=test:Shp_order={id}",
+            self.merchant_login, self.password1
+        ));
+        let mut url =
+            Url::parse("https://auth.robokassa.ru/Merchant/Index.aspx").expect("constant URL");
+        url.query_pairs_mut().extend_pairs([
+            ("MerchantLogin", self.merchant_login.as_str()),
+            ("OutSum", amount.as_str()),
+            ("InvId", invoice.as_str()),
+            ("Description", format!("Wien: {name}, один месяц").as_str()),
+            ("Culture", "ru"),
+            ("IsTest", "1"),
+            ("SignatureValue", signature.as_str()),
+            ("Shp_mode", "test"),
+            ("Shp_order", id),
+        ]);
+        url.to_string()
+    }
+    pub fn verify(&self, fields: Vec<(String, String)>) -> Result<Notification, &'static str> {
+        let mut values = BTreeMap::new();
+        for (key, value) in fields {
+            if values.insert(key, value).is_some() {
+                return Err("Duplicate callback field");
+            }
+        }
+        let get = |key: &str| {
+            values
+                .get(key)
+                .map(String::as_str)
+                .ok_or("Missing callback field")
+        };
+        if values
+            .keys()
+            .any(|k| k.starts_with("Shp_") && k != "Shp_mode" && k != "Shp_order")
+            || get("Shp_mode")? != "test"
+        {
+            return Err("Unexpected callback parameters");
+        }
+        let id = get("Shp_order")?;
+        if !valid_id(id) {
+            return Err("Invalid order ID");
+        }
+        let amount = get("OutSum")?;
+        let amount_minor = amount_minor(amount).ok_or("Invalid amount")?;
+        let invoice = get("InvId")?;
+        if invoice.is_empty() || invoice.len() > 19 || !invoice.bytes().all(|c| c.is_ascii_digit())
+        {
+            return Err("Invalid invoice");
+        }
+        let invoice_id = invoice
+            .parse::<i64>()
+            .ok()
+            .filter(|v| *v > 0)
+            .ok_or("Invalid invoice")?;
+        let signature = get("SignatureValue")?;
+        let expected = hash(&format!(
+            "{amount}:{invoice}:{}:Shp_mode=test:Shp_order={id}",
+            self.password2
+        ));
+        if signature.len() != 64
+            || !signature.bytes().all(|c| c.is_ascii_hexdigit())
+            || !bool::from(
+                expected
+                    .as_bytes()
+                    .ct_eq(signature.to_ascii_lowercase().as_bytes()),
+            )
+        {
+            return Err("Invalid signature");
+        }
+        Ok(Notification {
+            invoice_id,
+            order_id: id.into(),
+            amount_minor,
+        })
+    }
+}
+pub struct Notification {
+    pub invoice_id: i64,
+    pub order_id: String,
+    pub amount_minor: i64,
+}
+pub fn valid_id(id: &str) -> bool {
+    id.len() == 36
+        && id.bytes().enumerate().all(|(i, c)| {
+            if [8, 13, 18, 23].contains(&i) {
+                c == b'-'
+            } else {
+                c.is_ascii_hexdigit()
+            }
+        })
+}
+fn hash(value: &str) -> String {
+    format!("{:x}", Sha256::digest(value.as_bytes()))
+}
+fn amount_minor(value: &str) -> Option<i64> {
+    if value.len() > 24 {
+        return None;
+    }
+    let (whole, fraction) = value.split_once('.').unwrap_or((value, ""));
+    if whole.is_empty()
+        || !whole.bytes().all(|c| c.is_ascii_digit())
+        || fraction.len() > 6
+        || !fraction.bytes().all(|c| c.is_ascii_digit())
+        || fraction.bytes().skip(2).any(|c| c != b'0')
+    {
+        return None;
+    }
+    let mut cents = fraction.bytes().take(2).map(|c| (c - b'0') as i64);
+    let decimal = cents.next().unwrap_or(0) * 10 + cents.next().unwrap_or(0);
+    whole
+        .parse::<i64>()
+        .ok()?
+        .checked_mul(100)?
+        .checked_add(decimal)
+        .filter(|n| *n > 0)
+}
+#[cfg(test)]
+mod tests;

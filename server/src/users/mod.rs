@@ -11,6 +11,7 @@ pub struct Profile {
     pub tier: String,
     pub plan: crate::plans::Plan,
     pub assist_requests_remaining: i32,
+    pub subscription_expires_at: Option<String>,
     pub audio_requests_used: i64,
     pub assist_requests_used: i64,
 }
@@ -26,8 +27,18 @@ pub(crate) struct User {
 impl User {
     pub async fn profile(&self, pool: &PgPool) -> Result<Profile, sqlx::Error> {
         let subscription = crate::subscriptions::get(pool, &self.id).await?;
+        let (limit,audio,expires): (Option<i32>,Option<bool>,Option<OffsetDateTime>) = sqlx::query_as("SELECT period_request_limit,period_audio_enabled,period_ends_at FROM subscriptions WHERE user_id=$1::uuid").bind(&self.id).fetch_one(pool).await?;
+        let mut plan = crate::plans::get(pool, &subscription.tier).await?;
+        if let Some(limit) = limit {
+            plan.initial_assist_requests = Some(limit);
+        }
+        if let Some(audio) = audio {
+            plan.audio_enabled = audio;
+        }
         Ok(Profile {
-            plan: crate::plans::get(pool, &subscription.tier).await?,
+            plan,
+            subscription_expires_at: expires
+                .map(|t| t.format(&Rfc3339).expect("valid database timestamp")),
             tier: subscription.tier,
             assist_requests_remaining: subscription.assist_requests_remaining,
             audio_requests_used: subscription.audio_requests_used,

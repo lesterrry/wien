@@ -53,7 +53,7 @@ impl Reservation {
     ) -> Result<Self, ReserveError> {
         let mut tx = pool.begin().await?;
         let (remaining, allowance, audio_enabled, expired): (i32, Option<i32>, bool, bool) = sqlx::query_as(
-            "SELECT s.assist_requests_remaining,p.initial_assist_requests,p.audio_enabled,COALESCE(s.period_ends_at <= now(), false) FROM subscriptions s JOIN plans p ON p.id=s.tier WHERE s.user_id=$1::uuid FOR UPDATE OF s NOWAIT",
+            "SELECT s.assist_requests_remaining,COALESCE(s.period_request_limit,p.initial_assist_requests),COALESCE(s.period_audio_enabled,p.audio_enabled),COALESCE(s.period_ends_at <= now(), false) FROM subscriptions s JOIN plans p ON p.id=s.tier WHERE s.user_id=$1::uuid FOR UPDATE OF s NOWAIT",
         ).bind(user_id).fetch_one(&mut *tx).await?;
         if audio && !audio_enabled {
             return Err(ReserveError::AudioRequiresPlan);

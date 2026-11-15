@@ -23,9 +23,9 @@ pub struct Plan {
     pub features_ru: Option<Vec<String>>,
 }
 
-pub async fn list(pool: &PgPool) -> Result<Vec<Plan>, sqlx::Error> {
+pub async fn list<'e>(executor: impl sqlx::PgExecutor<'e>) -> Result<Vec<Plan>, sqlx::Error> {
     sqlx::query_as("SELECT * FROM plans WHERE visible ORDER BY display_order, id")
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
 }
 

@@ -2,9 +2,10 @@ import type {
   Credentials,
   PasswordChange,
   Registration,
-  SubscriptionPlan,
   UserProfile,
 } from "./account";
+import { type PaymentRequest, parsePaymentOrder, paymentId } from "./payments";
+import { parsePlan } from "./plans";
 import { parseStorefront, type Storefront } from "./storefront";
 
 export interface TokenStore {
@@ -13,6 +14,18 @@ export interface TokenStore {
 }
 
 const messages: Record<string, string> = {
+  payments_unavailable: "Оплата пока недоступна. Попробуйте позже.",
+  test_payments_only: "Тестовая оплата доступна только тестовым аккаунтам.",
+  invalid_payment_request: "Некорректные параметры платежа.",
+  order_not_found: "Заказ не найден в вашем аккаунте.",
+  order_pending:
+    "У вас уже есть незавершённый заказ. Продолжите оплату или отмените его во вкладке «Платежи».",
+  subscription_active:
+    "Подписка ещё действует. Новый месяц можно купить после её окончания.",
+  order_request_conflict: "Условия заказа изменились. Откройте тарифы заново.",
+  payment_terms_changed:
+    "Условия тарифа изменились. Откройте тарифы заново и подтвердите актуальные условия.",
+  payment_rate_limited: "Слишком много заказов. Попробуйте через час.",
   captcha_failed: "Verification expired or failed. Complete it again.",
   registration_unavailable:
     "Registration verification is unavailable. Please try again later.",
@@ -39,6 +52,10 @@ function profile(value: unknown): UserProfile {
     !("created_at" in value) ||
     typeof value.created_at !== "string" ||
     !Number.isFinite(Date.parse(value.created_at)) ||
+    ("subscription_expires_at" in value &&
+      value.subscription_expires_at !== null &&
+      (typeof value.subscription_expires_at !== "string" ||
+        !Number.isFinite(Date.parse(value.subscription_expires_at)))) ||
     !("tier" in value) ||
     typeof value.tier !== "string" ||
     !("plan" in value) ||
@@ -66,6 +83,13 @@ function profile(value: unknown): UserProfile {
     created_at: value.created_at,
     tier: value.tier as UserProfile["tier"],
     assist_requests_remaining: value.assist_requests_remaining,
+    ...("subscription_expires_at" in value
+      ? {
+          subscription_expires_at: value.subscription_expires_at as
+            | string
+            | null,
+        }
+      : {}),
     // Usage counters were introduced later; keep text Assist usable during rollout.
     assist_requests_used:
       "assist_requests_used" in value
@@ -172,17 +196,43 @@ export class AccountClient {
   changePassword(request: PasswordChange) {
     return this.signedIn("/users/me/password", request, true);
   }
+  async paymentOrders() {
+    const value = await this.call(
+      "/v1/payments/orders",
+      "GET",
+      undefined,
+      true,
+    );
+    if (!Array.isArray(value)) throw new Error("Не удалось загрузить платежи.");
+    return value.map(parsePaymentOrder);
+  }
+  async paymentOrder(id: string) {
+    return parsePaymentOrder(
+      await this.call(
+        `/v1/payments/orders/${paymentId(id)}`,
+        "GET",
+        undefined,
+        true,
+      ),
+    );
+  }
+  async paymentCreate(request: PaymentRequest) {
+    return parsePaymentOrder(
+      await this.call("/v1/payments/orders", "POST", request, true),
+    );
+  }
+  async paymentCancel(id: string) {
+    return parsePaymentOrder(
+      await this.call(
+        `/v1/payments/orders/${paymentId(id)}/cancel`,
+        "POST",
+        undefined,
+        true,
+      ),
+    );
+  }
   async storefront(): Promise<Storefront> {
     return parseStorefront(await this.call("/v1/storefront", "GET"));
-  }
-  async plans(): Promise<SubscriptionPlan[]> {
-    const result = await this.call("/v1/plans", "GET");
-    if (!Array.isArray(result))
-      throw new Error("Invalid subscription catalog.");
-    const plans = result.map(parsePlan);
-    if (new Set(plans.map((plan) => plan.id)).size !== plans.length)
-      throw new Error("Invalid subscription catalog.");
-    return plans;
   }
   async current(): Promise<UserProfile | null> {
     if (this.store && !(await this.store.read())) return null;
@@ -199,47 +249,4 @@ export class AccountClient {
       await this.call("/auth/logout", "POST", undefined, true);
     await this.store?.write(null);
   }
-}
-
-function parsePlan(value: unknown): SubscriptionPlan {
-  const invalid = () => new Error("Invalid subscription catalog.");
-  if (!value || typeof value !== "object") throw invalid();
-  const p = value as Record<string, unknown>;
-  if (
-    typeof p.id !== "string" ||
-    !/^[a-z][a-z0-9_]*$/.test(p.id) ||
-    typeof p.name !== "string" ||
-    !p.name.trim() ||
-    typeof p.description !== "string" ||
-    !Array.isArray(p.features) ||
-    !p.features.every((f) => typeof f === "string") ||
-    typeof p.price_minor !== "number" ||
-    !Number.isSafeInteger(p.price_minor) ||
-    p.price_minor < 0 ||
-    typeof p.currency !== "string" ||
-    !/^[A-Z]{3}$/.test(p.currency) ||
-    typeof p.currency_minor_units !== "number" ||
-    !Number.isInteger(p.currency_minor_units) ||
-    p.currency_minor_units < 0 ||
-    p.currency_minor_units > 4 ||
-    typeof p.billing_period !== "string" ||
-    !["none", "month", "year"].includes(p.billing_period) ||
-    (p.initial_assist_requests !== null &&
-      (typeof p.initial_assist_requests !== "number" ||
-        !Number.isSafeInteger(p.initial_assist_requests) ||
-        p.initial_assist_requests < 0)) ||
-    typeof p.audio_enabled !== "boolean" ||
-    typeof p.is_default !== "boolean" ||
-    (p.ai_usage_multiplier != null &&
-      (typeof p.ai_usage_multiplier !== "number" ||
-        !Number.isSafeInteger(p.ai_usage_multiplier) ||
-        p.ai_usage_multiplier <= 0)) ||
-    (p.name_ru != null && typeof p.name_ru !== "string") ||
-    (p.description_ru != null && typeof p.description_ru !== "string") ||
-    (p.features_ru != null &&
-      (!Array.isArray(p.features_ru) ||
-        !p.features_ru.every((item) => typeof item === "string")))
-  )
-    throw invalid();
-  return value as SubscriptionPlan;
 }

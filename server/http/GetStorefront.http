@@ -3,10 +3,10 @@
 @baseUrl = http://127.0.0.1:3001
 @contentType = application/json
 
-#############################################################################
+#############################################################################################
 ### Request: GET /v1/storefront
-### Summary: Public seller details and purchase terms, without credentials.
-#############################################################################
+### Summary: Public plans, seller details, purchase terms and payment mode. No credentials.
+#############################################################################################
 
 
 GET {{baseUrl}}/v1/storefront
