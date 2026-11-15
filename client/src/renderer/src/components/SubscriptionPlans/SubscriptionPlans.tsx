@@ -236,6 +236,11 @@ export function SubscriptionPlans({
           </section>
         ) : (
           <>
+            <p>
+              Wien — AI-first редактор музыки. Создавайте и изменяйте
+              Strudel-код по текстовому запросу, анализируйте готовое аудио и
+              экспортируйте свою работу.
+            </p>
             <p className={styles.intro}>
               {exhausted
                 ? "Вы использовали доступные запросы ИИ."

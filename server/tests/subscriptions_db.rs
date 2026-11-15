@@ -728,7 +728,8 @@ async fn storefront_exposes_public_seller_details_and_request_limits(pool: PgPoo
     assert_eq!(details["seller"]["support_email"], "mail@aydar.media");
     assert_eq!(details["seller"]["support_phone"], Value::Null);
     assert_eq!(details["terms"]["renewal_mode"], "manual");
-    assert_eq!(details["terms"]["documents_published"], false);
+    assert_eq!(details["terms"]["documents_published"], true);
+    assert_eq!(details["terms"]["document_version"], "2026-11-15.1");
     assert!(details.get("singleton").is_none());
     assert_eq!(details["payments"], json!({"mode":"disabled"}));
     assert_eq!(details.as_object().unwrap().len(), 4);

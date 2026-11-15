@@ -12,8 +12,8 @@ export const storefront = {
   },
   terms: {
     accounts_location: "Российская Федерация",
-    document_version: "2026-11-15",
-    documents_published: false,
+    document_version: "2026-11-15.1",
+    documents_published: true,
     renewal_mode: "manual",
     ai_usage_policy:
       "Один успешный запрос, включая аудио, расходует один запрос из общего лимита. Ошибки не списываются. Продление вручную.",

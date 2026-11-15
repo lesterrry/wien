@@ -37,6 +37,13 @@ const returnOrderId = (() => {
 })();
 const paymentReturned =
   paymentQuery.has("payment") || paymentQuery.has("billing");
+const initialBillingTab: BillingTab = (() => {
+  if (paymentQuery.has("payment")) return "payments";
+  const tab = paymentQuery.get("billing");
+  if (tab === "plans" || tab === "offer" || tab === "privacy") return tab;
+  // Preserve Robokassa's /?billing=1 return link.
+  return paymentReturned ? "payments" : "plans";
+})();
 const errorMessage = (error: unknown) =>
   String(error instanceof Error ? error.message : error).replace(
     /^Error invoking remote method '[^']+': Error: /,
@@ -79,9 +86,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   const [notice, setNotice] = useState("");
 
   const [plansOpen, setPlansOpen] = useState(paymentReturned);
-  const [plansTab, setPlansTab] = useState<BillingTab>(
-    paymentReturned ? "payments" : "plans",
-  );
+  const [plansTab, setPlansTab] = useState<BillingTab>(initialBillingTab);
   const [upgradeReason, setUpgradeReason] = useState<"audio">();
   const resumePayment = useRef(false);
   const refreshVersion = useRef(0);

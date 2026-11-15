@@ -136,6 +136,10 @@ try {
   await expect(
     dialog.getByRole("heading", { name: "Публичная оферта" }),
   ).toBeVisible();
+  await expect(dialog).not.toContainText("Проект условий");
+  await expect(dialog).toContainText(
+    "Смена тарифа и покупка дополнительного лимита",
+  );
   await dialog
     .getByRole("tab", { name: "Политика данных", exact: true })
     .click();
@@ -221,6 +225,33 @@ try {
   await expect(dialog.getByRole("status")).toHaveText(
     "Тарифы пока недоступны.",
   );
+  // Moderators and customers can open published documents without an account.
+  // They remain dialogs over the editor; legacy payment return links still work.
+  catalog = plans;
+  for (const [query, tab] of [
+    ["plans", "Тарифы"],
+    ["offer", "Условия покупки"],
+    ["privacy", "Политика данных"],
+    ["1", "Платежи"],
+  ]) {
+    await page.goto(`${origin}/?billing=${query}`);
+    await expect(
+      dialog.getByRole("tab", { name: tab, exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
+    await expect(dialog).toContainText(storefront.seller.inn);
+    await expect(dialog).not.toContainText("Проект условий");
+    await expect(dialog).not.toContainText("Проект документа");
+    if (query === "offer" || query === "privacy") {
+      await page.screenshot({
+        path: path.join(artifacts, `${query}-published-mobile.png`),
+      });
+    }
+    await dialog.getByRole("button", { name: "Close dialog" }).click();
+    await expect(
+      page.getByLabel("Strudel code editor", { exact: true }),
+    ).toBeVisible();
+  }
+  assert.equal(page.context().pages().length, 1);
   assert.deepEqual(errors, []);
   assert.deepEqual(obsoleteReads, []);
   console.log(
