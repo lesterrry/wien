@@ -87,7 +87,7 @@ export function Offer({
   onNavigate: (tab: "plans" | "offer" | "privacy") => void;
 }) {
   return (
-    <article className="legal">
+    <article className="legal" lang="ru">
       <p className="eyebrow">
         Условия сервиса · редакция {store.terms.document_version}
       </p>
@@ -177,7 +177,7 @@ export function Offer({
 
 export function Privacy({ store }: { store: Storefront }) {
   return (
-    <article className="legal">
+    <article className="legal" lang="ru">
       <p className="eyebrow">
         Данные и конфиденциальность · редакция {store.terms.document_version}
       </p>
@@ -238,13 +238,6 @@ export function Privacy({ store }: { store: Storefront }) {
         {store.terms.accounts_location}. Проекты редактора хранятся локально: в
         браузере на устройстве либо в выбранной папке настольного приложения.
         Контекст, отправленный помощнику, передаётся серверу для обработки.
-      </p>
-      <p>
-        Для работы сервиса привлекаются внешние поставщики: инфраструктура
-        Cloudflare и проверка регистрации Turnstile, поставщик доступа к моделям
-        ИИ AI Tunnel; для оплаты — Robokassa. Объём передаваемых данных зависит
-        от используемой функции. Размещение основной базы в РФ не означает, что
-        все внешние поставщики обрабатывают данные исключительно в РФ.
       </p>
       <h2>5. Сроки и удаление</h2>
       <p>

@@ -1,6 +1,7 @@
 import { Check, ChevronRight, RotateCcw } from "lucide-react";
 import { useId, useState } from "react";
 import type { VersionEntry } from "../../../../shared/types";
+import { formatLocale, t, useLocale } from "../../i18n";
 import styles from "./VersionsPanel.module.css";
 
 interface Props {
@@ -24,11 +25,12 @@ export function VersionsPanel({
   onSelect,
   onRetry,
 }: Props) {
+  useLocale();
   const [message, setMessage] = useState("");
   const [expanded, setExpanded] = useState(false);
   const contentId = useId();
   return (
-    <section className={styles.panel} aria-label="Versions">
+    <section className={styles.panel} aria-label={t("Versions")}>
       <button
         type="button"
         className={styles.heading}
@@ -36,15 +38,15 @@ export function VersionsPanel({
         aria-controls={contentId}
         onClick={() => setExpanded((value) => !value)}
       >
-        <span>Versions</span>
+        <span>{t("Versions")}</span>
         <ChevronRight size={13} aria-hidden="true" />
       </button>
       <div id={contentId} hidden={!expanded}>
         {error && (
           <p role="status">
-            Versions unavailable: {error}{" "}
+            {t("Versions unavailable:")} {t(error)}{" "}
             <button type="button" disabled={disabled} onClick={onRetry}>
-              Retry
+              {t("Retry")}
             </button>
           </p>
         )}
@@ -56,7 +58,7 @@ export function VersionsPanel({
             onClick={() => onSelect(null)}
           >
             <RotateCcw size={14} aria-hidden="true" />
-            Return to working state
+            {t("Return to working state")}
           </button>
         ) : (
           <form
@@ -69,8 +71,8 @@ export function VersionsPanel({
             }}
           >
             <input
-              aria-label="Version message"
-              placeholder="Version message"
+              aria-label={t("Version message")}
+              placeholder={t("Version message")}
               value={message}
               onChange={(event) => setMessage(event.target.value)}
               disabled={disabled || Boolean(error)}
@@ -79,7 +81,7 @@ export function VersionsPanel({
               type="submit"
               disabled={disabled || Boolean(error) || !message.trim()}
             >
-              Save
+              {t("Save")}
             </button>
           </form>
         )}
@@ -101,7 +103,9 @@ export function VersionsPanel({
                     <span className={styles.versionLabel}>
                       {version.message}
                       <small>
-                        {new Date(version.timestamp * 1000).toLocaleString()}
+                        {new Date(version.timestamp * 1000).toLocaleString(
+                          formatLocale(),
+                        )}
                       </small>
                     </span>
                     {selected === version.oid && (

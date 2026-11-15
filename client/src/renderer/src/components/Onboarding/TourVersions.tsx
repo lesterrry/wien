@@ -1,8 +1,10 @@
 import { Check, History, RotateCcw, Save } from "lucide-react";
 import { useState } from "react";
+import { t, useLocale } from "../../i18n";
 import styles from "./Onboarding.module.css";
 
 export function TourVersions() {
+  useLocale();
   const [message, setMessage] = useState("");
   const [versions, setVersions] = useState([
     { id: 3, message: "A little more space" },
@@ -14,7 +16,7 @@ export function TourVersions() {
   return (
     <div className={styles.preview} data-tour-versions>
       <div className={styles.previewHeading}>
-        <History size={14} /> Versions
+        <History size={14} /> {t("Versions")}
       </div>
       <div className={styles.versionsDemo}>
         <form
@@ -29,8 +31,8 @@ export function TourVersions() {
           }}
         >
           <input
-            aria-label="Version message"
-            placeholder="What changed?"
+            aria-label={t("Version message")}
+            placeholder={t("What changed?")}
             value={message}
             onChange={(event) => setMessage(event.target.value)}
           />
@@ -39,7 +41,7 @@ export function TourVersions() {
             type="submit"
             disabled={!message.trim()}
           >
-            <Save size={13} /> Save version
+            <Save size={13} /> {t("Save version")}
           </button>
         </form>
         <div className={styles.versionList}>
@@ -50,7 +52,9 @@ export function TourVersions() {
               data-current={current === version.id || undefined}
             >
               <span className={styles.versionDot} />
-              <span>{version.message}</span>
+              <span>
+                {version.id <= 3 ? t(version.message) : version.message}
+              </span>
               <button
                 type="button"
                 className={styles.restoreButton}
@@ -62,13 +66,15 @@ export function TourVersions() {
                 ) : (
                   <RotateCcw size={12} />
                 )}
-                {current === version.id ? "Current" : "Restore"}
+                {current === version.id ? t("Current") : t("Restore")}
               </button>
             </div>
           ))}
         </div>
         <p className={styles.versionStatus} role="status">
-          Current version: {selected?.message}
+          {t("Current version:")}{" "}
+          {selected &&
+            (selected.id <= 3 ? t(selected.message) : selected.message)}
         </p>
       </div>
     </div>

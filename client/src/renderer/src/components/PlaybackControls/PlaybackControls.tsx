@@ -2,6 +2,7 @@ import type { ReplState } from "@strudel/codemirror";
 import classNames from "classnames";
 import { Loader2, MoreHorizontal, Play, Square, SquareX } from "lucide-react";
 import type { MouseEventHandler } from "react";
+import { t, useLocale } from "../../i18n";
 import { shortcut } from "../App/workspace-utils";
 import styles from "./PlaybackControls.module.css";
 
@@ -22,13 +23,14 @@ export function PlaybackControls({
   onActions: MouseEventHandler<HTMLButtonElement>;
   onStopAll?: () => void;
 }) {
+  useLocale();
   return (
     <>
       <button
         type="button"
         className={classNames(styles.iconButton, styles.stopButton)}
-        title={`Stop (${shortcut} .)`}
-        aria-label="Stop playback"
+        title={t("Stop ({p0} .)", { p0: shortcut })}
+        aria-label={t("Stop playback")}
         disabled={!playback.started}
         onClick={onStop}
       >
@@ -38,8 +40,8 @@ export function PlaybackControls({
         <button
           type="button"
           className={styles.iconButton}
-          aria-label="Stop all playback"
-          title={`Stop all (${shortcut} ⇧ .)`}
+          aria-label={t("Stop all playback")}
+          title={t("Stop all ({p0} ⇧ .)", { p0: shortcut })}
           onClick={onStopAll}
         >
           <SquareX size={16} />
@@ -49,7 +51,11 @@ export function PlaybackControls({
         type="button"
         className={styles.playButton}
         disabled={!path || playback.pending || busy}
-        title={path ? `Play / update ${path}` : "Open a file to play"}
+        title={
+          path
+            ? t("Play / update {p0}", { p0: path })
+            : t("Open a file to play")
+        }
         onClick={onPlay}
       >
         {playback.pending ? (
@@ -57,14 +63,14 @@ export function PlaybackControls({
         ) : (
           <Play size={13} fill="currentColor" />
         )}
-        <span>{playback.started ? "Update" : "Play"}</span>
+        <span>{playback.started ? t("Update") : t("Play")}</span>
         <kbd>{shortcut} ↵</kbd>
       </button>
       <button
         type="button"
         className={styles.iconButton}
-        title="Snippet actions"
-        aria-label="Snippet actions"
+        title={t("Snippet actions")}
+        aria-label={t("Snippet actions")}
         disabled={!path || busy}
         onClick={onActions}
       >

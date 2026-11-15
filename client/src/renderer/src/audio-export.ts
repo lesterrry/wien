@@ -3,6 +3,7 @@ import type {
   AudioExportProgress,
 } from "../../shared/audio-export";
 import type { ModuleGraph } from "../../shared/modules";
+import { t } from "./i18n";
 
 // Each export owns a document: Strudel's global controller and pooled nodes
 // must never be shared between the live AudioContext and an offline context.
@@ -15,7 +16,7 @@ export function renderAudio(
   return new Promise((resolve, reject) => {
     const frame = document.createElement("iframe");
     frame.hidden = true;
-    frame.title = "Audio export renderer";
+    frame.title = t("Audio export renderer");
     frame.src = new URL("audio-export.html", window.location.href).href;
     const channel = new MessageChannel();
     const cleanup = () => {
@@ -31,9 +32,9 @@ export function renderAudio(
       reject(error);
     };
     const abort = () =>
-      fail(new DOMException("Export cancelled.", "AbortError"));
+      fail(new DOMException(t("Export cancelled."), "AbortError"));
     const timeout = setTimeout(
-      () => fail(new Error("Could not start the audio renderer.")),
+      () => fail(new Error(t("Could not start the audio renderer."))),
       30000,
     );
     const ready = (event: MessageEvent) => {

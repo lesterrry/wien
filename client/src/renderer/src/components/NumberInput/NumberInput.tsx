@@ -1,4 +1,5 @@
 import { ChevronDown, ChevronUp } from "lucide-react";
+import { t, useLocale } from "../../i18n";
 import styles from "./NumberInput.module.css";
 
 export function NumberInput({
@@ -22,6 +23,7 @@ export function NumberInput({
   disabled?: boolean;
   onChange: (value: string) => void;
 }) {
+  useLocale();
   const numeric = Number(value);
   const step = (direction: number) => {
     const current = Number.isFinite(numeric) ? numeric : 0;
@@ -54,7 +56,7 @@ export function NumberInput({
         aria-valuemin={min}
         aria-valuemax={max}
         inputMode={integer ? "numeric" : "decimal"}
-        placeholder={optional ? "None" : undefined}
+        placeholder={optional ? t("None") : undefined}
         value={value}
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
@@ -67,7 +69,7 @@ export function NumberInput({
       <span className={styles.steps}>
         <button
           type="button"
-          aria-label={`Increase ${label.toLowerCase()}`}
+          aria-label={t("Increase {p0}", { p0: label.toLowerCase() })}
           disabled={
             disabled || (max !== undefined && value !== "" && numeric >= max)
           }
@@ -77,7 +79,7 @@ export function NumberInput({
         </button>
         <button
           type="button"
-          aria-label={`Decrease ${label.toLowerCase()}`}
+          aria-label={t("Decrease {p0}", { p0: label.toLowerCase() })}
           disabled={
             disabled || (min !== undefined && value !== "" && numeric <= min)
           }

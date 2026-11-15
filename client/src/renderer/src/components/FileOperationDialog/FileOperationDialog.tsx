@@ -1,6 +1,7 @@
 import { ArrowDownToLine, Loader2, Trash2 } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { type Entry, isWithin } from "../../../../shared/types";
+import { t, useLocale } from "../../i18n";
 import type { FileOperation } from "../App/workspace-types";
 import { Dialog } from "../Dialog/Dialog";
 
@@ -32,6 +33,7 @@ export function FileOperationDialog({
   onSubmit: () => void;
   onClose: () => void;
 }) {
+  useLocale();
   const modalNameInput = useRef<HTMLInputElement>(null);
   useEffect(() => {
     const input = modalNameInput.current;
@@ -49,17 +51,17 @@ export function FileOperationDialog({
   const title =
     modal.kind === "create"
       ? modal.folder
-        ? "New folder"
-        : "New snippet"
+        ? t("New folder")
+        : t("New snippet")
       : modal.kind === "reload"
-        ? "Reload saved file?"
+        ? t("Reload saved file?")
         : modal.kind === "rename"
-          ? "Rename"
+          ? t("Rename")
           : modal.kind === "move"
-            ? "Move to folder"
+            ? t("Move to folder")
             : window.workspace.platform === "web"
-              ? "Delete?"
-              : "Move to Trash?";
+              ? t("Delete?")
+              : t("Move to Trash?");
 
   return (
     <Dialog
@@ -77,26 +79,27 @@ export function FileOperationDialog({
       >
         {modal.kind === "reload" ? (
           <p>
-            Unsaved edits will be discarded. Copy anything you want to keep
-            before reloading the saved file.
+            {t(
+              "Unsaved edits will be discarded. Copy anything you want to keep before reloading the saved file.",
+            )}
           </p>
         ) : modal.kind === "delete" ? (
           <p>
             <strong>{modal.entry.name}</strong>
-            {modal.entry.children ? " and everything inside it" : ""}
+            {modal.entry.children ? t(" and everything inside it") : ""}
             {window.workspace.platform === "web"
-              ? " will be permanently deleted from this browser project."
-              : " will move to your computer’s Trash."}
+              ? t(" will be permanently deleted from this browser project.")
+              : t(" will move to your computer’s Trash.")}
           </p>
         ) : modal.kind === "move" ? (
           <>
-            <label htmlFor="destination">Destination</label>
+            <label htmlFor="destination">{t("Destination")}</label>
             <select
               id="destination"
               value={value}
               onChange={(event) => onValue(event.target.value)}
             >
-              <option value="">Project root</option>
+              <option value="">{t("Project root")}</option>
               {folders(entries)
                 .filter((entry) => !isWithin(entry.id, modal.entry.id))
                 .map((entry) => (
@@ -109,7 +112,9 @@ export function FileOperationDialog({
         ) : (
           <>
             <label htmlFor="item-name">
-              {modal.kind === "create" && modal.folder ? "Folder name" : "Name"}
+              {modal.kind === "create" && modal.folder
+                ? t("Folder name")
+                : t("Name")}
             </label>
             <input
               id="item-name"
@@ -120,14 +125,16 @@ export function FileOperationDialog({
             />
             <p className={styles.fieldHint}>
               {modal.kind === "create"
-                ? `In ${modal.parent || projectName || "project root"}`
-                : "Use .strudel or .js for snippets."}
+                ? t("In {p0}", {
+                    p0: modal.parent || projectName || t("project root"),
+                  })
+                : t("Use .strudel or .js for snippets.")}
             </p>
           </>
         )}
         {modalError && (
           <p role="alert" className={styles.formError}>
-            {modalError}
+            {t(modalError)}
           </p>
         )}
         <div className={styles.dialogActions}>
@@ -137,7 +144,7 @@ export function FileOperationDialog({
             disabled={busy}
             onClick={onClose}
           >
-            Cancel
+            {t("Cancel")}
           </button>
           <button
             type="submit"
@@ -156,16 +163,16 @@ export function FileOperationDialog({
               <ArrowDownToLine size={14} />
             )}
             {modal.kind === "create"
-              ? "Create"
+              ? t("Create")
               : modal.kind === "delete"
                 ? window.workspace.platform === "web"
-                  ? "Delete"
-                  : "Move to Trash"
+                  ? t("Delete")
+                  : t("Move to Trash")
                 : modal.kind === "move"
-                  ? "Move"
+                  ? t("Move")
                   : modal.kind === "reload"
-                    ? "Discard and reload"
-                    : "Rename"}
+                    ? t("Discard and reload")
+                    : t("Rename")}
           </button>
         </div>
       </form>

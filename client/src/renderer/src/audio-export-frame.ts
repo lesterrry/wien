@@ -10,6 +10,7 @@ import {
   exportSampleRate,
 } from "../../shared/audio-export";
 import type { ModuleGraph } from "../../shared/modules";
+import { t } from "./i18n";
 import { compileGraph } from "./module-compiler";
 import { registerStandardSounds } from "./standard-sounds";
 
@@ -31,7 +32,7 @@ async function render(
 ) {
   const progress = (phase: string, fraction: number) =>
     port.postMessage({ type: "progress", progress: { phase, fraction } });
-  progress("Preparing sounds…", 0);
+  progress(t("Preparing sounds…"), 0);
   await core.evalScope(core, mini, tonal, audio);
   await registerStandardSounds();
   const compiled = compileGraph(graph, transpiler);
@@ -52,7 +53,7 @@ async function render(
     repl.stop();
   }
   if (!pattern?.queryArc)
-    throw new Error("End the snippet with a playable pattern.");
+    throw new Error(t("End the snippet with a playable pattern."));
   const duration = exportDuration(options, cps);
   await audio.getAudioContext().close();
   const context = new OfflineAudioContext(
@@ -74,7 +75,9 @@ async function render(
     hap.ensureObjectValue();
     if (hap.value.cps !== undefined && Number(hap.value.cps) !== cps)
       throw new Error(
-        "WAV export currently requires a constant tempo. Use setcps or setcpm.",
+        t(
+          "WAV export currently requires a constant tempo. Use setcps or setcpm.",
+        ),
       );
     const begin = Number(hap.whole.begin) / cps;
     await audio.superdough(
@@ -85,22 +88,25 @@ async function render(
       begin,
     );
     if (i % 32 === 0) {
-      progress("Loading and arranging sounds…", (0.2 * (i + 1)) / haps.length);
+      progress(
+        t("Loading and arranging sounds…"),
+        (0.2 * (i + 1)) / haps.length,
+      );
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
   }
-  progress("Rendering audio…", 0.2);
+  progress(t("Rendering audio…"), 0.2);
   const timer = setInterval(
     () =>
       progress(
-        "Rendering audio…",
+        t("Rendering audio…"),
         0.2 + (0.75 * context.currentTime) / duration,
       ),
     150,
   );
   try {
     const buffer = await context.startRendering();
-    progress("Encoding WAV…", 0.96);
+    progress(t("Encoding WAV…"), 0.96);
     const wav = encodeWav(
       [buffer.getChannelData(0), buffer.getChannelData(1)],
       options.normalize,

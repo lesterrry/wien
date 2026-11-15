@@ -28,6 +28,7 @@ import {
   type Document,
   useSnippetSessions,
 } from "../../hooks/useSnippetSessions";
+import { t, useLocale } from "../../i18n";
 import { useAccount } from "../Account/Account";
 import { AppMenu } from "../AppMenu/AppMenu";
 import { AudioExportDialog } from "../AudioExportDialog/AudioExportDialog";
@@ -58,6 +59,7 @@ import { findEntry, markExports, message } from "./workspace-utils";
 
 const api = window.workspace;
 export function App() {
+  useLocale();
   const {
     user,
     resolved: accountResolved,
@@ -467,7 +469,7 @@ export function App() {
               try {
                 if (
                   (await api.versionChanged()) &&
-                  !window.confirm("Discard edits made in this version?")
+                  !window.confirm(t("Discard edits made in this version?"))
                 ) {
                   api.cancelClose();
                   return;
@@ -550,7 +552,7 @@ export function App() {
         ? next.entry.name
         : next.kind === "create"
           ? next.folder
-            ? "New folder"
+            ? t("New folder")
             : "untitled.strudel"
           : "",
     );
@@ -729,7 +731,7 @@ export function App() {
         try {
           if (
             (await api.versionChanged()) &&
-            !window.confirm("Discard edits made in this version?")
+            !window.confirm(t("Discard edits made in this version?"))
           )
             return;
           await removeSessions(tabsRef.current);
@@ -784,7 +786,7 @@ export function App() {
       if (
         selectedVersion &&
         (await api.versionChanged()) &&
-        !window.confirm("Discard edits made in this version?")
+        !window.confirm(t("Discard edits made in this version?"))
       )
         return;
       cancelLiveUpdate();
@@ -867,7 +869,7 @@ export function App() {
         }
       } else if (modal.kind === "rename") {
         if (value.includes("/"))
-          throw new Error("Enter a name without slashes.");
+          throw new Error(t("Enter a name without slashes."));
         await move(modal.entry.id, joinPath(parentPath(modal.entry.id), value));
       } else if (modal.kind === "move") {
         await move(modal.entry.id, joinPath(value, modal.entry.name));
@@ -1014,7 +1016,7 @@ export function App() {
     if (busyRef.current || dialogOpen) return;
     if (command.startsWith("tab")) {
       const tabs = window.document.querySelectorAll<HTMLButtonElement>(
-        '[role="tablist"][aria-label="Open snippets"] [role="tab"]',
+        '[data-snippet-tabs] [role="tab"]',
       );
       const number = Number(command.slice(3));
       tabs[number === 9 ? tabs.length - 1 : number - 1]?.click();
@@ -1313,7 +1315,7 @@ export function App() {
               ? `tab-${encodeURIComponent(document.path)}`
               : undefined
         }
-        aria-label={graphActive || document ? undefined : "Snippet editor"}
+        aria-label={graphActive || document ? undefined : t("Snippet editor")}
       >
         {!graphActive && !controllerOpen && (
           <SnippetToolbar
@@ -1342,20 +1344,20 @@ export function App() {
         )}
         {error && (
           <div role="alert" className={styles.errorBanner}>
-            <span>{error}</span>
+            <span>{t(error)}</span>
             {savedStatus === "Not saved" && (
               <button
                 type="button"
                 className={styles.secondaryButton}
                 onClick={() => showModal({ kind: "reload" })}
               >
-                Reload file…
+                {t("Reload file…")}
               </button>
             )}
             <button
               type="button"
               className={styles.iconButton}
-              aria-label="Dismiss error"
+              aria-label={t("Dismiss error")}
               onClick={() => setError(null)}
             >
               <X size={15} />
@@ -1455,11 +1457,11 @@ export function App() {
             <div className={styles.emptyIcon}>
               <Code2 size={30} strokeWidth={1.2} />
             </div>
-            <h1>Make room for a little music.</h1>
+            <h1>{t("Make room for a little music.")}</h1>
             <p>
-              Open a snippet, or start with a few notes.
+              {t("Open a snippet, or start with a few notes.")}
               <br />
-              There’s no wrong place to begin.
+              {t("There’s no wrong place to begin.")}
             </p>
             <button
               type="button"
@@ -1469,7 +1471,7 @@ export function App() {
               }
             >
               <Plus size={15} />
-              New snippet
+              {t("New snippet")}
             </button>
           </div>
         )}
@@ -1489,10 +1491,10 @@ export function App() {
         )}
         {!graphActive && playback.error && (
           <div className={styles.evaluationError} role="alert">
-            <strong>Couldn’t run this code</strong>
+            <strong>{t("Couldn’t run this code")}</strong>
             <span>{playback.error.message}</span>
             {playback.started && (
-              <small>The previous version is still playing.</small>
+              <small>{t("The previous version is still playing.")}</small>
             )}
           </div>
         )}

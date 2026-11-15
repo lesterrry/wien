@@ -1,4 +1,5 @@
 import classNames from "classnames";
+import { t, useLocale } from "../../i18n";
 import styles from "./ControlTitle.module.css";
 
 export function ControlTitle({
@@ -12,6 +13,7 @@ export function ControlTitle({
   disabled: boolean;
   onDefinition?: (name: string) => void;
 }) {
+  useLocale();
   if (!onDefinition)
     return (
       <span className={className} title={name}>
@@ -22,7 +24,7 @@ export function ControlTitle({
     <button
       type="button"
       className={classNames(className, styles.title)}
-      title={`Go to ${name} declaration`}
+      title={t("Go to {p0} declaration", { p0: name })}
       disabled={disabled}
       onClick={() => onDefinition(name)}
     >

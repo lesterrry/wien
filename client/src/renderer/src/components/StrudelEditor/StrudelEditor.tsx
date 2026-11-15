@@ -22,6 +22,7 @@ import {
 } from "../../../../shared/controls";
 import type { ModuleGraph } from "../../../../shared/modules";
 import type { Entry } from "../../../../shared/types";
+import { t, useLocale } from "../../i18n";
 import { compileGraph } from "../../module-compiler";
 import { registerStandardSounds } from "../../standard-sounds";
 import {
@@ -99,6 +100,7 @@ export function StrudelEditor({
   const [assistantInvocation, setAssistantInvocation] = useState(0);
   const [assistantPlacement, setAssistantPlacement] =
     useState<AssistantPlacement>("cursor");
+  const locale = useLocale();
   const root = useRef<HTMLDivElement>(null);
   const editor = useRef<EditorView | null>(null);
   const readOnly = useRef(new Compartment());
@@ -357,12 +359,12 @@ export function StrudelEditor({
         EditorView.editable.of(!disabled),
         EditorView.contentAttributes.of({
           "aria-label": active
-            ? "Strudel code editor"
-            : "Background snippet editor",
+            ? t("Strudel code editor", undefined, locale)
+            : t("Background snippet editor", undefined, locale),
         }),
       ]),
     });
-  }, [disabled, active]);
+  }, [disabled, active, locale]);
 
   return (
     <>
@@ -374,7 +376,7 @@ export function StrudelEditor({
           root.current = node;
           drop(node);
         }}
-        data-drop-hint="Release to import snippet"
+        data-drop-hint={t("Release to import snippet")}
       />
       {view && !sandbox && (
         <AssistantPopover

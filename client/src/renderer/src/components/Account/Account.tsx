@@ -11,6 +11,7 @@ import {
 } from "react";
 import type { UserProfile } from "../../../../shared/account";
 import { paymentId } from "../../../../shared/payments";
+import { formatLocale, getLocale, t, useLocale } from "../../i18n";
 import { Dialog } from "../Dialog/Dialog";
 import {
   type BillingTab,
@@ -69,6 +70,7 @@ export function useAccount() {
 }
 
 export function AccountProvider({ children }: { children: ReactNode }) {
+  useLocale();
   const [open, setOpen] = useState(registrationRequested);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [resolved, setResolved] = useState(false);
@@ -140,7 +142,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       return false;
     }
     if (audio && !profile.plan.audio_enabled) {
-      throw new Error("Audio attachments are not included in your plan.");
+      throw new Error(t("Audio attachments are not included in your plan."));
     }
     if (
       profile.plan.initial_assist_requests !== null &&
@@ -187,7 +189,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     try {
       if (mode === "register" && (!api.accountRegister || !captchaToken)) {
         throw new Error(
-          "Complete the verification before creating an account.",
+          t("Complete the verification before creating an account."),
         );
       }
       const profile =
@@ -286,10 +288,10 @@ export function AccountProvider({ children }: { children: ReactNode }) {
         <Dialog
           title={
             user
-              ? "Your profile"
+              ? t("Your profile")
               : mode === "register"
-                ? "Create an account"
-                : "Sign in"
+                ? t("Create an account")
+                : t("Sign in")
           }
           onClose={close}
         >
@@ -298,17 +300,22 @@ export function AccountProvider({ children }: { children: ReactNode }) {
               <div className={styles.profile}>
                 <UserRound size={28} />
                 <strong>@{user.username}</strong>
-                <span className={styles.tier}>{user.plan.name}</span>
+                <span className={styles.tier}>
+                  {getLocale() === "ru"
+                    ? user.plan.name_ru || user.plan.name
+                    : user.plan.name}
+                </span>
                 {user.subscription_expires_at && (
                   <span>
-                    Действует до{" "}
+                    {t("Действует до")}{" "}
                     {new Date(user.subscription_expires_at).toLocaleString(
-                      "ru-RU",
+                      formatLocale(),
                     )}
                   </span>
                 )}
                 <span>
-                  Joined {new Date(user.created_at).toLocaleDateString()}
+                  {t("Joined")}{" "}
+                  {new Date(user.created_at).toLocaleDateString(formatLocale())}
                 </span>
               </div>
             )}
@@ -321,7 +328,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
                 <fieldset disabled={busy}>
                   {!user && (
                     <label htmlFor="account-username">
-                      Username
+                      {t("Username")}
                       <input
                         id="account-username"
                         value={username}
@@ -337,10 +344,10 @@ export function AccountProvider({ children }: { children: ReactNode }) {
                     </label>
                   )}
                   {!user && mode === "register" && (
-                    <p>3–32 lowercase letters, digits or underscores.</p>
+                    <p>{t("3–32 lowercase letters, digits or underscores.")}</p>
                   )}
                   <label htmlFor="account-password">
-                    {user ? "Current password" : "Password"}
+                    {user ? t("Current password") : t("Password")}
                     <input
                       id="account-password"
                       type="password"
@@ -358,7 +365,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
                   </label>
                   {mode === "password" && (
                     <label htmlFor="account-new-password">
-                      New password
+                      {t("New password")}
                       <input
                         id="account-new-password"
                         type="password"
@@ -374,7 +381,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
                   {(mode === "register" || mode === "password") && (
                     <>
                       <label htmlFor="account-confirmation">
-                        Confirm password
+                        {t("Confirm password")}
                         <input
                           id="account-confirmation"
                           type="password"
@@ -386,17 +393,17 @@ export function AccountProvider({ children }: { children: ReactNode }) {
                           required
                         />
                       </label>
-                      <p>12–128 characters.</p>
+                      <p>{t("12–128 characters.")}</p>
                     </>
                   )}
                   {mode === "register" && (
                     <p>
-                      Как мы обрабатываем данные:{" "}
+                      {t("Как мы обрабатываем данные:")}{" "}
                       <button
                         type="button"
                         onClick={() => openTerms("privacy")}
                       >
-                        политика конфиденциальности
+                        {t("политика конфиденциальности")}
                       </button>
                       .
                     </p>
@@ -411,26 +418,26 @@ export function AccountProvider({ children }: { children: ReactNode }) {
                   >
                     {busy && <Loader2 className={styles.spinner} size={14} />}{" "}
                     {mode === "register"
-                      ? "Create account"
+                      ? t("Create account")
                       : mode === "password"
-                        ? "Change password"
-                        : "Sign in"}
+                        ? t("Change password")
+                        : t("Sign in")}
                   </button>
                 </fieldset>
               </form>
             )}
             {error && (
               <p className={styles.error} role="alert">
-                {error}
+                {t(error)}
               </p>
             )}
-            {notice && <p role="status">{notice}</p>}
+            {notice && <p role="status">{t(notice)}</p>}
             <div className={styles.actions}>
               {!user && api.platform === "web" && (
                 <button type="button" disabled={busy} onClick={switchMode}>
                   {mode === "register"
-                    ? "Already have an account? Sign in"
-                    : "Create an account"}
+                    ? t("Already have an account? Sign in")
+                    : t("Create an account")}
                 </button>
               )}
               {!user && api.platform !== "web" && (
@@ -442,7 +449,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
                     );
                   }}
                 >
-                  Create an account on the website
+                  {t("Create an account on the website")}
                 </button>
               )}
               {user && (
@@ -457,7 +464,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
                       setNotice("");
                     }}
                   >
-                    {mode === "password" ? "Cancel" : "Change password"}
+                    {mode === "password" ? t("Cancel") : t("Change password")}
                   </button>
                   <button
                     type="button"
@@ -466,7 +473,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
                       void logout();
                     }}
                   >
-                    Sign out
+                    {t("Sign out")}
                   </button>
                 </>
               )}

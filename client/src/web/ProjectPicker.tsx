@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Dialog } from "../renderer/src/components/Dialog/Dialog";
+import { t, useLocale } from "../renderer/src/i18n";
 import styles from "./ProjectPicker.module.css";
 import type { BrowserProject } from "./projects";
 
@@ -11,7 +12,7 @@ type Choice =
 export function pickProject(
   projects: BrowserProject[],
   create: boolean,
-  initialName = "Untitled session",
+  initialName = t("Untitled session"),
 ): Promise<Choice | null> {
   return new Promise((resolve) => {
     const container = document.createElement("div");
@@ -46,14 +47,15 @@ function Picker({
   initialName: string;
   finish: (choice: Choice | null) => void;
 }) {
+  useLocale();
   const [name, setName] = useState(initialName);
   const [error, setError] = useState("");
   return (
     <Dialog
-      title={create ? "New project" : "Open project"}
+      title={create ? t("New project") : t("Open project")}
       onClose={() => finish(null)}
     >
-      <p className={styles.intro}>Projects are saved in this browser.</p>
+      <p className={styles.intro}>{t("Projects are saved in this browser.")}</p>
       {create ? (
         <form
           onSubmit={(event) => {
@@ -68,7 +70,7 @@ function Picker({
           }}
         >
           <label>
-            Project name
+            {t("Project name")}
             <input
               value={name}
               maxLength={80}
@@ -77,7 +79,7 @@ function Picker({
             />
           </label>
           <button className={styles.primary} type="submit">
-            Create
+            {t("Create")}
           </button>
         </form>
       ) : (
@@ -94,7 +96,7 @@ function Picker({
             ))}
           </div>
           <label className={styles.import}>
-            Import a Wien project
+            {t("Import a Wien project")}
             <input
               type="file"
               accept=".json,application/json"
@@ -106,14 +108,16 @@ function Picker({
                     throw new Error("This project is too large.");
                   finish({ kind: "import", content: await file.text() });
                 } catch (error) {
-                  setError(String(error));
+                  setError(
+                    error instanceof Error ? error.message : String(error),
+                  );
                 }
               }}
             />
           </label>
         </>
       )}
-      {error && <p role="alert">{error}</p>}
+      {error && <p role="alert">{t(error)}</p>}
     </Dialog>
   );
 }

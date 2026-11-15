@@ -8,6 +8,7 @@ import {
 import type { ReactNode } from "react";
 import { commands, shortcutLabel } from "../../../../shared/commands";
 import { shortcutEnvironment } from "../../commands";
+import { t, useLocale } from "../../i18n";
 import { shortcut } from "../App/workspace-utils";
 import { SplitMarquee } from "../SplitMarquee/SplitMarquee";
 import styles from "./WorkspaceTitlebar.module.css";
@@ -31,6 +32,7 @@ export function WorkspaceTitlebar({
   onControls: () => void;
   tabs: ReactNode;
 }) {
+  useLocale();
   return (
     <div
       className={classNames(styles.titlebar, {
@@ -47,8 +49,8 @@ export function WorkspaceTitlebar({
         <button
           className={styles.iconButton}
           type="button"
-          title={`Toggle sidebar (${shortcut} B)`}
-          aria-label="Toggle sidebar"
+          title={t("Toggle sidebar ({p0} B)", { p0: shortcut })}
+          aria-label={t("Toggle sidebar")}
           onClick={onSidebar}
         >
           {sidebar ? <PanelLeftClose size={17} /> : <PanelLeftOpen size={17} />}
@@ -59,8 +61,16 @@ export function WorkspaceTitlebar({
         <button
           type="button"
           className={styles.iconButton}
-          title={`Toggle controls (${shortcutLabel(commands.find((command) => command.id === "controls") ?? { id: "controls", label: "Toggle Controls" }, shortcutEnvironment)})`}
-          aria-label="Toggle controls"
+          title={t("Toggle controls ({p0})", {
+            p0: shortcutLabel(
+              commands.find((command) => command.id === "controls") ?? {
+                id: "controls",
+                label: t("Toggle Controls"),
+              },
+              shortcutEnvironment,
+            ),
+          })}
+          aria-label={t("Toggle controls")}
           aria-expanded={controlsVisible && !controllerOpen && !graphActive}
           disabled={graphActive}
           onClick={onControls}

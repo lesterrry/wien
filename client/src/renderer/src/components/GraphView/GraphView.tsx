@@ -12,6 +12,7 @@ import {
   type ReactFlowInstance,
   useNodesState,
 } from "@xyflow/react";
+import { t, useLocale } from "../../i18n";
 import "@xyflow/react/dist/style.css";
 import classNames from "classnames";
 import {
@@ -41,6 +42,7 @@ type SnippetNode = Node<
 >;
 
 function Snippet({ data, selected }: NodeProps<SnippetNode>) {
+  useLocale();
   const Icon = data.exported ? Package : FileCode2;
   const filename = data.path.split("/").at(-1);
   const folder = data.path.includes("/")
@@ -65,14 +67,14 @@ function Snippet({ data, selected }: NodeProps<SnippetNode>) {
         <AlertCircle
           size={14}
           className={styles.issueIcon}
-          aria-label="Dependency issue"
+          aria-label={t("Dependency issue")}
         />
       )}
       <button
         type="button"
         className={classNames(styles.openNode, "nodrag", "nopan")}
-        aria-label={`Open ${data.path}`}
-        title="Open snippet"
+        aria-label={t("Open {p0}", { p0: data.path })}
+        title={t("Open snippet")}
         onClick={() => data.onOpen(data.path)}
       >
         ↗
@@ -104,6 +106,7 @@ export function GraphView({
   playingPaths: ReadonlySet<string>;
   onOpen: (path: string) => void;
 }) {
+  const locale = useLocale();
   const [model, setModel] = useState<DependencyGraph>(empty);
   const [nodes, setNodes, onNodesChange] = useNodesState<SnippetNode>([]);
   const [flow, setFlow] = useState<ReactFlowInstance<SnippetNode, Edge> | null>(
@@ -238,10 +241,10 @@ export function GraphView({
       nodes.map((node) => ({
         ...node,
         selected: node.id === selected,
-        ariaLabel: `${node.id}${playingPaths.has(node.id) ? " · Playing" : ""}`,
+        ariaLabel: `${node.id}${playingPaths.has(node.id) ? t(" · Playing", undefined, locale) : ""}`,
         data: { ...node.data, playing: playingPaths.has(node.id) },
       })),
-    [nodes, selected, playingPaths],
+    [nodes, selected, playingPaths, locale],
   );
   const edges = useMemo<Edge[]>(
     () =>
@@ -249,7 +252,11 @@ export function GraphView({
         ...edge,
         type: "default",
         selectable: false,
-        ariaLabel: `${edge.source} is used by ${edge.target}`,
+        ariaLabel: t(
+          "{p0} is used by {p1}",
+          { p0: edge.source, p1: edge.target },
+          locale,
+        ),
         markerEnd: {
           type: MarkerType.ArrowClosed,
           color: "var(--color-brand)",
@@ -265,7 +272,7 @@ export function GraphView({
               : 0.85,
         },
       })),
-    [model.edges, selected],
+    [model.edges, selected, locale],
   );
   const issueCount = model.nodes.filter((node) => node.issues.length).length;
   const selectedNode = model.nodes.find((node) => node.path === selected);
@@ -273,23 +280,23 @@ export function GraphView({
   return (
     <section
       className={styles.graphView}
-      aria-label="Project dependency graph"
+      aria-label={t("Project dependency graph")}
       aria-busy={loading}
     >
       <header className={styles.toolbar}>
         <Network size={17} />
         <div>
-          <strong>Graph View</strong>
+          <strong>{t("Graph View")}</strong>
           <span>
-            {project.name} · {model.nodes.length} snippets ·{" "}
+            {project.name} · {model.nodes.length} {t("snippets ·")}{" "}
             {model.edges.length} {model.edges.length === 1 ? "link" : "links"}
           </span>
         </div>
         <button
           type="button"
           className={styles.iconButton}
-          title="Fit all snippets"
-          aria-label="Fit all snippets"
+          title={t("Fit all snippets")}
+          aria-label={t("Fit all snippets")}
           onClick={fitAll}
           disabled={!nodes.length}
         >
@@ -298,8 +305,8 @@ export function GraphView({
         <button
           type="button"
           className={styles.iconButton}
-          title="Reset graph layout"
-          aria-label="Reset graph layout"
+          title={t("Reset graph layout")}
+          aria-label={t("Reset graph layout")}
           onClick={resetLayout}
           disabled={loading || !nodes.length}
         >
@@ -309,6 +316,12 @@ export function GraphView({
       <div className={styles.canvas}>
         <ReactFlow<SnippetNode, Edge>
           proOptions={{ hideAttribution: true }}
+          ariaLabelConfig={{
+            "controls.ariaLabel": t("Graph controls"),
+            "controls.zoomIn.ariaLabel": t("Zoom in"),
+            "controls.zoomOut.ariaLabel": t("Zoom out"),
+            "controls.fitView.ariaLabel": t("Fit all snippets"),
+          }}
           nodes={renderedNodes}
           edges={edges}
           nodeTypes={nodeTypes}
@@ -348,28 +361,28 @@ export function GraphView({
         {loading && !nodes.length && (
           <div className={styles.empty}>
             <Loader2 size={20} className={styles.spin} />
-            <span>Reading snippets…</span>
+            <span>{t("Reading snippets…")}</span>
           </div>
         )}
         {!loading && !error && !nodes.length && (
           <div className={styles.empty}>
             <Network size={28} />
-            <strong>No snippets yet</strong>
-            <span>Create a snippet to see it here.</span>
+            <strong>{t("No snippets yet")}</strong>
+            <span>{t("Create a snippet to see it here.")}</span>
           </div>
         )}
         {error && (
           <div className={styles.notice} role="alert">
-            {error}
+            {t(error)}
           </div>
         )}
       </div>
       {issueCount > 0 && (
         <footer className={styles.footer}>
-          <span>Updating…</span>
+          <span>{t("Updating…")}</span>
           <span className={styles.warning}>
-            {issueCount} {issueCount === 1 ? "snippet" : "snippets"} with
-            dependency issues · Select to inspect
+            {issueCount} {issueCount === 1 ? "snippet" : "snippets"}{" "}
+            {t("with dependency issues · Select to inspect")}
           </span>
         </footer>
       )}

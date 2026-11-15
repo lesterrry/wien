@@ -25,6 +25,7 @@ import {
 } from "../../../../shared/controls";
 import { type Edit, editSource } from "../../../../shared/modules";
 import type { useSnippetSessions } from "../../hooks/useSnippetSessions";
+import { t } from "../../i18n";
 import { message } from "./workspace-utils";
 
 const api = window.workspace;
@@ -119,7 +120,7 @@ export function useControlPanel({
         )
       )
         throw new Error(
-          "This control has changed. Refresh the panel before moving it.",
+          t("This control has changed. Refresh the panel before moving it."),
         );
       return moveControl(code, name, targetName, placement);
     })
@@ -184,7 +185,9 @@ export function useControlPanel({
     preferencesSave.current = task;
     void task.catch((error) => {
       if (!cancelled)
-        setError(`Could not save panel settings: ${message(error)}`);
+        setError(
+          t("Could not save panel settings: {p0}", { p0: message(error) }),
+        );
     });
     return () => {
       cancelled = true;
@@ -321,7 +324,7 @@ export function useControlPanel({
             typeof control.value !== typeof change.value)
         )
           throw new Error(
-            "This control has changed. Fix its declaration before editing.",
+            t("This control has changed. Fix its declaration before editing."),
           );
         const edit =
           change === undefined
@@ -366,7 +369,7 @@ export function useControlPanel({
 
   async function saveControlSettings(settings: ControlCustomization) {
     if (!controlSettings || busyRef.current)
-      throw new Error("The workspace is busy. Try again.");
+      throw new Error(t("The workspace is busy. Try again."));
     const {
       path,
       control: { name },
@@ -385,7 +388,7 @@ export function useControlPanel({
         if (edit) {
           const editor = players.current.get(open.id);
           if (!editor)
-            throw new Error("The source editor is not ready. Try again.");
+            throw new Error(t("The source editor is not ready. Try again."));
           editor.configureControl(name, settings, initial);
         }
         await flush();

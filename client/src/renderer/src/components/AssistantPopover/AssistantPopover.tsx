@@ -12,6 +12,7 @@ import { createPortal } from "react-dom";
 import { parseModule } from "../../../../shared/modules";
 import { type AudioSelection, prepareAssistAudio } from "../../assist-audio";
 import { useAssistTurbo } from "../../hooks/useAssistTurbo";
+import { t, useLocale } from "../../i18n";
 import { useAccount } from "../Account/Account";
 import { AssistantContent } from "./AssistantContent";
 import styles from "./AssistantPopover.module.css";
@@ -32,6 +33,7 @@ export function AssistantPopover({
   placement: AssistantPlacement;
   disabled: boolean;
 }) {
+  useLocale();
   const account = useAccount();
   const [turbo, setTurbo] = useAssistTurbo();
   const [open, setOpen] = useState(false);
@@ -234,14 +236,18 @@ export function AssistantPopover({
       if (result.code !== null && result.code !== snapshot.toString()) {
         if (view.state.doc !== snapshot || view.state.readOnly)
           throw new Error(
-            "The file changed while I was working. Send the request again to use the latest code.",
+            t(
+              "The file changed while I was working. Send the request again to use the latest code.",
+            ),
           );
         try {
           parseModule(result.code, path);
         } catch (error) {
           const detail = error instanceof Error ? ` ${error.message}` : "";
           throw new Error(
-            `The model returned invalid code. Your file is unchanged.${detail}`,
+            t("The model returned invalid code. Your file is unchanged.{p0}", {
+              p0: detail,
+            }),
           );
         }
         view.dispatch({
@@ -282,7 +288,7 @@ export function AssistantPopover({
     <div
       ref={panel}
       role="dialog"
-      aria-label="Wien assistant"
+      aria-label={t("Wien assistant")}
       aria-hidden={!open}
       inert={!open}
       data-assistant
@@ -295,7 +301,7 @@ export function AssistantPopover({
       <AssistantContent
         prompt={prompt}
         answer={answer}
-        error={error}
+        error={error ? t(error) : null}
         pending={pending}
         disabled={disabled || (!!audioFile && !audioSelection)}
         turbo={!audioFile && turbo}
@@ -328,10 +334,10 @@ export function AssistantPopover({
             ) : (
               <div className={styles.attachment}>
                 <div className={styles.audioHeader}>
-                  <span>Add audio</span>
+                  <span>{t("Add audio")}</span>
                   <button
                     type="button"
-                    aria-label="Close audio picker"
+                    aria-label={t("Close audio picker")}
                     onClick={() => setAudioOpen(false)}
                   >
                     ×

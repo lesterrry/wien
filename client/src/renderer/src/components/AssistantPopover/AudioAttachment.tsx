@@ -9,6 +9,7 @@ import {
   assistSampleRate,
   maxAudioSeconds,
 } from "../../assist-audio";
+import { t, useLocale } from "../../i18n";
 import styles from "./AssistantPopover.module.css";
 
 export function AudioAttachment({
@@ -22,6 +23,7 @@ export function AudioAttachment({
   onSelect: (selection: AudioSelection | null) => void;
   onRemove: () => void;
 }) {
+  useLocale();
   const container = useRef<HTMLDivElement>(null);
   const wave = useRef<WaveSurfer | null>(null);
   const region = useRef<Region | null>(null);
@@ -73,7 +75,7 @@ export function AudioAttachment({
         const buffer = ws.getDecodedData();
         if (!buffer || buffer.duration < 0.1 || buffer.duration > 900) {
           throw new Error(
-            "Use an MP3 between 0.1 seconds and 15 minutes long.",
+            t("Use an MP3 between 0.1 seconds and 15 minutes long."),
           );
         }
         const r = regions.addRegion({
@@ -137,7 +139,7 @@ export function AudioAttachment({
         <span title={file.name}>{file.name}</span>
         <button
           type="button"
-          aria-label="Remove audio"
+          aria-label={t("Remove audio")}
           disabled={pending}
           onClick={onRemove}
         >
@@ -146,15 +148,15 @@ export function AudioAttachment({
       </div>
       <div ref={container} className={styles.waveform} inert={pending} />
       {error ? (
-        <p role="alert">{error}</p>
+        <p role="alert">{t(error)}</p>
       ) : !ready ? (
-        <p role="status">Loading audio…</p>
+        <p role="status">{t("Loading audio…")}</p>
       ) : (
         <div className={styles.trimControls}>
           <button
             type="button"
             aria-label={
-              playing ? "Pause audio preview" : "Preview selected audio"
+              playing ? t("Pause audio preview") : t("Preview selected audio")
             }
             disabled={pending}
             onClick={() => {
@@ -168,9 +170,9 @@ export function AudioAttachment({
             {playing ? <Pause size={14} /> : <Play size={14} />}
           </button>
           <label>
-            From{" "}
+            {t("From")}{" "}
             <input
-              aria-label="Audio start seconds"
+              aria-label={t("Audio start seconds")}
               type="number"
               min={0}
               max={Math.max(0, range.duration - 0.1)}
@@ -181,9 +183,9 @@ export function AudioAttachment({
             />
           </label>
           <label>
-            To{" "}
+            {t("To")}{" "}
             <input
-              aria-label="Audio end seconds"
+              aria-label={t("Audio end seconds")}
               type="number"
               min={range.start + 0.1}
               max={Math.min(range.duration, range.start + 10)}
@@ -193,7 +195,9 @@ export function AudioAttachment({
               onChange={(e) => change("end", e.target.valueAsNumber)}
             />
           </label>
-          <span>{(range.end - range.start).toFixed(2)} / 10 s</span>
+          <span>
+            {(range.end - range.start).toFixed(2)} {t("/ 10 s")}
+          </span>
         </div>
       )}
     </div>
@@ -207,6 +211,7 @@ export function AudioPicker({
   onFile: (file: File) => void;
   onError: (message: string) => void;
 }) {
+  useLocale();
   const input = useRef<HTMLInputElement>(null);
   return (
     <>
@@ -215,17 +220,17 @@ export function AudioPicker({
         type="file"
         accept=".mp3,audio/mpeg"
         className={styles.srOnly}
-        aria-label="Choose MP3 file"
+        aria-label={t("Choose MP3 file")}
         onChange={(event) => {
           const file = event.target.files?.[0];
           event.target.value = "";
           if (!file) return;
           if (!file.name.toLowerCase().endsWith(".mp3")) {
-            onError("Choose an MP3 file.");
+            onError(t("Choose an MP3 file."));
             return;
           }
           if (!file.size || file.size > 50 * 1024 * 1024) {
-            onError("Choose an MP3 up to 50 MB.");
+            onError(t("Choose an MP3 up to 50 MB."));
             return;
           }
           onFile(file);
@@ -236,9 +241,11 @@ export function AudioPicker({
         className={styles.chooseAudio}
         onClick={() => input.current?.click()}
       >
-        <Upload size={14} /> Choose MP3
+        <Upload size={14} /> {t("Choose MP3")}
       </button>
-      <p>Select up to 10 seconds. Audio requests are counted separately.</p>
+      <p>
+        {t("Select up to 10 seconds. Audio requests are counted separately.")}
+      </p>
     </>
   );
 }

@@ -5,11 +5,13 @@ import {
   FilePlus2,
   FileText,
   FolderPlus,
+  Globe,
   Network,
   Search,
   X,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { setLocale, t, useLocale } from "../../i18n";
 import styles from "./WorkspaceSidebar.module.css";
 
 export function WorkspaceSidebar({
@@ -37,14 +39,15 @@ export function WorkspaceSidebar({
   explorer: ReactNode;
   versions: ReactNode;
 }) {
+  const locale = useLocale();
   return (
     <aside className={styles.sidebar}>
       {projectMenu}
       <label className={styles.searchBox}>
         <Search size={14} />
         <input
-          aria-label="Find a snippet"
-          placeholder="Find a snippet…"
+          aria-label={t("Find a snippet")}
+          placeholder={t("Find a snippet…")}
           value={search}
           onChange={(event) => onSearch(event.target.value)}
         />
@@ -52,7 +55,7 @@ export function WorkspaceSidebar({
           <button
             className={styles.iconButton}
             type="button"
-            aria-label="Clear search"
+            aria-label={t("Clear search")}
             onClick={() => onSearch("")}
           >
             <X size={12} />
@@ -60,13 +63,13 @@ export function WorkspaceSidebar({
         )}
       </label>
       <div className={styles.sectionHeading}>
-        <span>Files</span>
+        <span>{t("Files")}</span>
         <div>
           <button
             className={styles.iconButton}
             type="button"
-            title="New snippet"
-            aria-label="New snippet"
+            title={t("New snippet")}
+            aria-label={t("New snippet")}
             disabled={busy}
             onClick={() => onCreate(false)}
           >
@@ -75,8 +78,8 @@ export function WorkspaceSidebar({
           <button
             className={styles.iconButton}
             type="button"
-            title="New folder"
-            aria-label="New folder"
+            title={t("New folder")}
+            aria-label={t("New folder")}
             disabled={busy}
             onClick={() => onCreate(true)}
           >
@@ -94,7 +97,7 @@ export function WorkspaceSidebar({
           rel="noopener noreferrer"
         >
           <ArrowDownToLine size={16} aria-hidden="true" />
-          Скачать приложение
+          {t("Скачать приложение")}
         </a>
       )}
       <div className={styles.sidebarBottom}>
@@ -103,22 +106,43 @@ export function WorkspaceSidebar({
           className={styles.graphLink}
           onClick={onGraph}
           disabled={!projectReady || busy}
-          aria-label="Open Graph View"
+          aria-label={t("Open Graph View")}
         >
           <Network size={16} />
           <span>
-            Graph View<small>Explore project dependencies</small>
+            {t("Graph View")}
+            <small>{t("Explore project dependencies")}</small>
           </span>
           <ArrowRight size={13} />
         </button>
         <button type="button" className={styles.helpButton} onClick={onTerms}>
           <FileText size={14} aria-hidden="true" />
-          Тарифы и условия
+          {t("Тарифы и условия")}
         </button>
         <button type="button" className={styles.helpButton} onClick={onHelp}>
           <CircleHelp size={14} />
-          Getting started<span>?</span>
+          {t("Getting started")}
         </button>
+        <fieldset
+          className={styles.languageSwitcher}
+          aria-label={t("Language")}
+        >
+          <Globe size={14} aria-hidden="true" />
+          <span>{t("Language")}</span>
+          <div className={styles.languageOptions}>
+            {(["en", "ru"] as const).map((language) => (
+              <button
+                type="button"
+                key={language}
+                lang={language}
+                aria-pressed={locale === language}
+                onClick={() => setLocale(language)}
+              >
+                {language.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </fieldset>
       </div>
     </aside>
   );

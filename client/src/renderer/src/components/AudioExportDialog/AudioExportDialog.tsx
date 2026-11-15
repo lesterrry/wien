@@ -6,6 +6,7 @@ import {
 } from "../../../../shared/audio-export";
 import type { ModuleGraph } from "../../../../shared/modules";
 import { renderAudio } from "../../audio-export";
+import { t, useLocale } from "../../i18n";
 import { Dialog } from "../Dialog/Dialog";
 import styles from "./AudioExportDialog.module.css";
 
@@ -18,6 +19,7 @@ export function AudioExportDialog({
   snapshot: () => Promise<ModuleGraph>;
   onClose: () => void;
 }) {
+  useLocale();
   const [cycles, setCycles] = useState(32);
   const [tail, setTail] = useState(2);
   const [normalize, setNormalize] = useState(false);
@@ -58,7 +60,7 @@ export function AudioExportDialog({
     }
     const controller = new AbortController();
     job.current = controller;
-    setProgress({ phase: "Reading project…", fraction: 0 });
+    setProgress({ phase: t("Reading project…"), fraction: 0 });
     try {
       const graph = await snapshot();
       const data = await renderAudio(
@@ -83,7 +85,7 @@ export function AudioExportDialog({
   };
   return (
     <Dialog
-      title="Save WAV"
+      title={t("Save WAV")}
       onClose={() => {
         if (!saving) onClose();
       }}
@@ -96,8 +98,8 @@ export function AudioExportDialog({
         }}
       >
         <p className={styles.description}>
-          Export <strong>{path}</strong> from the beginning, including its
-          imports and current edits.
+          {t("Export")} <strong>{path}</strong>{" "}
+          {t("from the beginning, including its imports and current edits.")}
         </p>
         <fieldset
           disabled={Boolean(progress) || saving}
@@ -105,9 +107,9 @@ export function AudioExportDialog({
         >
           <div className={styles.row}>
             <label>
-              Length in cycles
+              {t("Length in cycles")}
               <input
-                aria-label="Length in cycles"
+                aria-label={t("Length in cycles")}
                 type="number"
                 min="1"
                 max="512"
@@ -117,9 +119,9 @@ export function AudioExportDialog({
               />
             </label>
             <label>
-              Effect tail, seconds
+              {t("Effect tail, seconds")}
               <input
-                aria-label="Effect tail, seconds"
+                aria-label={t("Effect tail, seconds")}
                 type="number"
                 min="0"
                 max="30"
@@ -131,7 +133,7 @@ export function AudioExportDialog({
             </label>
           </div>
           <p className={styles.hint}>
-            One cycle is usually one bar. The snippet sets the tempo.
+            {t("One cycle is usually one bar. The snippet sets the tempo.")}
           </p>
           <div className={styles.presets}>
             {[8, 16, 32, 64, 96].map((value) => (
@@ -154,12 +156,13 @@ export function AudioExportDialog({
               checked={normalize}
               onChange={(event) => setNormalize(event.target.checked)}
             />
-            Normalize peak to −1 dB
+            {t("Normalize peak to −1 dB")}
           </label>
         </fieldset>
         <p className={styles.hint}>
-          Stereo · 44.1 kHz · 16-bit WAV. Overloads are reduced to prevent
-          clipping.
+          {t(
+            "Stereo · 44.1 kHz · 16-bit WAV. Overloads are reduced to prevent clipping.",
+          )}
         </p>
         {progress && (
           <div role="status" className={styles.progress}>
@@ -169,14 +172,16 @@ export function AudioExportDialog({
             <progress
               max="1"
               value={progress.fraction}
-              aria-label="Export progress"
+              aria-label={t("Export progress")}
             />
           </div>
         )}
-        {ready && !progress && <p role="status">Your WAV is ready to save.</p>}
+        {ready && !progress && (
+          <p role="status">{t("Your WAV is ready to save.")}</p>
+        )}
         {error && (
           <p className={styles.error} role="alert">
-            {error}
+            {t(error)}
           </p>
         )}
         <div className={styles.actions}>
@@ -186,7 +191,7 @@ export function AudioExportDialog({
             disabled={saving}
             onClick={progress ? cancel : onClose}
           >
-            {progress ? "Cancel export" : "Cancel"}
+            {progress ? t("Cancel export") : t("Cancel")}
           </button>
           <button
             type="submit"
@@ -198,7 +203,7 @@ export function AudioExportDialog({
             ) : (
               <ArrowDownToLine size={15} />
             )}
-            {saving ? "Saving…" : "Save WAV"}
+            {saving ? t("Saving…") : t("Save WAV")}
           </button>
         </div>
       </form>

@@ -4,6 +4,7 @@ import type {
   ControlChange,
   MultiEnumControl,
 } from "../../../../shared/controls";
+import { t, useLocale } from "../../i18n";
 import { ControlActions } from "../ControlActions/ControlActions";
 import { ControlTitle } from "../ControlTitle/ControlTitle";
 import styles from "./MultiSelect.module.css";
@@ -32,6 +33,7 @@ export function MultiSelect({
   onConfigure?: (name: string) => void;
   onReset?: () => void;
 }) {
+  useLocale();
   const group = useRef<HTMLFieldSetElement>(null);
   const pending = useRef<{ key: string; x: number; y: number } | null>(null);
   const dragging = useRef<Drag | null>(null);
@@ -135,7 +137,7 @@ export function MultiSelect({
       <fieldset
         ref={group}
         className={styles.list}
-        aria-label={`${control.name} options`}
+        aria-label={t("{p0} options", { p0: control.name })}
         data-drop-end={Boolean(drag && before === undefined)}
         onKeyDown={(event) => {
           if (event.key === "Escape") {
@@ -186,8 +188,8 @@ export function MultiSelect({
                 type="button"
                 className={styles.grip}
                 disabled={disabled}
-                aria-label={`Move ${option.key}`}
-                title="Drag to reorder · Alt + Up / Down"
+                aria-label={t("Move {p0}", { p0: option.key })}
+                title={t("Drag to reorder · Alt + Up / Down")}
                 onPointerDown={(event) => {
                   if (disabled || event.button !== 0) return;
                   event.preventDefault();

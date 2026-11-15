@@ -48,12 +48,7 @@ export function useWorkspaceCommands(
   }, []);
   useEffect(() => {
     const syncMenu = () => {
-      if (
-        window.document.activeElement?.closest(
-          '[aria-label="Application menu"]',
-        )
-      )
-        return;
+      if (window.document.activeElement?.closest("[data-app-menu]")) return;
       const available = !window.document.querySelector("dialog[open]");
       const state = stateHandler.current(available);
       const serialized = JSON.stringify(state);

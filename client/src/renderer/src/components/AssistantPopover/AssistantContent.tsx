@@ -1,6 +1,7 @@
 import classNames from "classnames";
 import { ArrowUp, Paperclip, Square, X, Zap } from "lucide-react";
 import type { ReactNode, Ref } from "react";
+import { t, useLocale } from "../../i18n";
 import { AnimatedBorder } from "../AnimatedBorder/AnimatedBorder";
 import { MarkdownAnswer } from "../MarkdownAnswer/MarkdownAnswer";
 import styles from "./AssistantPopover.module.css";
@@ -19,7 +20,7 @@ export function AssistantContent({
   hasAudio = false,
   onAttach,
   inputRef,
-  placeholder = "What would you like to make?",
+  placeholder = t("What would you like to make?"),
   onPromptChange,
   onSubmit,
   onCancel,
@@ -43,6 +44,7 @@ export function AssistantContent({
   onCancel: () => void;
   onClose?: () => void;
 }) {
+  useLocale();
   return (
     <>
       <AnimatedBorder active={pending} className={styles.rim} />
@@ -59,7 +61,7 @@ export function AssistantContent({
         </div>
       )}
       <span className={styles.srOnly} role="status">
-        {pending ? "Working on it…" : ""}
+        {pending ? t("Working on it…") : ""}
       </span>
       {showComposer && (
         <>
@@ -73,7 +75,7 @@ export function AssistantContent({
           >
             <textarea
               ref={inputRef}
-              aria-label="Ask Assist"
+              aria-label={t("Ask Assist")}
               placeholder={placeholder}
               value={prompt}
               readOnly={pending}
@@ -96,8 +98,8 @@ export function AssistantContent({
                 <button
                   type="button"
                   className={styles.turbo}
-                  aria-label="Add audio"
-                  title="Add MP3"
+                  aria-label={t("Add audio")}
+                  title={t("Add MP3")}
                   disabled={pending || disabled}
                   onClick={onAttach}
                 >
@@ -108,12 +110,12 @@ export function AssistantContent({
                 <button
                   type="button"
                   className={styles.turbo}
-                  aria-label="Turbo"
+                  aria-label={t("Turbo")}
                   aria-pressed={turbo}
                   title={
                     hasAudio
-                      ? "Turbo is unavailable with audio"
-                      : "Быстрее ответы, меньше точность"
+                      ? t("Turbo is unavailable with audio")
+                      : t("Быстрее ответы, меньше точность")
                   }
                   disabled={pending || disabled || hasAudio}
                   onClick={() => onTurboChange(!turbo)}
@@ -125,7 +127,7 @@ export function AssistantContent({
                 <button
                   type="button"
                   className={styles.send}
-                  aria-label="Cancel request"
+                  aria-label={t("Cancel request")}
                   onClick={onCancel}
                 >
                   <Square size={12} fill="currentColor" />
@@ -134,7 +136,7 @@ export function AssistantContent({
                 <button
                   type="submit"
                   className={styles.send}
-                  aria-label="Send request"
+                  aria-label={t("Send request")}
                   disabled={disabled}
                 >
                   <ArrowUp size={17} />
@@ -143,8 +145,8 @@ export function AssistantContent({
                 <button
                   type="button"
                   className={styles.closeButton}
-                  aria-label="Close assistant"
-                  title="Close (Esc)"
+                  aria-label={t("Close assistant")}
+                  title={t("Close (Esc)")}
                   onClick={onClose}
                 >
                   <X size={14} />

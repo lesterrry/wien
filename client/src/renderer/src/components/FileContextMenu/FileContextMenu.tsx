@@ -11,6 +11,7 @@ import {
   Trash2,
 } from "lucide-react";
 import type { Entry } from "../../../../shared/types";
+import { t, useLocale } from "../../i18n";
 import type { Modal } from "../App/workspace-types";
 import styles from "./FileContextMenu.module.css";
 
@@ -29,6 +30,7 @@ export function FileContextMenu({
   onGraph: (path: string) => void;
   onToggleExport: (path: string) => void;
 }) {
+  useLocale();
   return (
     <div
       className={classNames(styles.menu, styles.contextMenu)}
@@ -44,11 +46,11 @@ export function FileContextMenu({
             }
           >
             <ArrowDownToLine size={14} />
-            Save WAV
+            {t("Save WAV")}
           </button>
           <button type="button" onClick={() => onGraph(context.entry.id)}>
             <Network size={14} />
-            View in Graph View
+            {t("View in Graph View")}
           </button>
           <button
             type="button"
@@ -59,7 +61,9 @@ export function FileContextMenu({
             ) : (
               <Package size={14} />
             )}
-            {context.entry.exported ? "Remove exports" : "Make exportable"}
+            {context.entry.exported
+              ? t("Remove exports")
+              : t("Make exportable")}
           </button>
           <div className={styles.menuDivider} />
         </>
@@ -77,7 +81,7 @@ export function FileContextMenu({
             }
           >
             <FilePlus2 size={14} />
-            New snippet
+            {t("New snippet")}
           </button>
           <button
             type="button"
@@ -90,7 +94,7 @@ export function FileContextMenu({
             }
           >
             <FolderPlus size={14} />
-            New folder
+            {t("New folder")}
           </button>
           <div className={styles.menuDivider} />
         </>
@@ -100,14 +104,14 @@ export function FileContextMenu({
         onClick={() => onModal({ kind: "rename", entry: context.entry })}
       >
         <Pencil size={14} />
-        Rename
+        {t("Rename")}
       </button>
       <button
         type="button"
         onClick={() => onModal({ kind: "move", entry: context.entry })}
       >
         <ArrowRight size={14} />
-        Move to folder…
+        {t("Move to folder…")}
       </button>
       <button
         type="button"
@@ -115,7 +119,7 @@ export function FileContextMenu({
         onClick={() => onModal({ kind: "delete", entry: context.entry })}
       >
         <Trash2 size={14} />
-        {window.workspace.platform === "web" ? "Delete" : "Move to Trash"}
+        {window.workspace.platform === "web" ? t("Delete") : t("Move to Trash")}
       </button>
     </div>
   );

@@ -6,6 +6,7 @@ import {
   shortcutLabel,
 } from "../../../../shared/commands";
 import { shortcutEnvironment } from "../../commands";
+import { t, useLocale } from "../../i18n";
 import styles from "./AppMenu.module.css";
 
 export function AppMenu({
@@ -17,6 +18,7 @@ export function AppMenu({
   state: CommandState;
   hidden?: boolean;
 }) {
+  useLocale();
   const [open, setOpen] = useState<number | null>(null);
   const root = useRef<HTMLElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
@@ -45,12 +47,13 @@ export function AppMenu({
   return (
     <nav
       className={styles.bar}
-      aria-label="Application menu"
+      aria-label={t("Application menu")}
+      data-app-menu
       ref={root}
       hidden={hidden}
     >
       {menus.map((menu, index) => (
-        <div className={styles.group} key={menu.label}>
+        <div className={styles.group} key={t(menu.label)}>
           <button
             type="button"
             aria-haspopup="menu"
@@ -70,12 +73,12 @@ export function AppMenu({
               }
             }}
           >
-            {menu.label}
+            {t(menu.label)}
           </button>
           {open === index && (
             <div
               role="menu"
-              aria-label={menu.label}
+              aria-label={t(menu.label)}
               className={styles.dropdown}
               onKeyDown={(event) => {
                 const items = Array.from(
@@ -130,7 +133,7 @@ export function AppMenu({
                     onCommand(command.id);
                   }}
                 >
-                  <span>{command.label}</span>
+                  <span>{t(command.label)}</span>
                   <kbd>{shortcutLabel(command, shortcutEnvironment)}</kbd>
                 </button>
               ))}

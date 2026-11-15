@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { t, useLocale } from "../../i18n";
 import styles from "./Account.module.css";
 
 interface TurnstileApi {
@@ -8,6 +9,7 @@ interface TurnstileApi {
       sitekey: string;
       action: string;
       theme: string;
+      language: string;
       size: string;
       callback: (token: string) => void;
       "expired-callback": () => void;
@@ -32,7 +34,7 @@ function loadScript(): Promise<TurnstileApi> {
     function failed() {
       window.clearTimeout(timeout);
       element.remove();
-      reject(new Error("Cannot load verification. Please retry."));
+      reject(new Error(t("Cannot load verification. Please retry.")));
     }
     element.src =
       "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
@@ -53,6 +55,7 @@ function loadScript(): Promise<TurnstileApi> {
 }
 
 export function Turnstile({ onToken }: { onToken: (token: string) => void }) {
+  const locale = useLocale();
   const container = useRef<HTMLDivElement>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -77,10 +80,14 @@ export function Turnstile({ onToken }: { onToken: (token: string) => void }) {
           redirect: "error",
         });
         if (!response.ok)
-          throw new Error("Registration is unavailable. Please retry later.");
+          throw new Error(
+            t("Registration is unavailable. Please retry later."),
+          );
         const config = await response.json();
         if (typeof config.sitekey !== "string" || !config.sitekey)
-          throw new Error("Registration is unavailable. Please retry later.");
+          throw new Error(
+            t("Registration is unavailable. Please retry later."),
+          );
         api = await loadScript();
         if (cancelled || !container.current) return;
         const invalidate = () => {
@@ -90,6 +97,7 @@ export function Turnstile({ onToken }: { onToken: (token: string) => void }) {
           sitekey: config.sitekey,
           action: "register",
           theme: "dark",
+          language: locale,
           size: "flexible",
           callback: (token) => {
             if (!cancelled) {
@@ -126,21 +134,21 @@ export function Turnstile({ onToken }: { onToken: (token: string) => void }) {
       controller.abort();
       if (widget !== undefined) api?.remove(widget);
     };
-  }, [attempt, onToken]);
+  }, [attempt, onToken, locale]);
   return (
     <div className={styles.verification}>
       <div ref={container} />
-      {loading && <p role="status">Loading verification…</p>}
+      {loading && <p role="status">{t("Loading verification…")}</p>}
       {error && (
         <>
           <p role="alert" className={styles.error}>
-            {error}
+            {t(error)}
           </p>
           <button
             type="button"
             onClick={() => setAttempt((value) => value + 1)}
           >
-            Retry verification
+            {t("Retry verification")}
           </button>
         </>
       )}

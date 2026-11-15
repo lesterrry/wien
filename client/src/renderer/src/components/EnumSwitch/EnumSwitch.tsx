@@ -1,5 +1,6 @@
 import { useId, useRef } from "react";
 import type { EnumControl } from "../../../../shared/controls";
+import { t, useLocale } from "../../i18n";
 import { ControlActions } from "../ControlActions/ControlActions";
 import { ControlTitle } from "../ControlTitle/ControlTitle";
 import styles from "./EnumSwitch.module.css";
@@ -21,6 +22,7 @@ export function EnumSwitch({
   onConfigure?: (name: string) => void;
   onReset?: () => void;
 }) {
+  useLocale();
   const groupId = useId();
   const rail = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
@@ -73,7 +75,7 @@ export function EnumSwitch({
           className={styles.rail}
           role="radiogroup"
           aria-orientation="vertical"
-          aria-label={`${control.name} options`}
+          aria-label={t("{p0} options", { p0: control.name })}
           onPointerDown={(event) => {
             if (disabled || event.button !== 0) return;
             event.preventDefault();

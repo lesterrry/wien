@@ -4,6 +4,7 @@ import { FileCode2, Network, Play, Sparkles, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { readControls } from "../../../../shared/controls";
 import { loadGraph } from "../../../../shared/modules";
+import { t, useLocale } from "../../i18n";
 import { AssistantContent } from "../AssistantPopover/AssistantContent";
 import assistantStyles from "../AssistantPopover/AssistantPopover.module.css";
 import { NumberSlider } from "../NumberSlider/NumberSlider";
@@ -49,6 +50,7 @@ note("c4 e4 g4 b4").s("sawtooth")
 }
 
 export function TourSandbox({ topic }: { topic: TourTopic }) {
+  useLocale();
   const [files, setFiles] = useState(() => initialFiles(topic));
   const filesRef = useRef(files);
   filesRef.current = files;
@@ -71,7 +73,7 @@ export function TourSandbox({ topic }: { topic: TourTopic }) {
       loadGraph(entry, async (file) => {
         if (file === entry) return source;
         if (!Object.hasOwn(filesRef.current, file))
-          throw new Error(`No file named ${file} in this demo.`);
+          throw new Error(t("No file named {p0} in this demo.", { p0: file }));
         return filesRef.current[file];
       }),
   });
@@ -91,7 +93,7 @@ export function TourSandbox({ topic }: { topic: TourTopic }) {
   }
   function submit() {
     if (!prompt || timer.current || answer) return;
-    setPrompt(requestText);
+    setPrompt(t(requestText));
     setPending(true);
     setAnswer(null);
     timer.current = setTimeout(() => {
@@ -103,7 +105,9 @@ export function TourSandbox({ topic }: { topic: TourTopic }) {
           : suspended,
       );
       setAnswer(
-        "Replaced the thirds with fourths for **Csus4 → Asus4**. Press Play / Update to hear the more open sound.",
+        t(
+          "Replaced the thirds with fourths for **Csus4 → Asus4**. Press Play / Update to hear the more open sound.",
+        ),
       );
       setPrompt("");
       setPending(false);
@@ -114,14 +118,14 @@ export function TourSandbox({ topic }: { topic: TourTopic }) {
     <div className={styles.preview} data-tour-sandbox={topic}>
       <div className={styles.previewHeading}>
         <FileCode2 size={14} />{" "}
-        {topic === "modules" ? "A connected track" : "Try it here"}
+        {topic === "modules" ? t("A connected track") : t("Try it here")}
         {!graphOpen && (
           <>
             {topic === "assist" && (
               <button
                 type="button"
                 className={styles.assistToggle}
-                aria-label="Toggle demo Assist"
+                aria-label={t("Toggle demo Assist")}
                 aria-expanded={assistOpen}
                 onClick={() => setAssistOpen(!assistOpen)}
               >
@@ -135,7 +139,7 @@ export function TourSandbox({ topic }: { topic: TourTopic }) {
                 disabled={pending}
                 onClick={() => run(() => player.current?.play())}
               >
-                <Play size={13} /> {state?.started ? "Update" : "Play"}
+                <Play size={13} /> {state?.started ? t("Update") : t("Play")}
               </button>
               {state?.started && (
                 <button
@@ -143,7 +147,7 @@ export function TourSandbox({ topic }: { topic: TourTopic }) {
                   className={styles.secondaryButton}
                   onClick={() => run(() => player.current?.stop())}
                 >
-                  <Square size={12} /> Stop
+                  <Square size={12} /> {t("Stop")}
                 </button>
               )}
             </div>
@@ -151,7 +155,11 @@ export function TourSandbox({ topic }: { topic: TourTopic }) {
         )}
       </div>
       {topic === "modules" && (
-        <div className={styles.fileTabs} role="tablist" aria-label="Demo files">
+        <div
+          className={styles.fileTabs}
+          role="tablist"
+          aria-label={t("Demo files")}
+        >
           <button
             type="button"
             role="tab"
@@ -162,7 +170,7 @@ export function TourSandbox({ topic }: { topic: TourTopic }) {
               setGraphOpen(true);
             }}
           >
-            <Network size={13} /> Graph View
+            <Network size={13} /> {t("Graph View")}
           </button>
           {Object.keys(files).map((file) => (
             <button
@@ -218,7 +226,7 @@ export function TourSandbox({ topic }: { topic: TourTopic }) {
                 assistantStyles.panel,
                 styles.floatingAssistant,
               )}
-              aria-label="Assist demo"
+              aria-label={t("Assist demo")}
               aria-busy={pending}
             >
               <AssistantContent
@@ -226,7 +234,7 @@ export function TourSandbox({ topic }: { topic: TourTopic }) {
                 answer={answer}
                 showComposer={!answer}
                 pending={pending}
-                placeholder="Try typing..."
+                placeholder={t("Try typing...")}
                 onPromptChange={(value) =>
                   setPrompt((current) =>
                     requestText.slice(

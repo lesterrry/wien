@@ -1,5 +1,6 @@
 import { ArrowLeft, ArrowRight, Library } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { t, useLocale } from "../../i18n";
 import { Dialog } from "../Dialog/Dialog";
 import styles from "./Onboarding.module.css";
 import { markOnboardingSeen } from "./onboarding-state";
@@ -14,6 +15,7 @@ export function Onboarding({
   onClose: () => void;
   onExamples: () => void;
 }) {
+  useLocale();
   const web = window.workspace.platform === "web";
   const steps = tourSteps(web);
   const [index, setIndex] = useState(0);
@@ -29,10 +31,14 @@ export function Onboarding({
     content.current?.scrollTo(0, 0);
   }, [index]);
   return (
-    <Dialog title="Welcome to Wien" className={styles.dialog} onClose={onClose}>
+    <Dialog
+      title={t("Welcome to Wien")}
+      className={styles.dialog}
+      onClose={onClose}
+    >
       <div className={styles.layout}>
-        <nav className={styles.chapters} aria-label="Tour chapters">
-          <span className={styles.eyebrow}>A quick tour</span>
+        <nav className={styles.chapters} aria-label={t("Tour chapters")}>
+          <span className={styles.eyebrow}>{t("A quick tour")}</span>
           {steps.map((item, position) => (
             <button
               type="button"
@@ -78,7 +84,7 @@ export function Onboarding({
       </div>
       <footer className={styles.footer}>
         <span className={styles.counter} aria-live="polite">
-          {index + 1} of {steps.length}
+          {index + 1} {t("of")} {steps.length}
         </span>
         <div className={styles.actions}>
           {index > 0 && (
@@ -87,7 +93,7 @@ export function Onboarding({
               className={styles.secondaryButton}
               onClick={() => setIndex(index - 1)}
             >
-              <ArrowLeft size={14} /> Back
+              <ArrowLeft size={14} /> {t("Back")}
             </button>
           )}
           {last && (
@@ -96,7 +102,7 @@ export function Onboarding({
               className={styles.secondaryButton}
               onClick={onExamples}
             >
-              <Library size={14} /> Browse examples
+              <Library size={14} /> {t("Browse examples")}
             </button>
           )}
           <button
@@ -104,7 +110,7 @@ export function Onboarding({
             className={styles.primaryButton}
             onClick={last ? onClose : () => setIndex(index + 1)}
           >
-            {last ? "Let’s make something" : "Next"}
+            {last ? t("Let’s make something") : t("Next")}
             <ArrowRight size={14} />
           </button>
         </div>

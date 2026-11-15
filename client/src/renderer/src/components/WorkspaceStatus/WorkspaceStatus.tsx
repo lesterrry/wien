@@ -1,5 +1,6 @@
 import classNames from "classnames";
 import { Check, Loader2 } from "lucide-react";
+import { t, useLocale } from "../../i18n";
 import styles from "./WorkspaceStatus.module.css";
 
 export function WorkspaceStatus({
@@ -11,6 +12,7 @@ export function WorkspaceStatus({
   dirty: boolean;
   position: number[];
 }) {
+  useLocale();
   return (
     <footer className={styles.statusbar}>
       <span
@@ -25,11 +27,12 @@ export function WorkspaceStatus({
         ) : (
           <Check size={12} />
         )}
-        {savedStatus}
+        {t(savedStatus)}
       </span>
       <div>
         <span>
-          Ln {position[0]}, Col {position[1]}
+          {t("Ln")} {position[0]}
+          {t(", Col")} {position[1]}
         </span>
         <span>UTF-8</span>
         <span className={styles.strudelBadge}>Strudel</span>

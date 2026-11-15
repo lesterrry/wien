@@ -1,5 +1,6 @@
 import { Library } from "lucide-react";
 import { exampleDescriptions } from "../../../../shared/example-descriptions";
+import { t, useLocale } from "../../i18n";
 import { Dialog } from "../Dialog/Dialog";
 import styles from "./ExamplePickerDialog.module.css";
 
@@ -12,9 +13,10 @@ export function ExamplePickerDialog({
   onClose: () => void;
   onSelect: (example: string) => void;
 }) {
+  useLocale();
   return (
-    <Dialog title="New from example" onClose={onClose}>
-      <ul className={styles.exampleList} aria-label="Examples">
+    <Dialog title={t("New from example")} onClose={onClose}>
+      <ul className={styles.exampleList} aria-label={t("Examples")}>
         {examples.map((example) => (
           <li key={example}>
             <button
@@ -32,7 +34,7 @@ export function ExamplePickerDialog({
                 <span>{example}</span>
                 {exampleDescriptions[example] && (
                   <small id={`example-${example}-description`}>
-                    {exampleDescriptions[example]}
+                    {t(exampleDescriptions[example])}
                   </small>
                 )}
               </span>

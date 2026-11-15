@@ -26,6 +26,7 @@
     "build:web": "pnpm typecheck && vite build --config vite.web.config.ts",
     "test:payments": "pnpm build:web && node scripts/payments-smoke.mjs",
     "test:storefront": "pnpm build:web && node scripts/storefront-smoke.mjs",
+    "test:localization": "pnpm build:web && node scripts/localization-smoke.mjs",
     "test:web": "node scripts/web-smoke.mjs",
     "test:audio-export": "pnpm build && pnpm build:web && node scripts/audio-export-smoke.mjs",
     "test:onboarding": "pnpm build && pnpm build:web && node scripts/onboarding-smoke.mjs"

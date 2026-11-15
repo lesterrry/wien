@@ -2,9 +2,11 @@ import { useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { externalWebUrl } from "../../../../shared/links";
+import { t, useLocale } from "../../i18n";
 import styles from "./MarkdownAnswer.module.css";
 
 export function MarkdownAnswer({ children }: { children: string }) {
+  useLocale();
   const [linkError, setLinkError] = useState(false);
   return (
     <div className={styles.markdown}>
@@ -44,7 +46,7 @@ export function MarkdownAnswer({ children }: { children: string }) {
       </Markdown>
       {linkError && (
         <p className={styles.error} role="alert">
-          Could not open the link in your browser.
+          {t("Could not open the link in your browser.")}
         </p>
       )}
     </div>

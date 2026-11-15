@@ -8,6 +8,7 @@ import {
   Plus,
   UserRound,
 } from "lucide-react";
+import { getLocale, t, useLocale } from "../../i18n";
 import { useAccount } from "../Account/Account";
 import styles from "./ProjectMenu.module.css";
 
@@ -32,6 +33,7 @@ export function ProjectMenu({
   onExport: () => void;
   onReveal: () => void;
 }) {
+  useLocale();
   const {
     user,
     openProfile,
@@ -43,7 +45,7 @@ export function ProjectMenu({
       <button
         className={styles.projectPicker}
         type="button"
-        aria-label="Project and account"
+        aria-label={t("Project and account")}
         aria-expanded={open}
         onClick={(event) => {
           event.stopPropagation();
@@ -56,14 +58,16 @@ export function ProjectMenu({
           <Code2 size={18} />
         </span>
         <span>
-          <strong>{projectName ?? "Opening workspace…"}</strong>
+          <strong>{projectName ?? t("Opening workspace…")}</strong>
           <small className={styles.accountIdentity}>
             <span title={user?.username}>
-              {user?.username ?? "Not signed in"}
+              {user?.username ?? t("Not signed in")}
             </span>
             {user && !user.plan.is_default && (
               <span className={styles.tierBadge} data-tier={user.tier}>
-                {user.plan.name}
+                {getLocale() === "ru"
+                  ? user.plan.name_ru || user.plan.name
+                  : user.plan.name}
               </span>
             )}
           </small>
@@ -80,7 +84,7 @@ export function ProjectMenu({
             }}
           >
             <UserRound size={15} />
-            {user ? "Your profile" : "Sign in"}
+            {user ? t("Your profile") : t("Sign in")}
           </button>
           {user && (
             <div className={styles.subscription}>
@@ -88,8 +92,10 @@ export function ProjectMenu({
                 <strong>{user.plan.name}</strong>
                 <span>
                   {user.plan.initial_assist_requests !== null
-                    ? `${user.assist_requests_remaining} assist requests left`
-                    : "Subscription active"}
+                    ? t("{p0} assist requests left", {
+                        p0: user.assist_requests_remaining,
+                      })
+                    : t("Subscription active")}
                 </span>
               </div>
               <button
@@ -100,7 +106,9 @@ export function ProjectMenu({
                 }}
               >
                 <span>
-                  {user.plan.is_default ? "Explore plans" : "Manage billing"}
+                  {user.plan.is_default
+                    ? t("Explore plans")
+                    : t("Manage billing")}
                 </span>{" "}
                 <ArrowRight size={13} />
               </button>
@@ -109,11 +117,11 @@ export function ProjectMenu({
           <div className={styles.menuDivider} />
           <button type="button" onClick={() => onSwitchProject(true)}>
             <Plus size={15} />
-            New project
+            {t("New project")}
           </button>
           <button type="button" onClick={() => onSwitchProject(false)}>
             <FolderOpen size={15} />
-            Open project…
+            {t("Open project…")}
           </button>
           {hasExamples && (
             <button
@@ -124,7 +132,7 @@ export function ProjectMenu({
               }}
             >
               <Library size={15} />
-              New from example
+              {t("New from example")}
             </button>
           )}
           <div className={styles.menuDivider} />
@@ -136,12 +144,12 @@ export function ProjectMenu({
                 onExport();
               }}
             >
-              Export project…
+              {t("Export project…")}
             </button>
           ) : (
             <button type="button" onClick={onReveal}>
               <ArrowRight size={15} />
-              Show project folder
+              {t("Show project folder")}
             </button>
           )}
         </div>

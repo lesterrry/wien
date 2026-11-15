@@ -10,6 +10,7 @@ import {
   validateCustomization,
 } from "../../../../shared/control-customizations";
 import type { Control } from "../../../../shared/controls";
+import { t, useLocale } from "../../i18n";
 import { Dialog } from "../Dialog/Dialog";
 import { NumberInput } from "../NumberInput/NumberInput";
 import { Select } from "../Select/Select";
@@ -28,19 +29,20 @@ function SettingField({
   disabled: boolean;
   onChange: (value: SettingValue) => void;
 }) {
+  useLocale();
   const fieldId = useId();
   switch (field.type) {
     case "select":
       return (
         <Select
-          aria-label={field.label}
+          aria-label={t(field.label)}
           value={value as string}
           disabled={disabled}
           onChange={(event) => onChange(event.target.value)}
         >
           {field.options.map((option) => (
             <option key={option.value} value={option.value}>
-              {option.label}
+              {t(option.label)}
             </option>
           ))}
         </Select>
@@ -48,9 +50,9 @@ function SettingField({
     case "text":
       return (
         <input
-          aria-label={field.label}
+          aria-label={t(field.label)}
           value={value as string}
-          placeholder={field.placeholder}
+          placeholder={field.placeholder ? t(field.placeholder) : undefined}
           disabled={disabled}
           onChange={(event) => onChange(event.target.value)}
         />
@@ -59,7 +61,7 @@ function SettingField({
       return (
         <NumberInput
           id={fieldId}
-          label={field.label}
+          label={t(field.label)}
           value={value as string}
           min={field.min}
           max={field.max}
@@ -72,12 +74,12 @@ function SettingField({
     case "range":
       return (
         <div className={styles.range}>
-          {["Minimum", "Maximum"].map((label, index) => (
+          {[t("Minimum"), t("Maximum")].map((label, index) => (
             <div key={label}>
               <label htmlFor={`${fieldId}-${index}`}>{label}</label>
               <NumberInput
                 id={`${fieldId}-${index}`}
-                label={`${field.label} ${label.toLowerCase()}`}
+                label={`${t(field.label)} ${label.toLowerCase()}`}
                 value={value[index]}
                 disabled={disabled}
                 onChange={(nextValue) => {
@@ -102,7 +104,7 @@ function SettingField({
         onChange(next);
       };
       return (
-        <ol className={styles.order} aria-label={field.label}>
+        <ol className={styles.order} aria-label={t(field.label)}>
           {order.map((key, index) => (
             <li key={key}>
               <span>
@@ -111,7 +113,7 @@ function SettingField({
               <button
                 type="button"
                 className={styles.iconButton}
-                aria-label={`Move ${key} up`}
+                aria-label={t("Move {p0} up", { p0: key })}
                 disabled={disabled || index === 0}
                 onClick={() => move(index, -1)}
               >
@@ -120,7 +122,7 @@ function SettingField({
               <button
                 type="button"
                 className={styles.iconButton}
-                aria-label={`Move ${key} down`}
+                aria-label={t("Move {p0} down", { p0: key })}
                 disabled={disabled || index === order.length - 1}
                 onClick={() => move(index, 1)}
               >
@@ -147,6 +149,7 @@ export function ControlSettingsDialog({
   onSave: (settings: ControlCustomization) => Promise<void>;
   onClose: () => void;
 }) {
+  useLocale();
   const [settings, setSettings] = useState(initial);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -169,7 +172,10 @@ export function ControlSettingsDialog({
     });
   };
   return (
-    <Dialog title={`Settings · ${control.name}`} onClose={onClose}>
+    <Dialog
+      title={t("Settings · {p0}", { p0: control.name })}
+      onClose={onClose}
+    >
       <form
         className={styles.form}
         onSubmit={async (event) => {
@@ -190,9 +196,9 @@ export function ControlSettingsDialog({
         <p className={styles.path}>{path}</p>
         {definitions.length > 1 && (
           <div>
-            <div className={styles.label}>Control type</div>
+            <div className={styles.label}>{t("Control type")}</div>
             <Select
-              aria-label="Control type"
+              aria-label={t("Control type")}
               value={settings.kind}
               disabled={saving}
               onChange={(event) => {
@@ -219,7 +225,7 @@ export function ControlSettingsDialog({
             >
               {definitions.map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.label}
+                  {t(item.label)}
                 </option>
               ))}
             </Select>
@@ -227,7 +233,7 @@ export function ControlSettingsDialog({
         )}
         {definition.fields.map((field) => (
           <div key={field.id}>
-            <div className={styles.label}>{field.label}</div>
+            <div className={styles.label}>{t(field.label)}</div>
             <SettingField
               field={field}
               value={settings.values[field.id] ?? field.defaultValue}
@@ -239,7 +245,7 @@ export function ControlSettingsDialog({
         ))}
         {(error || validation) && (
           <p role="alert" className={styles.error}>
-            {error || validation}
+            {t(error || validation || "")}
           </p>
         )}
         <div className={styles.actions}>
@@ -249,14 +255,14 @@ export function ControlSettingsDialog({
             disabled={saving}
             onClick={onClose}
           >
-            Cancel
+            {t("Cancel")}
           </button>
           <button
             type="submit"
             className={styles.primaryButton}
             disabled={saving || Boolean(validation)}
           >
-            {saving ? "Saving…" : "Save"}
+            {saving ? t("Saving…") : t("Save")}
           </button>
         </div>
       </form>

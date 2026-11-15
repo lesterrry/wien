@@ -24,6 +24,7 @@ import type {
   ControlValue,
 } from "../../../../shared/controls";
 import { shortcutEnvironment } from "../../commands";
+import { t, useLocale } from "../../i18n";
 import { BooleanSwitch } from "../BooleanSwitch/BooleanSwitch";
 import { EnumSwitch } from "../EnumSwitch/EnumSwitch";
 import { MultiSelect } from "../MultiSelect/MultiSelect";
@@ -47,6 +48,7 @@ export function ControlInput({
   onDefinition,
   onConfigure,
 }: ControlCallbacks & { control: Control }) {
+  useLocale();
   const props = {
     disabled,
     onIgnore,
@@ -71,7 +73,7 @@ export function ControlInput({
       return <BooleanSwitch {...props} control={control} onChange={setValue} />;
     default: {
       const unsupported: never = control;
-      throw new Error(`Unsupported control: ${unsupported}`);
+      throw new Error(t("Unsupported control: {p0}", { p0: unsupported }));
     }
   }
 }
@@ -122,6 +124,7 @@ export function ControlsPanel({
   onReloadSource: (path: string) => void;
   onOpenController: () => void;
 }) {
+  useLocale();
   const [drag, setDrag] = useState<{
     file: string;
     name: string;
@@ -184,10 +187,14 @@ export function ControlsPanel({
             [styles.dropBefore]: isOver && drag?.side === "before",
             [styles.dropAfter]: isOver && drag?.side === "after",
           })}
-          aria-label={`${control.name} control`}
+          aria-label={t("{p0} control", { p0: control.name })}
           draggable={!disabled}
           tabIndex={disabled ? undefined : 0}
-          title={`Drag to reorder ${control.name} (${shortcut}+↑ / ${shortcut}+↓)`}
+          title={t("Drag to reorder {p0} ({p1}+↑ / {p2}+↓)", {
+            p0: control.name,
+            p1: shortcut,
+            p2: shortcut,
+          })}
           onPointerDown={(event) => {
             const target = event.target as HTMLElement | null;
             dragAllowed.current = !target?.closest(
@@ -281,13 +288,13 @@ export function ControlsPanel({
           />
           {error && (
             <p role="alert" className={styles.issue}>
-              {error}
+              {t(error)}
               <button
                 type="button"
                 disabled={disabled}
                 onClick={() => onReloadSource(group.path)}
               >
-                Reload source…
+                {t("Reload source…")}
               </button>
             </p>
           )}
@@ -298,13 +305,13 @@ export function ControlsPanel({
       <section
         key={group.id}
         className={styles.group}
-        aria-label={`${group.path} controls`}
+        aria-label={t("{p0} controls", { p0: group.path })}
       >
         <button
           type="button"
           className={styles.groupHeading}
           title={group.path}
-          aria-label={`Toggle ${group.path} group`}
+          aria-label={t("Toggle {p0} group", { p0: group.path })}
           aria-expanded={!collapsed}
           onClick={() =>
             onLayout({
@@ -350,7 +357,7 @@ export function ControlsPanel({
                     disabled={disabled}
                     onClick={() => onReloadSource(group.path)}
                   >
-                    Reload source…
+                    {t("Reload source…")}
                   </button>
                 </p>
               );
@@ -383,7 +390,9 @@ export function ControlsPanel({
                   <section
                     key={composition.name}
                     className={styles.composition}
-                    aria-label={`${composition.name} control group`}
+                    aria-label={t("{p0} control group", {
+                      p0: composition.name,
+                    })}
                   >
                     <button
                       type="button"
@@ -409,20 +418,22 @@ export function ControlsPanel({
       className={classNames(styles.controlsPanel, {
         [styles.fullscreen]: fullscreen,
       })}
-      aria-label="Snippet controls"
+      aria-label={t("Snippet controls")}
       data-mode={fullscreen ? "fullscreen" : "sidebar"}
       hidden={!visible}
     >
       <div className={styles.controlsTitle}>
         <SlidersHorizontal size={14} />
-        <span>Controls</span>
-        {loading && <small>Updating…</small>}
+        <span>{t("Controls")}</span>
+        {loading && <small>{t("Updating…")}</small>}
         {headerActions}
         <button
           type="button"
           className={styles.controllerButton}
-          title={fullscreen ? "Exit fullscreen" : "Open full controls"}
-          aria-label={fullscreen ? "Exit fullscreen" : "Open full controls"}
+          title={fullscreen ? t("Exit fullscreen") : t("Open full controls")}
+          aria-label={
+            fullscreen ? t("Exit fullscreen") : t("Open full controls")
+          }
           disabled={!fullscreen && (!root || disabled)}
           onClick={onOpenController}
         >
@@ -431,15 +442,15 @@ export function ControlsPanel({
       </div>
       <div className={styles.rootHeading}>
         <span title={root ?? undefined}>
-          {root?.split("/").at(-1) ?? "No file selected"}
+          {root?.split("/").at(-1) ?? t("No file selected")}
         </span>
         <button
           type="button"
           disabled={!root || disabled}
           className={styles.pin}
-          aria-label={pinned ? "Unpin master" : "Pin as master"}
+          aria-label={pinned ? t("Unpin master") : t("Pin as master")}
           aria-pressed={pinned}
-          title={pinned ? "Unpin master" : "Pin as master"}
+          title={pinned ? t("Unpin master") : t("Pin as master")}
           onClick={onPin}
         >
           <Pin size={14} />
@@ -448,8 +459,8 @@ export function ControlsPanel({
       {groups.some((group) => group.controls.length > 0) && (
         <input
           className={styles.search}
-          aria-label="Search controls"
-          placeholder="Search controls or files…"
+          aria-label={t("Search controls")}
+          placeholder={t("Search controls or files…")}
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
@@ -467,8 +478,8 @@ export function ControlsPanel({
         ) : (
           <p className={styles.controlsEmpty}>
             {loading
-              ? "Loading controls…"
-              : "Open a snippet to see its controls."}
+              ? t("Loading controls…")
+              : t("Open a snippet to see its controls.")}
           </p>
         )}
         {groups
@@ -492,12 +503,14 @@ export function ControlsPanel({
           ))}
         {tree && !matchingGroups.length && (
           <p className={styles.controlsEmpty}>
-            {query ? "No matching controls." : "No controls in these files."}
+            {query
+              ? t("No matching controls.")
+              : t("No controls in these files.")}
           </p>
         )}
       </div>
       <div className={styles.controlsHint}>
-        Click control title to go to its declaration
+        {t("Click control title to go to its declaration")}
       </div>
     </aside>
   );

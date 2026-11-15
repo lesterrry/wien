@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SubscriptionPlan } from "../../../../shared/account";
 import type { PaymentConfig, PaymentOrder } from "../../../../shared/payments";
+import { formatLocale, t, useLocale } from "../../i18n";
 import styles from "./SubscriptionPlans.module.css";
 
 const api = window.workspace;
@@ -36,6 +37,7 @@ export function Payments({
   onSignIn: () => void;
   onPaid: () => Promise<unknown>;
 }) {
+  useLocale();
   const [orders, setOrders] = useState<PaymentOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -133,20 +135,21 @@ export function Payments({
     : orders;
   const hasPending = orders.some((order) => order.status === "pending");
   return (
-    <section className={styles.payments} aria-label="Платежи">
-      {loading && <p role="status">Проверяем оплату…</p>}
+    <section className={styles.payments} aria-label={t("Платежи")}>
+      {loading && <p role="status">{t("Проверяем оплату…")}</p>}
       {config?.mode === "test" && (
         <p className={styles.testNotice}>
-          Тестовый режим Robokassa. Деньги не списываются. Доступно только
-          тестовым аккаунтам.
+          {t(
+            "Тестовый режим Robokassa. Деньги не списываются. Доступно только тестовым аккаунтам.",
+          )}
         </p>
       )}
-      {config?.mode === "disabled" && <p>Оплата пока недоступна.</p>}
+      {config?.mode === "disabled" && <p>{t("Оплата пока недоступна.")}</p>}
       {!userId && (config?.mode === "test" || !plan) && (
         <button type="button" className={styles.pay} onClick={onSignIn}>
           {config?.mode === "test"
-            ? "Войти для оплаты"
-            : "Войти для просмотра платежей"}
+            ? t("Войти для оплаты")
+            : t("Войти для просмотра платежей")}
         </button>
       )}
       {plan && (userId || config?.mode !== "test") && (
@@ -174,19 +177,20 @@ export function Payments({
           }}
         >
           {busy
-            ? "Создаём заказ…"
+            ? t("Создаём заказ…")
             : config?.mode === "test"
-              ? "Создать тестовый заказ"
-              : "Оплата пока недоступна"}
+              ? t("Создать тестовый заказ")
+              : t("Оплата пока недоступна")}
         </button>
       )}
       {plan && config?.mode === "test" && (
         <p>
-          Новый месяц можно купить после окончания действующей подписки.
-          Автоматических списаний нет.
+          {t(
+            "Новый месяц можно купить после окончания действующей подписки. Автоматических списаний нет.",
+          )}
         </p>
       )}
-      {error && <p role="alert">{error}</p>}
+      {error && <p role="alert">{t(error)}</p>}
       {(error || (userId && !loading)) && (
         <button
           type="button"
@@ -196,47 +200,48 @@ export function Payments({
             void load();
           }}
         >
-          Проверить статус
+          {t("Проверить статус")}
         </button>
       )}
       {!plan && !loading && userId && orders.length === 0 && !error && (
-        <p>У вас пока нет платежей.</p>
+        <p>{t("У вас пока нет платежей.")}</p>
       )}
       {shown.map((order) => (
         <article
           key={order.id}
           className={styles.order}
-          aria-label={`Заказ ${order.invoice_id}`}
+          aria-label={t("Заказ {p0}", { p0: order.invoice_id })}
         >
           <h3>
             {order.plan_name} ·{" "}
-            {new Intl.NumberFormat("ru-RU", {
+            {new Intl.NumberFormat(formatLocale(), {
               style: "currency",
               currency: order.currency,
             }).format(order.price_minor / 100)}
           </h3>
           <p>
-            {order.request_limit.toLocaleString("ru-RU")} запросов · один месяц
-            · тестовый платёж
+            {order.request_limit.toLocaleString(formatLocale())}{" "}
+            {t("запросов · один месяц · тестовый платёж")}
           </p>
           <p className={styles.orderStatus} role="status">
-            {states[order.status]}
+            {t(states[order.status])}
           </p>
           <p>
-            Заказ № {order.invoice_id} ·{" "}
-            {new Date(order.created_at).toLocaleString("ru-RU")}
+            {t("Заказ №")} {order.invoice_id} ·{" "}
+            {new Date(order.created_at).toLocaleString(formatLocale())}
           </p>
           {order.period_ends_at && (
             <p>
-              Подписка действует до{" "}
-              {new Date(order.period_ends_at).toLocaleString("ru-RU")}.
+              {t("Подписка действует до")}{" "}
+              {new Date(order.period_ends_at).toLocaleString(formatLocale())}.
             </p>
           )}
           {order.status === "pending" && (
             <>
               <p>
-                Откройте Robokassa и завершите тестовую оплату. Этот экран
-                обновится после подтверждения сервера.
+                {t(
+                  "Откройте Robokassa и завершите тестовую оплату. Этот экран обновится после подтверждения сервера.",
+                )}
               </p>
               <div className={styles.orderActions}>
                 {order.checkout_url && (
@@ -249,7 +254,7 @@ export function Payments({
                         .catch((e: unknown) => setError(message(e)));
                     }}
                   >
-                    Открыть Robokassa
+                    {t("Открыть Robokassa")}
                   </button>
                 )}
                 <button
@@ -259,26 +264,29 @@ export function Payments({
                     void mutate(() => api.paymentCancel(order.id));
                   }}
                 >
-                  Отменить заказ
+                  {t("Отменить заказ")}
                 </button>
               </div>
             </>
           )}
           {order.status === "cancelled" && (
             <p>
-              Не оплачивайте старую ссылку. Для повторной попытки создайте новый
-              заказ.
+              {t(
+                "Не оплачивайте старую ссылку. Для повторной попытки создайте новый заказ.",
+              )}
             </p>
           )}
           {order.status === "paid_review" && (
             <p>
-              Подписка по этому заказу не включена автоматически. Напишите{" "}
+              {t(
+                "Подписка по этому заказу не включена автоматически. Напишите",
+              )}{" "}
               <a
                 href={`mailto:${supportEmail}?subject=${encodeURIComponent(`Wien: заказ ${order.invoice_id}`)}`}
               >
                 {supportEmail}
               </a>
-              , указав номер заказа.
+              {t(", указав номер заказа.")}
             </p>
           )}
         </article>

@@ -7,6 +7,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { t, useLocale } from "../../i18n";
 import { AnimatedBorder } from "../AnimatedBorder/AnimatedBorder";
 import styles from "./FileTabs.module.css";
 
@@ -44,6 +45,7 @@ export function FileTabs({
     onClose: () => void;
   };
 }) {
+  useLocale();
   const list = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!active && !controller?.open && !graph.active) return;
@@ -56,7 +58,8 @@ export function FileTabs({
     <div
       className={styles.fileTabs}
       role="tablist"
-      aria-label="Open snippets"
+      aria-label={t("Open snippets")}
+      data-snippet-tabs
       ref={list}
       onKeyDown={(event) => {
         if (
@@ -108,11 +111,11 @@ export function FileTabs({
               id={`tab-${encodeURIComponent(tab.path)}`}
               aria-label={tab.path}
               aria-selected={selected}
-              aria-description={tab.playing ? "Playing" : undefined}
+              aria-description={tab.playing ? t("Playing") : undefined}
               aria-controls="snippet-panel"
               tabIndex={selected ? 0 : -1}
               disabled={disabled}
-              title={`${tab.path}${tab.playing ? " · Playing" : ""}`}
+              title={`${tab.path}${tab.playing ? t(" · Playing") : ""}`}
               className={styles.fileTabSelect}
               onClick={() => onSelect(tab.path)}
             >
@@ -128,15 +131,15 @@ export function FileTabs({
               <span
                 className={styles.unsavedDot}
                 role="img"
-                aria-label="Unsaved changes"
+                aria-label={t("Unsaved changes")}
                 aria-hidden={!tab.dirty}
               />
             </button>
             <button
               type="button"
               className={styles.fileTabClose}
-              aria-label={`Close ${tab.path}`}
-              title="Close tab"
+              aria-label={t("Close {p0}", { p0: tab.path })}
+              title={t("Close tab")}
               disabled={disabled}
               onClick={() => onClose(tab.path)}
             >
@@ -156,7 +159,7 @@ export function FileTabs({
             type="button"
             role="tab"
             id="tab-graph"
-            aria-label="Graph View"
+            aria-label={t("Graph View")}
             aria-selected={graph.active}
             aria-controls="snippet-panel"
             tabIndex={graph.active ? 0 : -1}
@@ -165,13 +168,13 @@ export function FileTabs({
             onClick={graph.onSelect}
           >
             <Network size={13} />
-            <span className={styles.fileTabName}>Graph View</span>
+            <span className={styles.fileTabName}>{t("Graph View")}</span>
           </button>
           <button
             type="button"
             className={styles.fileTabClose}
-            aria-label="Close Graph View"
-            title="Close Graph View"
+            aria-label={t("Close Graph View")}
+            title={t("Close Graph View")}
             disabled={disabled}
             onClick={graph.onClose}
           >
@@ -189,19 +192,19 @@ export function FileTabs({
             type="button"
             role="tab"
             aria-selected="true"
-            aria-label="Controls view"
+            aria-label={t("Controls view")}
             tabIndex={0}
             className={styles.fileTabSelect}
             onClick={controller.onSelect}
           >
             <SlidersHorizontal size={13} />
-            <span className={styles.fileTabName}>Control Panel</span>
+            <span className={styles.fileTabName}>{t("Control Panel")}</span>
           </button>
           <button
             type="button"
             className={styles.fileTabClose}
-            aria-label="Close controls view"
-            title="Close controls view"
+            aria-label={t("Close controls view")}
+            title={t("Close controls view")}
             disabled={controller.disabled}
             onClick={controller.onClose}
           >

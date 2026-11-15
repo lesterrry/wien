@@ -12,6 +12,7 @@ import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { type NodeRendererProps, Tree, type TreeApi } from "react-arborist";
 import { useDragDropManager } from "react-dnd";
 import type { Entry } from "../../../../shared/types";
+import { t, useLocale } from "../../i18n";
 import styles from "./Explorer.module.css";
 
 const ExplorerActions = createContext<{
@@ -21,6 +22,7 @@ const ExplorerActions = createContext<{
 }>({ disabled: false, onOpen: () => {}, onMenu: () => {} });
 
 function Row({ node, style, dragHandle }: NodeRendererProps<Entry>) {
+  useLocale();
   const { disabled, onOpen, onMenu } = useContext(ExplorerActions);
   const Icon = node.isLeaf
     ? node.data.exported
@@ -43,7 +45,7 @@ function Row({ node, style, dragHandle }: NodeRendererProps<Entry>) {
           <span className={styles.treeChevron} />
           <Icon size={15} />
           <input
-            aria-label="Rename item"
+            aria-label={t("Rename item")}
             defaultValue={node.data.name}
             ref={(input) => {
               input?.focus();
@@ -77,8 +79,8 @@ function Row({ node, style, dragHandle }: NodeRendererProps<Entry>) {
           title={
             node.isLeaf
               ? node.data.exported
-                ? "Exported snippet · drag into the editor to import"
-                : "Snippet · drag into the editor to export and import"
+                ? t("Exported snippet · drag into the editor to import")
+                : t("Snippet · drag into the editor to export and import")
               : undefined
           }
         >
@@ -101,7 +103,7 @@ function Row({ node, style, dragHandle }: NodeRendererProps<Entry>) {
       <button
         type="button"
         className={classNames(styles.iconButton, styles.rowMenu)}
-        aria-label={`Actions for ${node.data.name}`}
+        aria-label={t("Actions for {p0}", { p0: node.data.name })}
         disabled={disabled}
         onClick={(event) => {
           event.stopPropagation();
@@ -136,6 +138,7 @@ export function Explorer({
   onMove: (paths: string[], parent: string) => Promise<void>;
   onMenu: (entry: Entry, x: number, y: number) => void;
 }) {
+  useLocale();
   const container = useRef<HTMLDivElement>(null);
   const tree = useRef<TreeApi<Entry>>(null);
   const dndManager = useDragDropManager();
@@ -190,9 +193,9 @@ export function Explorer({
         </Tree>
         {entries.length === 0 && (
           <div className={styles.treeEmpty}>
-            A fresh start.
+            {t("A fresh start.")}
             <br />
-            Add your first snippet above.
+            {t("Add your first snippet above.")}
           </div>
         )}
       </div>

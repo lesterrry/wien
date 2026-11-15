@@ -2,6 +2,7 @@ import { FileText } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { SubscriptionPlan } from "../../../../shared/account";
 import type { Storefront } from "../../../../shared/storefront";
+import { formatLocale, getLocale, t, useLocale } from "../../i18n";
 import { Dialog } from "../Dialog/Dialog";
 import tabStyles from "../FileTabs/FileTabs.module.css";
 import {
@@ -22,17 +23,19 @@ const names: Record<Tab, string> = {
   privacy: "Политика данных",
   payments: "Платежи",
 };
-const name = (plan: SubscriptionPlan) => plan.name_ru || plan.name;
+const name = (plan: SubscriptionPlan) =>
+  getLocale() === "ru" ? plan.name_ru || plan.name : plan.name;
 const price = (plan: SubscriptionPlan) =>
-  new Intl.NumberFormat("ru-RU", {
+  new Intl.NumberFormat(formatLocale(), {
     style: "currency",
     currency: plan.currency,
     minimumFractionDigits: 0,
     maximumFractionDigits: plan.currency_minor_units,
   }).format(plan.price_minor / 10 ** plan.currency_minor_units);
 function allowance(plan: SubscriptionPlan) {
-  if (plan.initial_assist_requests === null) return "Без ограничения запросов";
-  return `${plan.initial_assist_requests.toLocaleString("ru-RU")} запросов ${plan.billing_period === "month" ? "в месяц" : plan.billing_period === "year" ? "в год" : "однократно"}`;
+  if (plan.initial_assist_requests === null)
+    return t("Без ограничения запросов");
+  return `${plan.initial_assist_requests.toLocaleString(formatLocale())} ${t("requests")} ${plan.billing_period === "month" ? t("в месяц") : plan.billing_period === "year" ? t("в год") : t("однократно")}`;
 }
 
 export function SubscriptionPlans({
@@ -56,6 +59,7 @@ export function SubscriptionPlans({
   initialTab?: Tab;
   onClose: () => void;
 }) {
+  useLocale();
   const [tab, setTab] = useState<Tab>(initialTab);
   const selectedTab = useRef<HTMLButtonElement>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: keep the selected tab visible after navigation and resizing.
@@ -97,11 +101,11 @@ export function SubscriptionPlans({
     setTab(next);
   }
   return (
-    <Dialog title="Тарифы" onClose={onClose} className={styles.dialog}>
+    <Dialog title={t("Тарифы")} onClose={onClose} className={styles.dialog}>
       <div
         className={styles.tabs}
         role="tablist"
-        aria-label="Тарифы и документы"
+        aria-label={t("Тарифы и документы")}
         onKeyDown={(event) => {
           const items = Object.keys(names) as Tab[];
           const index = items.indexOf(tab);
@@ -144,7 +148,7 @@ export function SubscriptionPlans({
               onClick={() => navigate(item)}
             >
               <FileText size={13} aria-hidden="true" />
-              <span className={tabStyles.fileTabName}>{names[item]}</span>
+              <span className={tabStyles.fileTabName}>{t(names[item])}</span>
             </button>
           </div>
         ))}
@@ -157,16 +161,16 @@ export function SubscriptionPlans({
       >
         {error ? (
           <div role="alert">
-            <p>Не удалось загрузить тарифы.</p>
+            <p>{t("Не удалось загрузить тарифы.")}</p>
             <button
               type="button"
               onClick={() => setAttempt((value) => value + 1)}
             >
-              Попробовать снова
+              {t("Попробовать снова")}
             </button>
           </div>
         ) : !plans || !store ? (
-          <p role="status">Загружаем тарифы…</p>
+          <p role="status">{t("Загружаем тарифы…")}</p>
         ) : tab === "payments" ? (
           <Payments
             config={store.payments}
@@ -183,7 +187,10 @@ export function SubscriptionPlans({
         ) : tab === "privacy" ? (
           <Privacy store={store} />
         ) : plan ? (
-          <section className={styles.checkout} aria-label="Условия покупки">
+          <section
+            className={styles.checkout}
+            aria-label={t("Условия покупки")}
+          >
             <button
               type="button"
               className={styles.back}
@@ -192,15 +199,21 @@ export function SubscriptionPlans({
                 setAccepted(false);
               }}
             >
-              ← Все тарифы
+              {t("← Все тарифы")}
             </button>
             <h3>{name(plan)}</h3>
             <p className={styles.price}>
               {price(plan)}{" "}
-              <span>/ {plan.billing_period === "year" ? "год" : "месяц"}</span>
+              <span>
+                / {plan.billing_period === "year" ? t("год") : t("месяц")}
+              </span>
             </p>
             <p className={styles.allowance}>{allowance(plan)}</p>
-            <p>{plan.description_ru || plan.description}</p>
+            <p>
+              {getLocale() === "ru"
+                ? plan.description_ru || plan.description
+                : plan.description}
+            </p>
             <PurchaseTerms period={plan.billing_period} />
             <p>{store.terms.ai_usage_policy}</p>
             <RefundTerms store={store} />
@@ -211,13 +224,13 @@ export function SubscriptionPlans({
                 onChange={(event) => setAccepted(event.target.checked)}
               />
               <span>
-                Я ознакомился с{" "}
+                {t("Я ознакомился с")}{" "}
                 <button type="button" onClick={() => navigate("offer")}>
-                  условиями покупки и возврата
+                  {t("условиями покупки и возврата")}
                 </button>{" "}
-                и{" "}
+                {t("и")}{" "}
                 <button type="button" onClick={() => navigate("privacy")}>
-                  политикой данных
+                  {t("политикой данных")}
                 </button>
                 .
               </span>
@@ -237,47 +250,58 @@ export function SubscriptionPlans({
         ) : (
           <>
             <p>
-              Wien — AI-first редактор музыки. Создавайте и изменяйте
-              Strudel-код по текстовому запросу, анализируйте готовое аудио и
-              экспортируйте свою работу.
+              {t(
+                "Wien — AI-first редактор музыки. Создавайте и изменяйте Strudel-код по текстовому запросу, анализируйте готовое аудио и экспортируйте свою работу.",
+              )}
             </p>
             <p className={styles.intro}>
               {exhausted
-                ? "Вы использовали доступные запросы ИИ."
-                : "Выберите количество запросов для вашей музыки."}{" "}
-              Один месяц, продление вручную.
+                ? t("Вы использовали доступные запросы ИИ.")
+                : t("Выберите количество запросов для вашей музыки.")}{" "}
+              {t("Один месяц, продление вручную.")}
             </p>
-            {audio && <p>Выберите тариф с аудиовложениями.</p>}
+            {audio && <p>{t("Выберите тариф с аудиовложениями.")}</p>}
             {plans.length === 0 ? (
-              <p role="status">Тарифы пока недоступны.</p>
+              <p role="status">{t("Тарифы пока недоступны.")}</p>
             ) : (
               <div className={styles.plans}>
                 {plans.map((item) => (
                   <section
                     className={styles.plan}
                     key={item.id}
-                    aria-label={`Тариф ${name(item)}`}
+                    aria-label={t("Тариф {p0}", { p0: name(item) })}
                   >
                     <h3>{name(item)}</h3>
                     <div className={styles.price}>
                       {price(item)}
                       {item.billing_period !== "none" && (
                         <span>
-                          / {item.billing_period === "month" ? "месяц" : "год"}
+                          /{" "}
+                          {item.billing_period === "month"
+                            ? t("месяц")
+                            : t("год")}
                         </span>
                       )}
                     </div>
                     <p className={styles.allowance}>{allowance(item)}</p>
-                    <p>{item.description_ru || item.description}</p>
+                    <p>
+                      {getLocale() === "ru"
+                        ? item.description_ru || item.description
+                        : item.description}
+                    </p>
                     <ul>
-                      {[...new Set(item.features_ru ?? item.features)].map(
-                        (feature) => (
-                          <li key={feature}>{feature}</li>
+                      {[
+                        ...new Set(
+                          getLocale() === "ru"
+                            ? (item.features_ru ?? item.features)
+                            : item.features,
                         ),
-                      )}
+                      ].map((feature) => (
+                        <li key={feature}>{feature}</li>
+                      ))}
                     </ul>
                     {item.id === currentPlanId && (
-                      <p className={styles.current}>Текущий тариф</p>
+                      <p className={styles.current}>{t("Текущий тариф")}</p>
                     )}
                     <button
                       type="button"
@@ -287,7 +311,9 @@ export function SubscriptionPlans({
                         setAccepted(false);
                       }}
                     >
-                      {item.is_default ? "Включено" : "Посмотреть условия"}
+                      {item.is_default
+                        ? t("Включено")
+                        : t("Посмотреть условия")}
                     </button>
                   </section>
                 ))}

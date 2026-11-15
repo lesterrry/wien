@@ -1,6 +1,7 @@
 import { ArrowRight } from "lucide-react";
 import { commands, shortcutLabel } from "../../../../shared/commands";
 import { shortcutEnvironment } from "../../commands";
+import { t, useLocale } from "../../i18n";
 import { Dialog } from "../Dialog/Dialog";
 import styles from "./GettingStartedDialog.module.css";
 
@@ -11,14 +12,17 @@ export function GettingStartedDialog({
   onClose: () => void;
   onTour: () => void;
 }) {
+  useLocale();
   return (
-    <Dialog title="A place to play" onClose={onClose}>
+    <Dialog title={t("A place to play")} onClose={onClose}>
       <div className={styles.helpContent}>
         <p>
-          Write Strudel code, play it, and follow the sound.{" "}
+          {t("Write Strudel code, play it, and follow the sound.")}{" "}
           {window.workspace.platform === "web"
-            ? "Your projects are saved in this browser. Export a project to keep a backup or move it to another browser."
-            : "Your snippets are plain files on your computer."}
+            ? t(
+                "Your projects are saved in this browser. Export a project to keep a backup or move it to another browser.",
+              )
+            : t("Your snippets are plain files on your computer.")}
         </p>
         {commands
           .filter((command) =>
@@ -26,21 +30,21 @@ export function GettingStartedDialog({
           )
           .map((command) => (
             <div key={command.id}>
-              <span>{command.label}</span>
+              <span>{t(command.label)}</span>
               <kbd>{shortcutLabel(command, shortcutEnvironment)}</kbd>
             </div>
           ))}
         <p className={styles.muted}>
-          Drag snippets into folders to organize them. Starter sounds use
-          built-in synthesizers and work offline. Playback continues while you
-          browse other snippets.
+          {t(
+            "Drag snippets into folders to organize them. Starter sounds use built-in synthesizers and work offline. Playback continues while you browse other snippets.",
+          )}
         </p>
         <button
           type="button"
           className={styles.secondaryButton}
           onClick={onTour}
         >
-          Take a tour
+          {t("Take a tour")}
           <ArrowRight size={14} />
         </button>
         <button
@@ -48,7 +52,7 @@ export function GettingStartedDialog({
           className={styles.primaryButton}
           onClick={onClose}
         >
-          Let’s make something
+          {t("Let’s make something")}
         </button>
       </div>
     </Dialog>

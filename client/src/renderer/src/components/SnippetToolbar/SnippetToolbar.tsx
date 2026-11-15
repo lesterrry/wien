@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { hasExports } from "../../../../shared/modules";
 import { parentPath } from "../../../../shared/types";
 import type { Document } from "../../hooks/useSnippetSessions";
+import { t, useLocale } from "../../i18n";
 import { shortcut } from "../App/workspace-utils";
 import styles from "./SnippetToolbar.module.css";
 
@@ -25,12 +26,13 @@ export function SnippetToolbar({
   onAssist: () => void;
   playbackControls: ReactNode;
 }) {
+  useLocale();
   const filename = document?.path.split("/").at(-1);
   return (
     <header
       className={styles.editorToolbar}
       role="toolbar"
-      aria-label="Snippet toolbar"
+      aria-label={t("Snippet toolbar")}
     >
       <div className={styles.fileHeading}>
         {document ? (
@@ -44,8 +46,8 @@ export function SnippetToolbar({
               <button
                 type="button"
                 className={styles.fileName}
-                title={`Double-click to rename (${shortcut} R)`}
-                aria-label={`Rename ${filename}`}
+                title={t("Double-click to rename ({p0} R)", { p0: shortcut })}
+                aria-label={t("Rename {p0}", { p0: filename ?? "" })}
                 disabled={busy || readOnly}
                 onDoubleClick={onRename}
                 onKeyDown={(event) => {
@@ -66,7 +68,9 @@ export function SnippetToolbar({
             </div>
           </>
         ) : (
-          <span className={styles.muted}>Your next idea starts here</span>
+          <span className={styles.muted}>
+            {t("Your next idea starts here")}
+          </span>
         )}
       </div>
       <div className={styles.transport}>
@@ -76,15 +80,15 @@ export function SnippetToolbar({
             className={styles.secondaryButton}
             onClick={onBack}
           >
-            Back to controls
+            {t("Back to controls")}
           </button>
         )}
         <button
           type="button"
           className={styles.iconButton}
-          aria-label="Ask Assist"
+          aria-label={t("Ask Assist")}
           data-assistant-trigger
-          title={`Ask Assist (${shortcut} ,)`}
+          title={t("Ask Assist ({p0} ,)", { p0: shortcut })}
           disabled={!document || busy}
           onClick={onAssist}
         >

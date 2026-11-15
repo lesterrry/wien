@@ -7,6 +7,7 @@ import {
   knobIncrement,
   normalizeKnobValue,
 } from "../../../../shared/knob";
+import { t, useLocale } from "../../i18n";
 import { ControlActions } from "../ControlActions/ControlActions";
 import { ControlTitle } from "../ControlTitle/ControlTitle";
 import styles from "./NumberKnob.module.css";
@@ -28,6 +29,7 @@ export function NumberKnob({
   onConfigure?: (name: string) => void;
   onReset?: () => void;
 }) {
+  useLocale();
   const { name, value, integer, step, min, max, split } = control;
   const bounded = boundedKnob(control);
   const increment = knobIncrement(control);
@@ -82,12 +84,14 @@ export function NumberKnob({
           role="spinbutton"
           className={styles.numberKnob}
           data-held={held}
-          aria-label={`${name} knob`}
+          aria-label={t("{p0} knob", { p0: name })}
           aria-valuenow={value}
           aria-valuemin={min}
           aria-valuemax={max}
           disabled={disabled}
-          title="Drag up/right to increase · Shift for precision · Alt for faster adjustment"
+          title={t(
+            "Drag up/right to increase · Shift for precision · Alt for faster adjustment",
+          )}
           onPointerDown={(event) => {
             if (event.button !== 0) return;
             event.preventDefault();
@@ -182,7 +186,7 @@ export function NumberKnob({
         </button>
         <output
           className={styles.controlValue}
-          aria-label={`${name} value`}
+          aria-label={t("{p0} value", { p0: name })}
           aria-live="off"
         >
           {value !== 0 && Math.abs(value) < 1e-20

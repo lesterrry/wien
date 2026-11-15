@@ -1,4 +1,5 @@
 import audioBufferToWav from "audiobuffer-to-wav";
+import { t } from "./i18n";
 
 export const assistSampleRate = 24000;
 export const maxAudioSeconds = 10;
@@ -22,7 +23,7 @@ export async function prepareAssistAudio({
     end - start < 0.1 ||
     end - start > maxAudioSeconds + 1e-6
   ) {
-    throw new Error("Select between 0.1 and 10 seconds of audio.");
+    throw new Error(t("Select between 0.1 and 10 seconds of audio."));
   }
   const length = Math.min(
     assistSampleRate * maxAudioSeconds,

@@ -2,6 +2,7 @@ import classNames from "classnames";
 import type { CSSProperties } from "react";
 import type { SliderControl } from "../../../../shared/controls";
 import { clampSliderValue } from "../../../../shared/slider";
+import { t, useLocale } from "../../i18n";
 import { ControlActions } from "../ControlActions/ControlActions";
 import { ControlTitle } from "../ControlTitle/ControlTitle";
 import styles from "./NumberSlider.module.css";
@@ -28,6 +29,7 @@ export function NumberSlider({
   onConfigure?: (name: string) => void;
   onReset?: () => void;
 }) {
+  useLocale();
   const { name, min, max, value, presentation, integer } = control;
   const vertical = presentation === "vertical";
   const step = integer ? 1 : (max - min) / 1000;
@@ -72,7 +74,7 @@ export function NumberSlider({
             step={integer ? 1 : "any"}
             value={value}
             disabled={disabled}
-            aria-label={`${name} slider`}
+            aria-label={t("{p0} slider", { p0: name })}
             aria-orientation={vertical ? "vertical" : "horizontal"}
             style={
               {
@@ -113,7 +115,7 @@ export function NumberSlider({
         </div>
         <output
           className={styles.controlValue}
-          aria-label={`${name} value`}
+          aria-label={t("{p0} value", { p0: name })}
           title={String(value)}
         >
           {numberFormat.format(Number(value.toFixed(5)) || 0)}

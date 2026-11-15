@@ -1,6 +1,7 @@
 import { FileCode2 } from "lucide-react";
 import { useId } from "react";
 import { buildDependencyGraph } from "../../../../shared/dependency-graph";
+import { t, useLocale } from "../../i18n";
 import styles from "./Onboarding.module.css";
 
 // A compact map of the three demo files, using their actual imports.
@@ -11,6 +12,7 @@ export function TourGraph({
   files: Record<string, string>;
   onOpen: (path: string) => void;
 }) {
+  useLocale();
   const arrow = useId();
   const graph = buildDependencyGraph(files);
   const positions: Record<string, { x: number; y: number }> = {
@@ -19,7 +21,7 @@ export function TourGraph({
     "track.strudel": { x: 80, y: 50 },
   };
   return (
-    <section className={styles.demoGraph} aria-label="Demo dependencies">
+    <section className={styles.demoGraph} aria-label={t("Demo dependencies")}>
       <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
         <defs>
           <marker
@@ -60,7 +62,7 @@ export function TourGraph({
           key={node.path}
           data-demo-node
           className={styles.graphNode}
-          aria-label={`Open ${node.path}`}
+          aria-label={t("Open {p0}", { p0: node.path })}
           style={{
             left: `${positions[node.path].x}%`,
             top: `${positions[node.path].y}%`,

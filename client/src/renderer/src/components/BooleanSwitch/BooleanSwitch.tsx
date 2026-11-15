@@ -1,4 +1,5 @@
 import type { BooleanControl } from "../../../../shared/controls";
+import { t, useLocale } from "../../i18n";
 import { ControlActions } from "../ControlActions/ControlActions";
 import { ControlTitle } from "../ControlTitle/ControlTitle";
 import styles from "./BooleanSwitch.module.css";
@@ -20,6 +21,7 @@ export function BooleanSwitch({
   onConfigure?: (name: string) => void;
   onReset?: () => void;
 }) {
+  useLocale();
   const { name, value } = control;
   return (
     <div className={styles.booleanControl} data-control-card>
@@ -43,10 +45,10 @@ export function BooleanSwitch({
           type="button"
           role="switch"
           className={styles.switchButton}
-          aria-label={`${name} switch`}
+          aria-label={t("{p0} switch", { p0: name })}
           aria-checked={value}
           disabled={disabled}
-          title="Press to toggle · Space or Enter also works"
+          title={t("Press to toggle · Space or Enter also works")}
           onClick={() => onChange(name, !value)}
         >
           <svg width="64" height="64" viewBox="0 0 58 58" aria-hidden="true">
@@ -78,10 +80,10 @@ export function BooleanSwitch({
         </button>
         <output
           className={styles.controlValue}
-          aria-label={`${name} value`}
+          aria-label={t("{p0} value", { p0: name })}
           aria-live="off"
         >
-          {value ? "On" : "Off"}
+          {value ? t("On") : t("Off")}
         </output>
       </div>
     </div>

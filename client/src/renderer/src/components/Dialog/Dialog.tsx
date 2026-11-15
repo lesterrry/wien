@@ -1,5 +1,6 @@
 import { X } from "lucide-react";
 import { type ReactNode, useEffect, useRef } from "react";
+import { t, useLocale } from "../../i18n";
 import styles from "./Dialog.module.css";
 
 export function Dialog({
@@ -13,6 +14,7 @@ export function Dialog({
   onClose: () => void;
   className?: string;
 }) {
+  useLocale();
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     ref.current?.showModal();
@@ -31,7 +33,7 @@ export function Dialog({
         <button
           type="button"
           className={styles.iconButton}
-          aria-label="Close dialog"
+          aria-label={t("Close dialog")}
           onClick={onClose}
         >
           <X size={17} />
