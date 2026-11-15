@@ -25,16 +25,14 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("server/config.toml"));
     let config = Config::load(&config_path).map_err(|error| error.to_string())?;
+    let payment_config = config.payments.build()?;
     let provider = config.provider.build()?;
     let database = wien_server::database::connect().await?;
     let mut auth = wien_server::auth::Auth::new(database.clone()).await?;
     if let Some(turnstile) = wien_server::auth::turnstile::Turnstile::from_env()? {
         auth = auth.with_registration(std::sync::Arc::new(turnstile));
     }
-    let payments = wien_server::payments::Payments::new(
-        database.clone(),
-        wien_server::robokassa::TestConfig::from_env()?,
-    );
+    let payments = wien_server::payments::Payments::new(database.clone(), payment_config);
     let _cleanup = wien_server::auth::start_cleanup(database.clone());
     let tools = std::sync::Arc::new(wien_server::assistant::tools::Tools(
         wien_server::rag::RagClient::from_env()?,

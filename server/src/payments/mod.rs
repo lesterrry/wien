@@ -1,3 +1,4 @@
+pub mod config;
 mod orders;
 mod routes;
 
@@ -6,13 +7,13 @@ use axum::{
     http::{StatusCode, header},
     response::{IntoResponse, Response},
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use std::sync::Arc;
 use utoipa::ToSchema;
 
 pub use routes::{openapi, router};
-#[derive(Clone, Copy, Default, Serialize, ToSchema)]
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Mode {
     #[default]

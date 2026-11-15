@@ -11,6 +11,8 @@ pub struct Config {
     pub provider: ProviderKind,
     #[serde(default)]
     pub generation: GenerationConfig,
+    #[serde(default)]
+    pub payments: crate::payments::config::Config,
 }
 
 /// Model settings for the editor assistant.
@@ -65,7 +67,7 @@ impl fmt::Display for ConfigError {
                 "Cannot read server config. Check server/config.toml or WIEN_SERVER_CONFIG."
             }
             Self::Invalid => {
-                "Invalid server TOML config. Expected provider = \"aitunnel\" or \"codex\", an optional generation section, and no unknown fields."
+                "Invalid server TOML config. Expected provider = \"aitunnel\" or \"codex\", optional generation/payments sections, and no unknown fields."
             }
         })
     }
@@ -91,8 +93,20 @@ mod tests {
         let path = dir.path().join("config.toml");
         std::fs::write(&path, "provider = 'aitunnel'\n[generation]\nmodel = 'configured-model'\nreasoning_effort = 'high'").unwrap();
         let config = Config::load(&path).unwrap();
+        assert_eq!(config.payments.mode, crate::payments::Mode::Disabled);
         assert_eq!(config.generation.model, "configured-model");
         assert_eq!(config.generation.reasoning_effort, ReasoningEffort::High);
+    }
+
+    #[test]
+    fn loads_payment_settings_with_multiple_users() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "provider = 'aitunnel'\n[payments]\nmode = 'test'\nmerchant_login = 'wien'\ntest_users = ['tester_one', 'tester_two']").unwrap();
+        let config = Config::load(&path).unwrap();
+        assert_eq!(config.payments.mode, crate::payments::Mode::Test);
+        assert_eq!(config.payments.merchant_login, "wien");
+        assert_eq!(config.payments.test_users, ["tester_one", "tester_two"]);
     }
 
     #[test]
@@ -104,6 +118,10 @@ mod tests {
             "",
             "provider = 'unknown'",
             "provider = 42",
+            "provider = 'aitunnel'\n[payments]\nmode = 'live'",
+            "provider = 'aitunnel'\n[payments]\nmode = 'typo'",
+            "provider = 'aitunnel'\n[payments]\ntest_users = 'one,two'",
+            "provider = 'aitunnel'\n[payments]\npassword1 = 'test-only-secret'",
             "provider = 'aitunnel'\n[generation]\nmodel = ''",
             "provider = 'aitunnel'\n[generation]\nreasoning_effort = 'invalid'",
             "provider = 'aitunnel'\n[assistant]\nmodel = 'old-setting'",

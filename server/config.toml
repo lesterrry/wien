@@ -3,3 +3,9 @@ provider = "aitunnel"
 [generation]
 model = "gpt-6-luna"
 reasoning_effort = "low"
+
+# Payment passwords stay in .env. Only disabled/test modes are supported.
+[payments]
+mode = "test"
+merchant_login = "wien"
+test_users = ["bebra"]

@@ -42,32 +42,6 @@ impl TestConfig {
             test_users,
         })
     }
-    pub fn from_env() -> Result<Option<Self>, &'static str> {
-        match std::env::var("WIEN_PAYMENTS_MODE")
-            .as_deref()
-            .unwrap_or("disabled")
-        {
-            "disabled" | "" => Ok(None),
-            "test" => {
-                let get = |key| {
-                    std::env::var(key).map_err(|_| "Missing Robokassa test environment variables.")
-                };
-                Ok(Some(Self::new(
-                    get("ROBOKASSA_MERCHANT_LOGIN")?,
-                    get("ROBOKASSA_TEST_PASSWORD1")?,
-                    get("ROBOKASSA_TEST_PASSWORD2")?,
-                    get("ROBOKASSA_TEST_USERS")?
-                        .split(',')
-                        .map(str::trim)
-                        .map(str::to_owned)
-                        .collect(),
-                )?))
-            }
-            _ => Err(
-                "WIEN_PAYMENTS_MODE must be disabled or test. Live payments are not implemented.",
-            ),
-        }
-    }
     pub fn checkout_url(&self, invoice: i64, id: &str, amount_minor: i64, name: &str) -> String {
         let amount = format!("{}.{:02}", amount_minor / 100, amount_minor % 100);
         let invoice = invoice.to_string();
