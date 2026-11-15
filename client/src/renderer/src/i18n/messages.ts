@@ -514,9 +514,9 @@ export const messages: Record<string, readonly [en: string, ru: string]> = {
       "Controls turns top-level variables into knobs, sliders, switches and choices. Try the preview below.",
       "Панель превращает переменные верхнего уровня в ручки, ползунки, переключатели и списки. Попробуйте ниже.",
     ],
-  "Create a Control in code": [
-    "Create a Control in code",
-    "Создайте Control в коде",
+  "Create a control in code": [
+    "Create a control in code",
+    "Создайте Controls в коде",
   ],
   "Declare a top-level variable, such as": [
     "Declare a top-level variable, such as",
@@ -550,9 +550,9 @@ export const messages: Record<string, readonly [en: string, ru: string]> = {
     "Play it like an instrument",
     "Играйте как на инструменте",
   ],
-  "Drag Controls or use arrow keys; hold Shift for finer changes. Controls update the sound while playing. Imported voices get their own groups; pin the master to keep them in reach. The reset arrow restores a default, and clicking a name jumps to its code.":
+  "Drag controls or use arrow keys; hold Shift for finer changes. Controls update the sound while playing. Imported voices get their own groups; pin the master to keep them in reach. The reset arrow restores a default, and clicking a name jumps to its code.":
     [
-      "Drag Controls or use arrow keys; hold Shift for finer changes. Controls update the sound while playing. Imported voices get their own groups; pin the master to keep them in reach. The reset arrow restores a default, and clicking a name jumps to its code.",
+      "Drag controls or use arrow keys; hold Shift for finer changes. Controls update the sound while playing. Imported voices get their own groups; pin the master to keep them in reach. The reset arrow restores a default, and clicking a name jumps to its code.",
       "Перетаскивайте Controls или используйте стрелки; удерживайте Shift для точности. При воспроизведении звук меняется сразу. Импортированные голоса получают свои группы; закрепите мастер, чтобы держать их под рукой. Стрелка сброса возвращает значение по умолчанию, а нажатие на имя открывает код.",
     ],
   "Describe the change you hear.": [
@@ -577,9 +577,9 @@ export const messages: Record<string, readonly [en: string, ru: string]> = {
     ". Сначала выделите фрагмент, если хотите указать на конкретную часть.",
   ],
   "Be specific": ["Be specific", "Будьте конкретнее"],
-  "Ask for musical changes or new Controls: “Add a cutoff knob and a reverb slider.” Assist creates the variables and annotations for you. Enter sends; Shift + Enter adds a line. Your selection is context; Assist can change the whole current file.":
+  "Ask for musical changes or new controls: “Add a cutoff knob and a reverb slider.” Assist creates the variables and annotations for you. Enter sends; Shift + Enter adds a line. Your selection is context; Assist can change the whole current file.":
     [
-      "Ask for musical changes or new Controls: “Add a cutoff knob and a reverb slider.” Assist creates the variables and annotations for you. Enter sends; Shift + Enter adds a line. Your selection is context; Assist can change the whole current file.",
+      "Ask for musical changes or new controls: “Add a cutoff knob and a reverb slider.” Assist creates the variables and annotations for you. Enter sends; Shift + Enter adds a line. Your selection is context; Assist can change the whole current file.",
       "Просите музыкальные изменения или новые Controls: «Добавь ручку частоты среза и ползунок реверберации». Помощник создаст переменные и аннотации. Enter отправляет запрос, Shift + Enter добавляет строку. Выделение служит контекстом; помощник может изменить весь текущий файл.",
     ],
   "Listen, then decide": ["Listen, then decide", "Послушайте и решите"],

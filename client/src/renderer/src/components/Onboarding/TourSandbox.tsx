@@ -237,7 +237,7 @@ export function TourSandbox({ topic }: { topic: TourTopic }) {
                 placeholder={t("Try typing...")}
                 onPromptChange={(value) =>
                   setPrompt((current) =>
-                    requestText.slice(
+                    t(requestText).slice(
                       0,
                       value.length < current.length
                         ? value.length

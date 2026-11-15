@@ -249,8 +249,12 @@ export function tourSteps(web: boolean): TourStep[] {
       icon: History,
       title: t("Leave yourself a way back."),
       description: web
-        ? "Try Versions here. In the desktop app, save snapshots before an experiment and restore an earlier idea whenever you like."
-        : "Your files save automatically. Versions keeps named snapshots so you can always return to an earlier idea.",
+        ? t(
+            "Try Versions here. In the desktop app, save snapshots before an experiment and restore an earlier idea whenever you like.",
+          )
+        : t(
+            "Your files save automatically. Versions keeps named snapshots so you can always return to an earlier idea.",
+          ),
       instructions: [
         {
           title: t("Save a version"),
@@ -289,8 +293,12 @@ export function tourSteps(web: boolean): TourStep[] {
         {
           title: t("Render and save"),
           body: web
-            ? "Optionally normalize the peak, then click Save WAV. The stereo WAV downloads when rendering finishes. You can cancel a render at any time."
-            : "Optionally normalize the peak, then click Save WAV and choose where to save it. If you cancel the file dialog, click Save WAV again without re-rendering.",
+            ? t(
+                "Optionally normalize the peak, then click Save WAV. The stereo WAV downloads when rendering finishes. You can cancel a render at any time.",
+              )
+            : t(
+                "Optionally normalize the peak, then click Save WAV and choose where to save it. If you cancel the file dialog, click Save WAV again without re-rendering.",
+              ),
         },
       ],
     },

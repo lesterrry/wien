@@ -81,6 +81,10 @@
   margin: 0 0 10px;
   line-height: 1.2;
 }
+/* Chapter focus announces navigation without drawing a box around the title. */
+.content h3:focus {
+  outline: none;
+}
 .description {
   margin: 0 0 18px;
   max-width: 57ch;
