@@ -112,26 +112,17 @@ try {
     await expect(card).toContainText(count);
     await expect(card).toContainText(price);
   }
-  await expect(dialog).toContainText(storefront.seller.name);
+  await expect(dialog).not.toContainText(storefront.seller.name);
   await page.screenshot({
     path: path.join(artifacts, "plans-modal-desktop.png"),
   });
-  await dialog
-    .getByRole("region", { name: "Тариф PLUS", exact: true })
-    .getByRole("button", { name: "Посмотреть условия" })
-    .click();
-  const summary = dialog.getByRole("region", {
-    name: "Условия покупки",
-    exact: true,
-  });
-  await expect(summary).toContainText("399");
-  await expect(summary).toContainText("500 запросов в месяц");
-  await summary.getByRole("checkbox").check();
   await expect(
-    summary.getByRole("button", { name: "Оплата пока недоступна" }),
+    dialog
+      .getByRole("region", { name: "Тариф PLUS", exact: true })
+      .getByRole("button"),
   ).toBeDisabled();
-  await summary
-    .getByRole("button", { name: "условиями покупки и возврата" })
+  await dialog
+    .getByRole("tab", { name: "Условия покупки", exact: true })
     .click();
   await expect(
     dialog.getByRole("heading", { name: "Публичная оферта" }),
@@ -149,7 +140,6 @@ try {
     }),
   ).toBeVisible();
   await dialog.getByRole("tab", { name: "Тарифы", exact: true }).click();
-  await expect(summary.getByRole("checkbox")).toBeChecked();
   assert.equal(page.url(), `${origin}/`);
   assert.equal(page.context().pages().length, 1);
   await page.keyboard.press("Escape");
@@ -194,14 +184,6 @@ try {
   await page.screenshot({
     path: path.join(artifacts, "plans-modal-mobile.png"),
   });
-  await dialog
-    .getByRole("region", { name: "Тариф ULTRA", exact: true })
-    .getByRole("button", { name: "Посмотреть условия" })
-    .click();
-  await expect(summary).toContainText(/5\s000 запросов/);
-  await page.screenshot({
-    path: path.join(artifacts, "checkout-modal-mobile.png"),
-  });
   await dialog.getByRole("button", { name: "Закрыть диалог" }).click();
   catalog = [
     {
@@ -240,7 +222,11 @@ try {
     await expect(
       dialog.getByRole("tab", { name: tab, exact: true }),
     ).toHaveAttribute("aria-selected", "true");
-    await expect(dialog).toContainText(storefront.seller.inn);
+    if (query === "offer" || query === "privacy") {
+      await expect(dialog).toContainText(storefront.seller.inn);
+    } else {
+      await expect(dialog).not.toContainText(storefront.seller.inn);
+    }
     await expect(dialog).not.toContainText("Проект условий");
     await expect(dialog).not.toContainText("Проект документа");
     if (query === "offer" || query === "privacy") {

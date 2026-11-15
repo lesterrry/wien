@@ -15,7 +15,7 @@ export interface TokenStore {
 
 const messages: Record<string, string> = {
   payments_unavailable: "Оплата пока недоступна. Попробуйте позже.",
-  test_payments_only: "Тестовая оплата доступна только тестовым аккаунтам.",
+  test_payments_only: "Оплата для этого аккаунта пока недоступна.",
   invalid_payment_request: "Некорректные параметры платежа.",
   order_not_found: "Заказ не найден в вашем аккаунте.",
   order_pending:

@@ -226,7 +226,6 @@ async fn stale_terms_idempotency_and_concurrent_orders(pool: PgPool) {
         ("price_minor", json!(1), StatusCode::CONFLICT),
         ("request_limit", json!(1), StatusCode::CONFLICT),
         ("document_version", json!("old"), StatusCode::CONFLICT),
-        ("accepted", json!(false), StatusCode::BAD_REQUEST),
         ("request_id", json!("bad"), StatusCode::BAD_REQUEST),
         ("is_test", json!(false), StatusCode::BAD_REQUEST),
         ("plan_id", json!("free"), StatusCode::BAD_REQUEST),
@@ -288,6 +287,28 @@ async fn stale_terms_idempotency_and_concurrent_orders(pool: PgPool) {
             a.1["document_version"].as_str().unwrap().to_owned()
         )
     );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL in DATABASE_URL; CI runs this explicitly"]
+async fn order_returns_payment_url_without_client_consent(pool: PgPool) {
+    let app = setup(&pool, true).await;
+    let mut request = purchase(&pool, 90).await;
+    request.as_object_mut().unwrap().remove("accepted");
+    let (status, order) = api(&app, "POST", "/v1/payments/orders", request.clone(), TOKEN).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(order["checkout_url"].as_str().unwrap().contains("IsTest=1"));
+    assert_eq!(order["status"], "pending");
+    assert_eq!(quota(&pool).await, 10);
+    // Older clients can still submit the field; its value does not affect the order.
+    request["accepted"] = json!(false);
+    let (_, again) = api(&app, "POST", "/v1/payments/orders", request, TOKEN).await;
+    assert_eq!(again["id"], order["id"]);
+    assert_eq!(
+        notify(&app, form(&order, "399.00", PASSWORD2)).await.0,
+        StatusCode::OK
+    );
+    assert_eq!(quota(&pool).await, 500);
 }
 
 #[sqlx::test(migrations = "./migrations")]

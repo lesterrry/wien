@@ -81,7 +81,6 @@ test("payments use authenticated backend requests and keep provider navigation s
     document_version: "v1",
     price_minor: 39900,
     request_limit: 500,
-    accepted: true,
   });
   await client.paymentCancel(id);
   assert(
@@ -103,7 +102,6 @@ test("browser payment requests use cookie auth; stale terms have an actionable e
       document_version: "v1",
       price_minor: 39900,
       request_limit: 500,
-      accepted: true,
     }),
     /Условия тарифа изменились/,
   );

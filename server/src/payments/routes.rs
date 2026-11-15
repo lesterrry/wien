@@ -41,7 +41,7 @@ async fn no_store(request: Request, next: Next) -> Response {
         .insert(header::CACHE_CONTROL, "no-store".parse().unwrap());
     response
 }
-#[utoipa::path(post,path="/v1/payments/orders",request_body(content=CreateOrder,example=json!({"request_id":"00000000-0000-4000-8000-000000000001","plan_id":"plus","price_minor":39900,"request_limit":500,"document_version":"copy-current-version-from-v1-storefront","accepted":true})),responses((status=200,body=Order),(status=400,body=Error),(status=401,body=Error),(status=403,body=Error),(status=409,body=Error),(status=503,body=Error)),security(("session"=[]),("browser_session"=[])))]
+#[utoipa::path(post,path="/v1/payments/orders",request_body(content=CreateOrder,example=json!({"request_id":"00000000-0000-4000-8000-000000000001","plan_id":"plus","price_minor":39900,"request_limit":500,"document_version":"copy-current-version-from-v1-storefront"})),responses((status=200,body=Order),(status=400,body=Error),(status=401,body=Error),(status=403,body=Error),(status=409,body=Error),(status=503,body=Error)),security(("session"=[]),("browser_session"=[])))]
 async fn create_order(
     State(state): State<Payments>,
     headers: HeaderMap,

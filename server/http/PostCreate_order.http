@@ -14,7 +14,6 @@ Content-Type: {{contentType}}
 Authorization: Bearer {{sessionToken}}
 
 {
-  "accepted": true,
   "document_version": "copy-current-version-from-v1-storefront",
   "plan_id": "plus",
   "price_minor": 39900,

@@ -1,5 +1,40 @@
 // UI copy only. Legal documents remain in Russian.
 export const messages: Record<string, readonly [en: string, ru: string]> = {
+  "Купить за {amount}": ["Buy for {amount}", "Купить за {amount}"],
+  "Оплатить {amount}": ["Pay {amount}", "Оплатить {amount}"],
+  "Заказ {id}": ["Order {id}", "Заказ {id}"],
+  "К оплате": ["Total due", "К оплате"],
+  Итого: ["Total", "Итого"],
+  "Готовим заказ…": ["Preparing your order…", "Готовим заказ…"],
+  "Ожидает оплаты": ["Awaiting payment", "Ожидает оплаты"],
+  "один месяц": ["one month", "один месяц"],
+  "Подождите…": ["Please wait…", "Подождите…"],
+  "Безопасная оплата через Robokassa": [
+    "Secure payment with Robokassa",
+    "Безопасная оплата через Robokassa",
+  ],
+  "Проверить оплату": ["Check payment", "Проверить оплату"],
+  "Для новой покупки выберите тариф.": [
+    "Choose a plan to make another purchase.",
+    "Для новой покупки выберите тариф.",
+  ],
+  "{count} запросов к ИИ. Продление вручную, без автоматических списаний.": [
+    "{count} AI requests. Manual renewal, no automatic charges.",
+    "{count} запросов к ИИ. Продление вручную, без автоматических списаний.",
+  ],
+  "Оплата для этого аккаунта пока недоступна.": [
+    "Payments are not available for this account yet.",
+    "Оплата для этого аккаунта пока недоступна.",
+  ],
+  "Этот заказ больше нельзя оплатить. Выберите тариф заново.": [
+    "This order can no longer be paid. Choose a plan again.",
+    "Этот заказ больше нельзя оплатить. Выберите тариф заново.",
+  ],
+  "У вас уже есть неоплаченный заказ на другой тариф. Оплатите или отмените его, чтобы выбрать новый.":
+    [
+      "You have an unpaid order for another plan. Pay or cancel it before choosing a new one.",
+      "У вас уже есть неоплаченный заказ на другой тариф. Оплатите или отмените его, чтобы выбрать новый.",
+    ],
   "Select between 0.1 and 10 seconds of audio.": [
     "Select between 0.1 and 10 seconds of audio.",
     "Выберите от 0,1 до 10 секунд аудио.",
@@ -27,7 +62,7 @@ export const messages: Record<string, readonly [en: string, ru: string]> = {
   ],
   "Sign in to use Assist.": [
     "Sign in to use Assist.",
-    "Войдите, чтобы использовать помощника.",
+    "Войдите, чтобы использовать Assist.",
   ],
   "Audio attachments are not included in your plan.": [
     "Audio attachments are not included in your plan.",
@@ -161,7 +196,7 @@ export const messages: Record<string, readonly [en: string, ru: string]> = {
     "Что хотите создать?",
   ],
   "Working on it…": ["Working on it…", "Работаю над запросом…"],
-  "Ask Assist": ["Ask Assist", "Спросить помощника"],
+  "Ask Assist": ["Ask Assist", "Спросить Assist"],
   "Add audio": ["Add audio", "Добавить аудио"],
   "Add MP3": ["Add MP3", "Добавить MP3"],
   Turbo: ["Turbo", "Турбо"],
@@ -175,7 +210,7 @@ export const messages: Record<string, readonly [en: string, ru: string]> = {
   ],
   "Cancel request": ["Cancel request", "Отменить запрос"],
   "Send request": ["Send request", "Отправить запрос"],
-  "Close assistant": ["Close assistant", "Закрыть помощника"],
+  "Close assistant": ["Close assistant", "Закрыть Assist"],
   "Close (Esc)": ["Close (Esc)", "Закрыть (Esc)"],
   "The file changed while I was working. Send the request again to use the latest code.":
     [
@@ -442,13 +477,13 @@ export const messages: Record<string, readonly [en: string, ru: string]> = {
   "Try it here": ["Try it here", "Попробуйте здесь"],
   "Toggle demo Assist": [
     "Toggle demo Assist",
-    "Показать или скрыть демо помощника",
+    "Показать или скрыть демо Assist",
   ],
   Update: ["Update", "Обновить"],
   Play: ["Play", "Играть"],
   Stop: ["Stop", "Стоп"],
   "Demo files": ["Demo files", "Файлы примера"],
-  "Assist demo": ["Assist demo", "Демо помощника"],
+  "Assist demo": ["Assist demo", "Демо Assist"],
   "Try typing...": ["Try typing...", "Попробуйте написать..."],
   "A little more space": ["A little more space", "Чуть больше пространства"],
   "Found the melody": ["Found the melody", "Мелодия найдена"],
@@ -566,7 +601,7 @@ export const messages: Record<string, readonly [en: string, ru: string]> = {
     ],
   "Open Assist at the cursor": [
     "Open Assist at the cursor",
-    "Откройте помощника у курсора",
+    "Откройте Assist у курсора",
   ],
   "Click the sparkle button or press": [
     "Click the sparkle button or press",
@@ -580,7 +615,7 @@ export const messages: Record<string, readonly [en: string, ru: string]> = {
   "Ask for musical changes or new controls: “Add a cutoff knob and a reverb slider.” Assist creates the variables and annotations for you. Enter sends; Shift + Enter adds a line. Your selection is context; Assist can change the whole current file.":
     [
       "Ask for musical changes or new controls: “Add a cutoff knob and a reverb slider.” Assist creates the variables and annotations for you. Enter sends; Shift + Enter adds a line. Your selection is context; Assist can change the whole current file.",
-      "Просите музыкальные изменения или новые Controls: «Добавь ручку частоты среза и ползунок реверберации». Помощник создаст переменные и аннотации. Enter отправляет запрос, Shift + Enter добавляет строку. Выделение служит контекстом; помощник может изменить весь текущий файл.",
+      "Просите музыкальные изменения или новые Controls: «Добавь ручку частоты среза и ползунок реверберации». Помощник создаст переменные и аннотации. Enter отправляет запрос, Shift + Enter добавляет строку. Выделение служит контекстом; Assist может изменить весь текущий файл.",
     ],
   "Listen, then decide": ["Listen, then decide", "Послушайте и решите"],
   "Edits appear directly in the editor. Press Play / Update to hear them, or return to the editor and use":
@@ -590,7 +625,7 @@ export const messages: Record<string, readonly [en: string, ru: string]> = {
     ],
   "to undo. Esc closes Assist.": [
     "to undo. Esc closes Assist.",
-    "для отмены. Esc закрывает помощника.",
+    "для отмены. Esc закрывает Assist.",
   ],
   "Start from audio": ["Start from audio", "Начните с аудио"],
   "Turn a sound into a snippet.": [
@@ -600,12 +635,12 @@ export const messages: Record<string, readonly [en: string, ru: string]> = {
   "Give Assist a short audio reference to recreate as editable Strudel code, from its notes and rhythm to its tempo.":
     [
       "Give Assist a short audio reference to recreate as editable Strudel code, from its notes and rhythm to its tempo.",
-      "Дайте помощнику короткий аудиопример для воссоздания в редактируемом коде Strudel — от нот и ритма до темпа.",
+      "Дайте Assist короткий аудиопример для воссоздания в редактируемом коде Strudel — от нот и ритма до темпа.",
     ],
   "Attach an MP3": ["Attach an MP3", "Прикрепите MP3"],
   "Open Assist, click the paperclip and choose an MP3 from your computer.": [
     "Open Assist, click the paperclip and choose an MP3 from your computer.",
-    "Откройте помощника, нажмите скрепку и выберите MP3 на компьютере.",
+    "Откройте Assist, нажмите скрепку и выберите MP3 на компьютере.",
   ],
   "Choose the part you want": [
     "Choose the part you want",
@@ -757,11 +792,6 @@ export const messages: Record<string, readonly [en: string, ru: string]> = {
   ],
   Платежи: ["Payments", "Платежи"],
   "Проверяем оплату…": ["Checking payment…", "Проверяем оплату…"],
-  "Тестовый режим Robokassa. Деньги не списываются. Доступно только тестовым аккаунтам.":
-    [
-      "Robokassa test mode. No money is charged. Available to test accounts only.",
-      "Тестовый режим Robokassa. Деньги не списываются. Доступно только тестовым аккаунтам.",
-    ],
   "Оплата пока недоступна.": [
     "Payments are not available yet.",
     "Оплата пока недоступна.",
@@ -772,7 +802,6 @@ export const messages: Record<string, readonly [en: string, ru: string]> = {
     "Войти для просмотра платежей",
   ],
   "Создаём заказ…": ["Creating an order…", "Создаём заказ…"],
-  "Создать тестовый заказ": ["Create a test order", "Создать тестовый заказ"],
   "Оплата пока недоступна": [
     "Payments are not available yet",
     "Оплата пока недоступна",
@@ -787,20 +816,11 @@ export const messages: Record<string, readonly [en: string, ru: string]> = {
     "You have no payments yet.",
     "У вас пока нет платежей.",
   ],
-  "запросов · один месяц · тестовый платёж": [
-    "requests · one month · test payment",
-    "запросов · один месяц · тестовый платёж",
-  ],
   "Заказ №": ["Order No.", "Заказ №"],
   "Подписка действует до": [
     "Subscription valid until",
     "Подписка действует до",
   ],
-  "Откройте Robokassa и завершите тестовую оплату. Этот экран обновится после подтверждения сервера.":
-    [
-      "Open Robokassa and complete the test payment. This screen will update after server confirmation.",
-      "Откройте Robokassa и завершите тестовую оплату. Этот экран обновится после подтверждения сервера.",
-    ],
   "Открыть Robokassa": ["Open Robokassa", "Открыть Robokassa"],
   "Отменить заказ": ["Cancel order", "Отменить заказ"],
   "Не оплачивайте старую ссылку. Для повторной попытки создайте новый заказ.": [
@@ -981,14 +1001,14 @@ export const messages: Record<string, readonly [en: string, ru: string]> = {
   "Play / update {p0}": ["Play / update {p0}", "Играть / обновить {p0}"],
   "{p0} assist requests left": [
     "{p0} assist requests left",
-    "Осталось запросов к помощнику: {p0}",
+    "Осталось запросов к Assist: {p0}",
   ],
   "Double-click to rename ({p0} R)": [
     "Double-click to rename ({p0} R)",
     "Дважды нажмите для переименования ({p0} R)",
   ],
   "Rename {p0}": ["Rename {p0}", "Переименовать {p0}"],
-  "Ask Assist ({p0} ,)": ["Ask Assist ({p0} ,)", "Спросить помощника ({p0} ,)"],
+  "Ask Assist ({p0} ,)": ["Ask Assist ({p0} ,)", "Спросить Assist ({p0} ,)"],
   "Заказ {p0}": ["Order {p0}", "Заказ {p0}"],
   "Тариф {p0}": ["Plan {p0}", "Тариф {p0}"],
   "Toggle sidebar ({p0} B)": [
@@ -1163,11 +1183,11 @@ export const messages: Record<string, readonly [en: string, ru: string]> = {
   ],
   "Sign in to use assist.": [
     "Sign in to use assist.",
-    "Войдите, чтобы использовать помощника.",
+    "Войдите, чтобы использовать Assist.",
   ],
   "You have used all your assist requests.": [
     "You have used all your assist requests.",
-    "Вы использовали все запросы к помощнику.",
+    "Вы использовали все запросы к Assist.",
   ],
   "Audio attachments are available on paid plans.": [
     "Audio attachments are available on paid plans.",
@@ -1193,10 +1213,6 @@ export const messages: Record<string, readonly [en: string, ru: string]> = {
   "Оплата пока недоступна. Попробуйте позже.": [
     "Payments are not available yet. Try again later.",
     "Оплата пока недоступна. Попробуйте позже.",
-  ],
-  "Тестовая оплата доступна только тестовым аккаунтам.": [
-    "Test payments are available to test accounts only.",
-    "Тестовая оплата доступна только тестовым аккаунтам.",
   ],
   "Некорректные параметры платежа.": [
     "Invalid payment details.",

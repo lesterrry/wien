@@ -13,7 +13,9 @@ pub struct CreateOrder {
     pub document_version: String,
     pub price_minor: i64,
     pub request_limit: i32,
-    pub accepted: bool,
+    /// Legacy client field; consent is a client-side control and is not stored.
+    #[serde(default, rename = "accepted")]
+    pub _accepted: bool,
 }
 #[derive(Serialize, ToSchema)]
 pub struct Order {
@@ -115,11 +117,10 @@ impl Payments {
             return Err(Error::new(
                 StatusCode::FORBIDDEN,
                 "test_payments_only",
-                "Тестовая оплата доступна только тестовым аккаунтам.",
+                "Оплата для этого аккаунта пока недоступна.",
             ));
         }
-        if !request.accepted
-            || !crate::robokassa::valid_id(&request.request_id)
+        if !crate::robokassa::valid_id(&request.request_id)
             || request.plan_id.len() > 100
             || request.document_version.len() > 100
         {

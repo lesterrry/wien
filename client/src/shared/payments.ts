@@ -7,7 +7,6 @@ export interface PaymentRequest {
   document_version: string;
   price_minor: number;
   request_limit: number;
-  accepted: boolean;
 }
 export interface PaymentOrder {
   id: string;

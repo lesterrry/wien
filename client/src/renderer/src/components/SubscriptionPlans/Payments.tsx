@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { SubscriptionPlan } from "../../../../shared/account";
-import type { PaymentConfig, PaymentOrder } from "../../../../shared/payments";
+import type {
+  PaymentConfig,
+  PaymentOrder,
+  PaymentRequest,
+} from "../../../../shared/payments";
 import { formatLocale, t, useLocale } from "../../i18n";
+import common from "../../styles/common.module.css";
+import { Consent } from "./Consent";
 import styles from "./SubscriptionPlans.module.css";
 
 const api = window.workspace;
@@ -10,8 +15,15 @@ const message = (error: unknown) =>
     /^Error invoking remote method '[^']+': Error: /,
     "",
   );
+const amount = (order: PaymentOrder) =>
+  new Intl.NumberFormat(formatLocale(), {
+    style: "currency",
+    currency: order.currency,
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 0,
+  }).format(order.price_minor / 100);
 const states = {
-  pending: "Ожидаем подтверждения оплаты",
+  pending: "Ожидает оплаты",
   cancelled: "Заказ отменён",
   paid: "Оплата подтверждена · подписка активирована",
   paid_review: "Оплата получена · нужна проверка поддержки",
@@ -19,23 +31,25 @@ const states = {
 export function Payments({
   config,
   userId,
-  plan,
-  documentVersion,
-  accepted = false,
+  purchase,
   returnOrderId,
   supportEmail,
   onSignIn,
   onPaid,
+  onNavigate,
+  consent,
+  onConsent,
 }: {
   config: PaymentConfig;
   userId?: string;
-  plan?: SubscriptionPlan;
-  documentVersion: string;
-  accepted?: boolean;
+  purchase?: PaymentRequest;
   returnOrderId?: string;
   supportEmail: string;
   onSignIn: () => void;
   onPaid: () => Promise<unknown>;
+  onNavigate: (tab: "offer" | "privacy") => void;
+  consent: Record<string, boolean>;
+  onConsent: (id: string, checked: boolean) => void;
 }) {
   useLocale();
   const [orders, setOrders] = useState<PaymentOrder[]>([]);
@@ -43,8 +57,8 @@ export function Payments({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [focused, setFocused] = useState(returnOrderId);
-  const requestId = useRef(crypto.randomUUID());
   const busyRef = useRef(false);
+  const started = useRef(false);
   const revision = useRef(0);
   const pending = useRef(false);
   const paid = useRef(new Set<string>());
@@ -116,7 +130,6 @@ export function Payments({
       const order = await action();
       if (version !== revision.current) return;
       setFocused(order.id);
-      if (order.status !== "pending") requestId.current = crypto.randomUUID();
       await acceptOrders([
         order,
         ...orders.filter((item) => item.id !== order.id),
@@ -128,137 +141,136 @@ export function Payments({
       if (version === revision.current) setBusy(false);
     }
   }
-  const shown = plan
-    ? orders.filter(
-        (order) => order.id === focused || order.status === "pending",
-      )
+  async function begin() {
+    if (!purchase) return;
+    const existing = orders.find((item) => item.status === "pending");
+    if (existing) {
+      setFocused(existing.id);
+      if (existing.plan_id !== purchase.plan_id)
+        setError(
+          "У вас уже есть неоплаченный заказ на другой тариф. Оплатите или отмените его, чтобы выбрать новый.",
+        );
+      return;
+    }
+    await mutate(() => api.paymentCreate(purchase));
+  }
+  // A plan-card click creates an unpaid order once. Retries keep its request ID.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: begin uses the current history after the initial load.
+  useEffect(() => {
+    if (
+      !loading &&
+      userId &&
+      purchase &&
+      config.mode !== "disabled" &&
+      !started.current
+    ) {
+      started.current = true;
+      void begin();
+    }
+  }, [loading, userId, purchase, config.mode]);
+  const shown = purchase
+    ? orders.filter((order) => order.id === focused)
     : orders;
-  const hasPending = orders.some((order) => order.status === "pending");
+  async function pay(order: PaymentOrder) {
+    if (!consent[order.id]) return;
+    await mutate(async () => {
+      const checkout = order;
+      if (!checkout.checkout_url)
+        throw new Error(
+          "Заказ больше недоступен для оплаты. Проверьте его статус.",
+        );
+      if (api.platform === "web") {
+        const back = new URL(window.location.href);
+        back.searchParams.set("payment", order.id);
+        window.history.replaceState(null, "", back);
+        window.location.assign(checkout.checkout_url);
+      } else {
+        await api.openExternalLink(checkout.checkout_url);
+      }
+      return checkout;
+    });
+  }
   return (
     <section className={styles.payments} aria-label={t("Платежи")}>
-      {loading && <p role="status">{t("Проверяем оплату…")}</p>}
-      {config?.mode === "test" && (
-        <p className={styles.testNotice}>
-          {t(
-            "Тестовый режим Robokassa. Деньги не списываются. Доступно только тестовым аккаунтам.",
-          )}
-        </p>
+      {(loading || (busy && shown.length === 0)) && (
+        <p role="status">{t("Готовим заказ…")}</p>
       )}
-      {config?.mode === "disabled" && <p>{t("Оплата пока недоступна.")}</p>}
-      {!userId && (config?.mode === "test" || !plan) && (
-        <button type="button" className={styles.pay} onClick={onSignIn}>
-          {config?.mode === "test"
-            ? t("Войти для оплаты")
-            : t("Войти для просмотра платежей")}
-        </button>
-      )}
-      {plan && (userId || config?.mode !== "test") && (
+      {config.mode === "disabled" && <p>{t("Оплата пока недоступна.")}</p>}
+      {!userId && (
         <button
           type="button"
-          className={styles.pay}
-          disabled={
-            loading ||
-            busy ||
-            config?.mode !== "test" ||
-            !accepted ||
-            hasPending
-          }
-          onClick={() => {
-            void mutate(() =>
-              api.paymentCreate({
-                request_id: requestId.current,
-                plan_id: plan.id,
-                price_minor: plan.price_minor,
-                request_limit: plan.initial_assist_requests ?? 0,
-                document_version: documentVersion,
-                accepted,
-              }),
-            );
-          }}
+          className={common.primaryButton}
+          onClick={onSignIn}
         >
-          {busy
-            ? t("Создаём заказ…")
-            : config?.mode === "test"
-              ? t("Создать тестовый заказ")
-              : t("Оплата пока недоступна")}
+          {t("Войти для оплаты")}
         </button>
-      )}
-      {plan && config?.mode === "test" && (
-        <p>
-          {t(
-            "Новый месяц можно купить после окончания действующей подписки. Автоматических списаний нет.",
-          )}
-        </p>
       )}
       {error && <p role="alert">{t(error)}</p>}
-      {(error || (userId && !loading)) && (
+      {purchase && userId && error && shown.length === 0 && (
         <button
           type="button"
-          className={styles.back}
+          className={common.primaryButton}
           disabled={busy}
           onClick={() => {
-            void load();
+            void begin();
           }}
         >
-          {t("Проверить статус")}
+          {t("Попробовать снова")}
         </button>
       )}
-      {!plan && !loading && userId && orders.length === 0 && !error && (
+      {!purchase && !loading && userId && orders.length === 0 && !error && (
         <p>{t("У вас пока нет платежей.")}</p>
       )}
       {shown.map((order) => (
         <article
           key={order.id}
           className={styles.order}
-          aria-label={t("Заказ {p0}", { p0: order.invoice_id })}
+          aria-label={t("Заказ {id}", { id: order.invoice_id })}
         >
+          <p className={styles.orderNumber}>
+            {t("Заказ №")} {order.invoice_id}
+          </p>
           <h3>
-            {order.plan_name} ·{" "}
-            {new Intl.NumberFormat(formatLocale(), {
-              style: "currency",
-              currency: order.currency,
-            }).format(order.price_minor / 100)}
+            {order.plan_name} · {t("один месяц")}
           </h3>
           <p>
-            {order.request_limit.toLocaleString(formatLocale())}{" "}
-            {t("запросов · один месяц · тестовый платёж")}
+            {t(
+              "{count} запросов к ИИ. Продление вручную, без автоматических списаний.",
+              { count: order.request_limit.toLocaleString(formatLocale()) },
+            )}
           </p>
-          <p className={styles.orderStatus} role="status">
-            {t(states[order.status])}
-          </p>
-          <p>
-            {t("Заказ №")} {order.invoice_id} ·{" "}
-            {new Date(order.created_at).toLocaleString(formatLocale())}
-          </p>
-          {order.period_ends_at && (
-            <p>
-              {t("Подписка действует до")}{" "}
-              {new Date(order.period_ends_at).toLocaleString(formatLocale())}.
-            </p>
-          )}
-          {order.status === "pending" && (
+          <div className={styles.total}>
+            <span>{t(order.status === "pending" ? "К оплате" : "Итого")}</span>
+            <strong>{amount(order)}</strong>
+          </div>
+          {order.status === "pending" ? (
             <>
-              <p>
-                {t(
-                  "Откройте Robokassa и завершите тестовую оплату. Этот экран обновится после подтверждения сервера.",
-                )}
+              <Consent
+                checked={!!consent[order.id]}
+                onChange={(checked) => onConsent(order.id, checked)}
+                onNavigate={onNavigate}
+              />
+              <button
+                type="button"
+                className={styles.pay}
+                disabled={
+                  busy || !consent[order.id] || config.mode === "disabled"
+                }
+                onClick={() => {
+                  void pay(order);
+                }}
+              >
+                {busy
+                  ? t("Подождите…")
+                  : t("Оплатить {amount}", { amount: amount(order) })}
+              </button>
+              <p className={styles.paymentMethod}>
+                {t("Безопасная оплата через Robokassa")}
               </p>
               <div className={styles.orderActions}>
-                {order.checkout_url && (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => {
-                      void api
-                        .openExternalLink(order.checkout_url as string)
-                        .catch((e: unknown) => setError(message(e)));
-                    }}
-                  >
-                    {t("Открыть Robokassa")}
-                  </button>
-                )}
                 <button
                   type="button"
+                  className={styles.secondary}
                   disabled={busy}
                   onClick={() => {
                     void mutate(() => api.paymentCancel(order.id));
@@ -268,25 +280,29 @@ export function Payments({
                 </button>
               </div>
             </>
+          ) : (
+            <p className={styles.orderStatus} role="status">
+              {t(states[order.status])}
+            </p>
+          )}
+          {order.period_ends_at && (
+            <p>
+              {t("Подписка действует до")}{" "}
+              {new Date(order.period_ends_at).toLocaleString(formatLocale())}.
+            </p>
           )}
           {order.status === "cancelled" && (
-            <p>
-              {t(
-                "Не оплачивайте старую ссылку. Для повторной попытки создайте новый заказ.",
-              )}
-            </p>
+            <p>{t("Для новой покупки выберите тариф.")}</p>
           )}
           {order.status === "paid_review" && (
             <p>
-              {t(
-                "Подписка по этому заказу не включена автоматически. Напишите",
-              )}{" "}
+              {t("Напишите")}{" "}
               <a
                 href={`mailto:${supportEmail}?subject=${encodeURIComponent(`Wien: заказ ${order.invoice_id}`)}`}
               >
                 {supportEmail}
               </a>
-              {t(", указав номер заказа.")}
+              , {t("указав номер заказа.")}
             </p>
           )}
         </article>

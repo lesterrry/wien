@@ -211,7 +211,6 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       if (resumePayment.current) {
         resumePayment.current = false;
         setOpen(false);
-        setPlansTab("payments");
         setPlansOpen(true);
       }
       clearPasswords();
@@ -279,7 +278,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
           onPaid={refresh}
           onSignIn={() => {
             resumePayment.current = true;
-            openProfile();
+            setOpen(true);
           }}
           onClose={() => setPlansOpen(false)}
         />

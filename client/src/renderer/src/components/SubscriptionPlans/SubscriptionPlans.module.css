@@ -19,6 +19,10 @@
 }
 .tab {
   composes: fileTab from "../FileTabs/FileTabs.module.css";
+}
+.tabs .tab {
+  min-width: 0;
+  max-width: none;
   padding-right: 0;
 }
 .content {
@@ -68,22 +72,12 @@
   font-weight: 550;
   color: var(--color-primary);
 }
-.plan button,
 .pay {
+  composes: primaryButton from "../../styles/common.module.css";
   width: 100%;
   margin-top: auto;
-  padding: 10px;
-  border: 1px solid var(--color-border-strong);
-  border-radius: 8px;
-  color: var(--color-primary);
-}
-.plan button:disabled,
-.pay:disabled {
-  color: var(--color-muted);
-  cursor: not-allowed;
-}
-.plan button:not(:disabled):hover {
-  background: var(--color-surface);
+  padding: 13px 16px;
+  font-size: 14px;
 }
 .plan p,
 .plan ul {
@@ -115,6 +109,9 @@
   max-width: 720px;
   margin: 0 auto;
 }
+.checkout {
+  margin: 0;
+}
 .content article h1 {
   font-size: 26px;
   line-height: 1.25;
@@ -129,11 +126,16 @@
   margin: 8px 0;
 }
 .back,
-.consent button,
-.content article button {
+.consent button {
   color: var(--color-brand);
   text-decoration: underline;
   font: inherit;
+}
+.content :where(article:not(.order)) button {
+  color: var(--color-brand);
+  text-decoration: underline;
+  font: inherit;
+  padding: 0;
 }
 .footer a,
 .checkout a,
@@ -157,10 +159,47 @@
   margin: 24px 0;
 }
 .dialog .consent input {
+  appearance: none;
+  position: relative;
   width: 16px;
   height: 16px;
+  padding: 0;
+  border-radius: 3px;
+  border: 1px solid var(--color-border-strong);
   flex-shrink: 0;
-  margin-top: 2px;
+  margin: 2px 0 0;
+  cursor: pointer;
+}
+.dialog .consent input:checked {
+  background: var(--color-brand);
+  border-color: var(--color-brand);
+}
+.dialog .consent input:checked::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  background:
+    linear-gradient(
+      45deg,
+      transparent 40%,
+      var(--color-background) 40% 60%,
+      transparent 60%
+    ),
+    linear-gradient(
+      -45deg,
+      transparent 40%,
+      var(--color-background) 40% 60%,
+      transparent 60%
+    );
+}
+.dialog .consent span {
+  display: inline;
+}
+.dialog .consent button {
+  display: inline;
+  padding: 0;
+  margin: 0;
+  line-height: inherit;
 }
 @media (max-width: 820px) {
   .plans {
@@ -183,21 +222,21 @@
 .payments {
   margin-top: 20px;
 }
-.testNotice {
-  color: var(--color-brand);
-}
 .content article.order {
   margin: 20px 0;
-  padding: 16px;
+  padding: 12px;
   border: 1px solid var(--color-border-strong);
   border-radius: 12px;
 }
 .order h3 {
   margin: 0 0 12px;
-  font-size: 16px;
+  font-size: 24px;
 }
 .order p {
   overflow-wrap: anywhere;
+}
+.order > :last-child {
+  margin-bottom: 0;
 }
 .orderStatus {
   color: var(--color-primary);
@@ -208,4 +247,31 @@
   flex-wrap: wrap;
   gap: 16px;
   margin-top: 16px;
+  justify-content: space-between;
+}
+.total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 28px 0;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+.total strong {
+  font-size: 28px;
+  white-space: nowrap;
+}
+.dialog .paymentMethod {
+  text-align: center;
+  font-size: 11px;
+}
+.dialog .secondary {
+  padding: 0;
+  font-size: 12px;
+  color: var(--color-secondary);
+  text-decoration: none;
+}
+.dialog .orderNumber {
+  margin-top: 0;
 }

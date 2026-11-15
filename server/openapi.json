@@ -540,7 +540,6 @@
                 "$ref": "#/components/schemas/CreateOrder"
               },
               "example": {
-                "accepted": true,
                 "document_version": "copy-current-version-from-v1-storefront",
                 "plan_id": "plus",
                 "price_minor": 39900,
@@ -902,12 +901,12 @@
           "plan_id",
           "document_version",
           "price_minor",
-          "request_limit",
-          "accepted"
+          "request_limit"
         ],
         "properties": {
           "accepted": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Legacy client field; consent is a client-side control and is not stored."
           },
           "document_version": {
             "type": "string"

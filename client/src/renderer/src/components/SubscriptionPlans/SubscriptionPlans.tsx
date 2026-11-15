@@ -1,17 +1,12 @@
 import { FileText } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { SubscriptionPlan } from "../../../../shared/account";
+import type { PaymentRequest } from "../../../../shared/payments";
 import type { Storefront } from "../../../../shared/storefront";
 import { formatLocale, getLocale, t, useLocale } from "../../i18n";
 import { Dialog } from "../Dialog/Dialog";
 import tabStyles from "../FileTabs/FileTabs.module.css";
-import {
-  Offer,
-  Privacy,
-  PurchaseTerms,
-  RefundTerms,
-  Seller,
-} from "./Documents";
+import { Offer, Privacy, Seller } from "./Documents";
 import { Payments } from "./Payments";
 import styles from "./SubscriptionPlans.module.css";
 
@@ -75,7 +70,10 @@ export function SubscriptionPlans({
   }, [tab]);
   const [store, setStore] = useState<Storefront | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
-  const [accepted, setAccepted] = useState(false);
+  const [purchase, setPurchase] = useState<PaymentRequest>();
+  const [consent, setConsent] = useState<Record<string, boolean>>({});
+  const onConsent = (id: string, checked: boolean) =>
+    setConsent((value) => ({ ...value, [id]: checked }));
   const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState(0);
   // biome-ignore lint/correctness/useExhaustiveDependencies: attempt retries the public data request.
@@ -173,10 +171,12 @@ export function SubscriptionPlans({
           <p role="status">{t("Загружаем тарифы…")}</p>
         ) : tab === "payments" ? (
           <Payments
+            consent={consent}
+            onConsent={onConsent}
             config={store.payments}
             key={userId || "guest"}
             userId={userId}
-            documentVersion={store.terms.document_version}
+            onNavigate={navigate}
             returnOrderId={returnOrderId}
             supportEmail={store.seller.support_email}
             onSignIn={onSignIn}
@@ -196,52 +196,19 @@ export function SubscriptionPlans({
               className={styles.back}
               onClick={() => {
                 setSelected(null);
-                setAccepted(false);
+                setPurchase(undefined);
               }}
             >
               {t("← Все тарифы")}
             </button>
-            <h3>{name(plan)}</h3>
-            <p className={styles.price}>
-              {price(plan)}{" "}
-              <span>
-                / {plan.billing_period === "year" ? t("год") : t("месяц")}
-              </span>
-            </p>
-            <p className={styles.allowance}>{allowance(plan)}</p>
-            <p>
-              {getLocale() === "ru"
-                ? plan.description_ru || plan.description
-                : plan.description}
-            </p>
-            <PurchaseTerms period={plan.billing_period} />
-            <p>{store.terms.ai_usage_policy}</p>
-            <RefundTerms store={store} />
-            <label className={styles.consent}>
-              <input
-                type="checkbox"
-                checked={accepted}
-                onChange={(event) => setAccepted(event.target.checked)}
-              />
-              <span>
-                {t("Я ознакомился с")}{" "}
-                <button type="button" onClick={() => navigate("offer")}>
-                  {t("условиями покупки и возврата")}
-                </button>{" "}
-                {t("и")}{" "}
-                <button type="button" onClick={() => navigate("privacy")}>
-                  {t("политикой данных")}
-                </button>
-                .
-              </span>
-            </label>
             <Payments
+              consent={consent}
+              onConsent={onConsent}
               config={store.payments}
               key={`${userId}:${plan.id}:${plan.price_minor}:${plan.initial_assist_requests}:${store.terms.document_version}`}
               userId={userId}
-              plan={plan}
-              documentVersion={store.terms.document_version}
-              accepted={accepted}
+              purchase={purchase}
+              onNavigate={navigate}
               supportEmail={store.seller.support_email}
               onSignIn={onSignIn}
               onPaid={onPaid}
@@ -305,15 +272,25 @@ export function SubscriptionPlans({
                     )}
                     <button
                       type="button"
-                      disabled={item.is_default}
+                      className={styles.pay}
+                      disabled={
+                        item.is_default || store.payments.mode === "disabled"
+                      }
                       onClick={() => {
                         setSelected(item.id);
-                        setAccepted(false);
+                        setPurchase({
+                          request_id: crypto.randomUUID(),
+                          plan_id: item.id,
+                          price_minor: item.price_minor,
+                          request_limit: item.initial_assist_requests ?? 0,
+                          document_version: store.terms.document_version,
+                        });
+                        if (!userId) onSignIn();
                       }}
                     >
                       {item.is_default
                         ? t("Включено")
-                        : t("Посмотреть условия")}
+                        : t("Купить за {amount}", { amount: price(item) })}
                     </button>
                   </section>
                 ))}
@@ -322,7 +299,7 @@ export function SubscriptionPlans({
             <p className={styles.note}>{store.terms.ai_usage_policy}</p>
           </>
         )}
-        {store && (
+        {store && tab === "offer" && (
           <footer className={styles.footer}>
             <Seller store={store} />
           </footer>

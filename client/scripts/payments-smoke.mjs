@@ -56,7 +56,7 @@ const server = http.createServer(async (req, res) => {
         const body = JSON.parse(source);
         assert.equal(body.price_minor, 39900);
         assert.equal(body.request_limit, 500);
-        assert.equal(body.accepted, true);
+        assert.equal("accepted" in body, false);
         assert.equal(body.document_version, storefront.terms.document_version);
         if (stale) return json({ code: "payment_terms_changed" }, 409);
         if (requests.has(body.request_id))
@@ -92,7 +92,7 @@ const server = http.createServer(async (req, res) => {
       );
       const order = orders.find((item) => item.id === match?.[1]);
       if (order) {
-        if (match[2]) {
+        if (match[2] === "/cancel") {
           order.status = "cancelled";
           order.checkout_url = null;
         }
@@ -152,60 +152,143 @@ try {
     window.workspace.read("first-light.strudel"),
   );
   const dialog = page.getByRole("dialog", { name: "Тарифы", exact: true });
+  async function checkOrderSpacing(invoice, state) {
+    const previousViewport = page.viewportSize();
+    const card = dialog.getByRole("article", {
+      name: `Заказ ${invoice}`,
+      exact: true,
+    });
+    for (const [screen, viewport] of [
+      ["desktop", { width: 1440, height: 1000 }],
+      ["mobile", { width: 390, height: 844 }],
+    ]) {
+      await page.setViewportSize(viewport);
+      await card.scrollIntoViewIfNeeded();
+      const spacing = await card.evaluate((element) => {
+        const box = element.getBoundingClientRect();
+        const last = element.lastElementChild;
+        const content = last.querySelector("button") ?? last;
+        const end = content.getBoundingClientRect();
+        const first = element.firstElementChild.getBoundingClientRect();
+        return {
+          left: end.left - box.left,
+          bottom: box.bottom - end.bottom,
+          top: first.top - box.top,
+          innerBottom: Number.parseFloat(
+            getComputedStyle(content).paddingBottom,
+          ),
+          overflow: element.scrollWidth > element.clientWidth,
+        };
+      });
+      assert(
+        Math.abs(spacing.left - spacing.bottom) < 1,
+        `${state}/${screen}: ${JSON.stringify(spacing)}`,
+      );
+      assert(
+        Math.abs(spacing.left - spacing.top) < 1,
+        `${state}/${screen}: top spacing`,
+      );
+      assert.equal(
+        spacing.innerBottom,
+        0,
+        `${state}/${screen}: trailing padding`,
+      );
+      assert.equal(spacing.overflow, false, `${state}/${screen}: overflow`);
+      await card.screenshot({
+        path: path.join(artifacts, `${state}-${screen}-card.png`),
+      });
+    }
+    await page.setViewportSize(previousViewport);
+  }
   const open = () =>
     page.getByRole("button", { name: "Тарифы и условия", exact: true }).click();
   const selectPlus = () =>
     dialog
       .getByRole("region", { name: "Тариф PLUS", exact: true })
-      .getByRole("button", { name: "Посмотреть условия" })
+      .getByRole("button", { name: /Купить за 399/ })
       .click();
   await open();
   await selectPlus();
-  const create = dialog.getByRole("button", {
-    name: "Создать тестовый заказ",
+  const retry = dialog.getByRole("button", {
+    name: "Попробовать снова",
     exact: true,
   });
-  await expect(create).toBeDisabled();
-  await dialog.getByRole("checkbox").check();
-  await expect(create).toBeEnabled();
-  await create.click();
   await expect(dialog.getByRole("alert")).toContainText(
     "Оплата пока недоступна",
   );
-  assert.equal(orders.length, 1);
-  await create.click();
-  await expect(dialog.getByRole("article", { name: "Заказ 1" })).toBeVisible();
+  assert.equal(orders.length, 1, "plan click creates an order immediately");
+  await retry.click();
+  const pay = dialog.getByRole("button", { name: /Оплатить 399/ });
+  await expect(pay).toBeVisible();
+  await expect(pay).toBeDisabled();
+  await checkOrderSpacing(1, "pending");
   assert.equal(orders.length, 1, "retry must use the same request ID");
-  const popupPromise = context.waitForEvent("page");
-  await dialog.getByRole("button", { name: "Открыть Robokassa" }).click();
-  const popup = await popupPromise;
-  await expect(popup.getByRole("heading")).toHaveText(
-    "Mock Robokassa test checkout",
+  assert(orders[0].checkout_url, "order includes its payment URL immediately");
+  assert.equal(
+    providerVisits,
+    0,
+    "unchecked consent blocks navigation only on the client",
   );
+  await expect(
+    dialog.getByRole("region", { name: "Платежи", exact: true }),
+  ).not.toContainText(/тестов/i);
+  await dialog.getByRole("checkbox").check();
+  await dialog
+    .getByRole("button", { name: "условиями покупки и возврата" })
+    .click();
+  await expect(
+    dialog.getByRole("heading", { name: "Публичная оферта" }),
+  ).toBeVisible();
+  await dialog.getByRole("tab", { name: "Тарифы", exact: true }).click();
+  await expect(dialog.getByRole("checkbox")).toBeChecked();
+  await expect(pay).toBeEnabled();
+  assert.equal(orders.length, 1, "reading terms must not create another order");
+  await page.screenshot({ path: path.join(artifacts, "checkout-desktop.png") });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: path.join(artifacts, "checkout-mobile.png") });
+  const checkbox = await dialog.getByRole("checkbox").boundingBox();
+  assert.equal(checkbox.width, 16);
+  assert.equal(checkbox.height, 16);
+  const cta = await pay.evaluate((button) => {
+    const css = getComputedStyle(button);
+    return {
+      background: css.backgroundColor,
+      decoration: css.textDecorationLine,
+    };
+  });
+  assert.notEqual(cta.background, "rgba(0, 0, 0, 0)");
+  assert.equal(cta.decoration, "none");
+  await pay.click();
+  await expect(page).toHaveURL(/https:\/\/auth\.robokassa\.ru\//);
+  await expect(
+    page.getByRole("heading", { name: "Mock Robokassa test checkout" }),
+  ).toBeVisible();
   assert.equal(providerVisits, 1);
-  await popup.close();
+  assert.equal(context.pages().length, 1, "checkout stays in the same tab");
+  await page.goBack();
+  await expect(dialog.getByRole("article", { name: "Заказ 1" })).toBeVisible();
+  await page.setViewportSize({ width: 1440, height: 1000 });
   assert.equal(profile.assist_requests_remaining, 10);
   await page.screenshot({ path: path.join(artifacts, "pending-desktop.png") });
   await dialog.getByRole("button", { name: "Закрыть диалог" }).click();
   await open();
   await dialog.getByRole("tab", { name: "Платежи", exact: true }).click();
   await expect(dialog.getByRole("article", { name: "Заказ 1" })).toContainText(
-    "Ожидаем подтверждения",
+    "К оплате",
   );
   await dialog.getByRole("button", { name: "Отменить заказ" }).click();
   await expect(dialog.getByRole("article", { name: "Заказ 1" })).toContainText(
     "Заказ отменён",
   );
+  await checkOrderSpacing(1, "cancelled");
   await dialog.getByRole("tab", { name: "Тарифы", exact: true }).click();
-  await selectPlus();
-  await dialog.getByRole("checkbox").check();
   stale = true;
-  await create.click();
+  await selectPlus();
   await expect(dialog.getByRole("alert")).toContainText(
     "Условия тарифа изменились",
   );
   stale = false;
-  await create.click();
+  await retry.click();
   await expect(dialog.getByRole("article", { name: "Заказ 2" })).toBeVisible();
   // A browser return still waits for the server. Login resumes the payment modal.
   signedIn = false;
@@ -223,7 +306,7 @@ try {
     .fill("test password long enough");
   await login.getByRole("button", { name: "Войти", exact: true }).click();
   await expect(dialog.getByRole("article", { name: "Заказ 2" })).toContainText(
-    "Ожидаем подтверждения",
+    "К оплате",
   );
   const reads = profileReads;
   Object.assign(orders[1], {
@@ -243,14 +326,16 @@ try {
     { timeout: 10000 },
   );
   await expect.poll(() => profileReads).toBeGreaterThan(reads);
+  await checkOrderSpacing(2, "paid");
   Object.assign(orders[0], {
     status: "paid_review",
     paid_at: new Date().toISOString(),
   });
-  await dialog.getByRole("button", { name: "Проверить статус" }).click();
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
   await expect(dialog.getByRole("article", { name: "Заказ 1" })).toContainText(
     "нужна проверка поддержки",
   );
+  await checkOrderSpacing(1, "paid-review");
   await page.setViewportSize({ width: 390, height: 844 });
   assert(
     await dialog.evaluate(
@@ -280,6 +365,26 @@ try {
     await page.evaluate(() => window.workspace.read("first-light.strudel")),
     original,
   );
+  // A guest chooses the plan once; signing in resumes creation of that order.
+  signedIn = false;
+  mode = "test";
+  await page.goto(origin);
+  await open();
+  await selectPlus();
+  await expect(login).toBeVisible();
+  assert.equal(orders.length, 2);
+  await login
+    .getByLabel("Имя пользователя", { exact: true })
+    .fill("payment_tester");
+  await login
+    .getByLabel("Пароль", { exact: true })
+    .fill("test password long enough");
+  await login.getByRole("button", { name: "Войти", exact: true }).click();
+  await expect(dialog.getByRole("article", { name: "Заказ 3" })).toBeVisible();
+  await expect(
+    dialog.getByRole("button", { name: /Оплатить 399/ }),
+  ).toBeDisabled();
+  assert.equal(orders.length, 3);
   assert.deepEqual(errors, []);
   console.log(
     `PASS: consent, retry, test checkout, history, cancellation, stale terms, return/login, polling, profile refresh, review, disabled mode, mobile. Artifacts: ${artifacts}`,

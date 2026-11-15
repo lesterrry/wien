@@ -8,4 +8,4 @@ reasoning_effort = "low"
 [payments]
 mode = "test"
 merchant_login = "wien"
-test_users = ["bebra"]
+test_users = ["bebra", "bebra2"]
