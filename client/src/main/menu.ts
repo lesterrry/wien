@@ -11,14 +11,17 @@ import {
   commands,
 } from "../shared/commands";
 
+import { t } from "./locale";
+
 export function installMenu() {
   const template: MenuItemConstructorOptions[] = commandMenus.map((group) => ({
-    label: group.label,
+    label: t(group.label),
     submenu: group.commands
       .filter((command) => !command.webOnly)
       .map((command): MenuItemConstructorOptions => {
         if (command.edit)
           return {
+            label: t(command.label),
             role: command.id as
               | "undo"
               | "redo"
@@ -29,7 +32,7 @@ export function installMenu() {
           };
         return {
           id: command.id,
-          label: command.label,
+          label: t(command.label),
           enabled: false,
           accelerator: command.key
             ? `CommandOrControl+${command.alt ? "Alt+" : ""}${command.shift ? "Shift+" : ""}${command.key}`
@@ -46,7 +49,7 @@ export function installMenu() {
         };
       }),
   }));
-  const view = template.find((item) => item.label === "View");
+  const view = template.find((item) => item.label === t("View"));
   if (view && Array.isArray(view.submenu))
     view.submenu.push(
       { type: "separator" },

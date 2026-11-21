@@ -1492,7 +1492,7 @@ export function App() {
         {!graphActive && playback.error && (
           <div className={styles.evaluationError} role="alert">
             <strong>{t("Couldn’t run this code")}</strong>
-            <span>{playback.error.message}</span>
+            <span>{t(playback.error.message)}</span>
             {playback.started && (
               <small>{t("The previous version is still playing.")}</small>
             )}

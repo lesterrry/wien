@@ -35,6 +35,11 @@
   padding-left: 18px;
 }
 
+.web .appName > canvas {
+  width: 65%;
+  margin-right: auto;
+}
+
 .titlebarMain {
   flex: 1;
   min-width: 0;

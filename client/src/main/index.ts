@@ -15,6 +15,7 @@ import { AccountClient } from "./account";
 import { AccountStorage } from "./account-storage";
 import { AssistAccessError, askAssistant } from "./assistant";
 import { backendConfig } from "./config";
+import { setMenuLocale, t } from "./locale";
 import { installMenu, updateMenuState } from "./menu";
 import { ProjectFs } from "./project-fs";
 import { ProjectVersions } from "./project-versions";
@@ -52,9 +53,12 @@ async function selectProject(root: string) {
   if (savedHistory) {
     await dialog.showMessageBox({
       type: "info",
-      title: "Project recovered",
-      message: "The working state was restored.",
-      detail: `Files changed during the interrupted version view were preserved at ${savedHistory}.`,
+      title: t("Project recovered"),
+      message: t("The working state was restored."),
+      detail: t(
+        "Files changed during the interrupted version view were preserved at {path}.",
+        { path: savedHistory },
+      ),
     });
   }
   const info = await next.project();
@@ -126,10 +130,10 @@ function registerIpc() {
         throw new Error("Invalid filename.");
       validateWav(data);
       const result = await dialog.showSaveDialog(window, {
-        title: "Save WAV",
-        buttonLabel: "Save WAV",
+        title: t("Save WAV"),
+        buttonLabel: t("Save WAV"),
         defaultPath: wavFilename(name),
-        filters: [{ name: "WAV audio", extensions: ["wav"] }],
+        filters: [{ name: t("WAV audio"), extensions: ["wav"] }],
       });
       if (result.canceled || !result.filePath) return false;
       await fs.writeFile(result.filePath, new Uint8Array(data));
@@ -276,7 +280,7 @@ function registerIpc() {
   handle("project:open", async () => {
     if (!window) return null;
     const result = await dialog.showOpenDialog(window, {
-      title: "Open a music project",
+      title: t("Open a music project"),
       properties: ["openDirectory"],
     });
     return result.canceled ? null : selectProject(result.filePaths[0]);
@@ -298,8 +302,10 @@ function registerIpc() {
       if (!exists) return createStarter(defaultPath, files);
     }
     const result = await dialog.showSaveDialog(window, {
-      title: example ? "Choose another project name" : "Create a music project",
-      buttonLabel: "Create project",
+      title: example
+        ? t("Choose another project name")
+        : t("Create a music project"),
+      buttonLabel: t("Create project"),
       defaultPath,
       properties: ["createDirectory"],
     });
@@ -409,13 +415,15 @@ void app
     await initializeProject();
     registerIpc();
     installMenu();
-    ipcMain.on("menu:state", (event, state) => {
+    ipcMain.on("menu:state", (event, state, locale) => {
       if (
         event.sender === window?.webContents &&
         state &&
         typeof state === "object"
-      )
+      ) {
+        if (setMenuLocale(locale)) installMenu();
         updateMenuState(state);
+      }
     });
     createWindow();
     app.on("activate", () => {
@@ -423,7 +431,7 @@ void app
     });
   })
   .catch((error) => {
-    dialog.showErrorBox("Wien could not start", String(error));
+    dialog.showErrorBox(t("Wien could not start"), String(error));
     app.quit();
   });
 

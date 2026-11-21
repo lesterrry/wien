@@ -39,7 +39,7 @@ export interface VersionEntry {
 export interface WorkspaceApi {
   platform: "desktop" | "web";
   onMenuCommand?(callback: (command: CommandId) => void): () => void;
-  updateMenuState?(state: CommandState): void;
+  updateMenuState?(state: CommandState, locale?: "en" | "ru"): void;
   exportProject?(): Promise<void>;
   saveAudio(name: string, data: ArrayBuffer): Promise<boolean>;
   storefront(): Promise<Storefront>;

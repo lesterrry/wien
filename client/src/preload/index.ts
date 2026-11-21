@@ -12,7 +12,8 @@ const api: WorkspaceApi = {
     ipcRenderer.on("menu:command", listener);
     return () => ipcRenderer.removeListener("menu:command", listener);
   },
-  updateMenuState: (state) => ipcRenderer.send("menu:state", state),
+  updateMenuState: (state, locale) =>
+    ipcRenderer.send("menu:state", state, locale),
   storefront: () => ipcRenderer.invoke("account:storefront"),
   paymentOrders: () => ipcRenderer.invoke("account:payment-orders"),
   paymentOrder: (id) => ipcRenderer.invoke("account:payment-order", id),

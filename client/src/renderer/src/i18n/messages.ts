@@ -344,7 +344,7 @@ export const messages: Record<string, readonly [en: string, ru: string]> = {
     "Add your first snippet above.",
     "Добавьте первый сниппет кнопкой выше.",
   ],
-  "View in Graph View": ["View in Graph View", "Показать на графе"],
+  "View in Graph View": ["View in Graph View", "Показать в Graph View"],
   "Remove exports": ["Remove exports", "Убрать экспорты"],
   "Make exportable": ["Make exportable", "Сделать экспортируемым"],
   Rename: ["Rename", "Переименовать"],
@@ -397,7 +397,7 @@ export const messages: Record<string, readonly [en: string, ru: string]> = {
   "Graph View": ["Graph View", "Graph View"],
   "Close Graph View": ["Close Graph View", "Закрыть Graph View"],
   "Controls view": ["Controls view", "Панель Controls"],
-  "Control Panel": ["Control Panel", "Control Panel"],
+  "Control Panel": ["Control Panel", "Панель Controls"],
   "Close Controls view": ["Close Controls view", "Закрыть панель Controls"],
   "A place to play": ["A place to play", "Место для музыки"],
   "Write Strudel code, play it, and follow the sound.": [
@@ -681,7 +681,7 @@ export const messages: Record<string, readonly [en: string, ru: string]> = {
   "Open Graph View at the bottom left. Arrows point from a dependency to the file using it. Double-click a node to open its code; use ⋯ → View in Graph View to find a specific snippet.":
     [
       "Open Graph View at the bottom left. Arrows point from a dependency to the file using it. Double-click a node to open its code; use ⋯ → View in Graph View to find a specific snippet.",
-      "Откройте граф связей внизу слева. Стрелки идут от зависимости к использующему её файлу. Дважды нажмите узел, чтобы открыть код; команда ⋯ → «Показать на графе» найдёт нужный сниппет.",
+      "Откройте Graph View внизу слева. Стрелки идут от зависимости к использующему её файлу. Дважды нажмите узел, чтобы открыть код; команда ⋯ → «Показать в Graph View» найдёт нужный сниппет.",
     ],
   "Update the composition": ["Update the composition", "Обновите композицию"],
   "Keep your work": ["Keep your work", "Сохраните работу"],
@@ -901,7 +901,7 @@ export const messages: Record<string, readonly [en: string, ru: string]> = {
   "Clear search": ["Clear search", "Очистить поиск"],
   Files: ["Files", "Файлы"],
   "Скачать приложение": ["Download app", "Скачать приложение"],
-  "Open Graph View": ["Open Graph View", "Открыть граф связей"],
+  "Open Graph View": ["Open Graph View", "Открыть Graph View"],
   "Explore project dependencies": [
     "Explore project dependencies",
     "Зависимости проекта",
@@ -1002,6 +1002,10 @@ export const messages: Record<string, readonly [en: string, ru: string]> = {
   "{p0} assist requests left": [
     "{p0} assist requests left",
     "Осталось запросов к Assist: {p0}",
+  ],
+  "{p0}% of assist requests left": [
+    "{p0}% of assist requests left",
+    "Осталось запросов к Assist: {p0}%",
   ],
   "Double-click to rename ({p0} R)": [
     "Double-click to rename ({p0} R)",
@@ -1341,4 +1345,539 @@ export const messages: Record<string, readonly [en: string, ru: string]> = {
   "Graph Controls": ["Graph Controls", "Управление графом"],
   "Zoom in": ["Zoom in", "Увеличить масштаб"],
   "Zoom out": ["Zoom out", "Уменьшить масштаб"],
+  "This control has changed. Refresh the panel before moving it.": [
+    "This control has changed. Refresh the panel before moving it.",
+    "Этот Control изменился. Обновите панель перед перемещением.",
+  ],
+  "This control has changed. Fix its declaration before editing.": [
+    "This control has changed. Fix its declaration before editing.",
+    "Этот Control изменился. Исправьте его объявление перед редактированием.",
+  ],
+  "Hide {p0} control": ["Hide {p0} control", "Скрыть Control {p0}"],
+  "Hide control · adds // @ignore": [
+    "Hide control · adds // @ignore",
+    "Скрыть Control · добавляет // @ignore",
+  ],
+  "Unsupported control: {p0}": [
+    "Unsupported control: {p0}",
+    "Неподдерживаемый Control: {p0}",
+  ],
+  "{p0} control": ["{p0} control", "Control {p0}"],
+  "{p0} controls": ["{p0} controls", "Controls {p0}"],
+  "{p0} control group": ["{p0} control group", "Группа Controls {p0}"],
+  "Snippet controls": ["Snippet controls", "Controls сниппета"],
+  "Open full controls": ["Open full controls", "Открыть все Controls"],
+  "Search controls": ["Search controls", "Поиск Controls"],
+  "Search controls or files…": [
+    "Search controls or files…",
+    "Найти Control или файл…",
+  ],
+  "Loading controls…": ["Loading controls…", "Загрузка Controls…"],
+  "Open a snippet to see its controls.": [
+    "Open a snippet to see its controls.",
+    "Откройте сниппет, чтобы увидеть его Controls.",
+  ],
+  "No matching controls.": ["No matching controls.", "Controls не найдены."],
+  "No controls in these files.": [
+    "No controls in these files.",
+    "В этих файлах нет Controls.",
+  ],
+  "Click control title to go to its declaration": [
+    "Click control title to go to its declaration",
+    "Нажмите на название Control, чтобы перейти к объявлению",
+  ],
+  "Close controls view": ["Close controls view", "Закрыть панель Controls"],
+  "Graph controls": ["Graph controls", "Управление графом"],
+  "Back to controls": ["Back to controls", "К Controls"],
+  "Toggle controls ({p0})": [
+    "Toggle controls ({p0})",
+    "Показать или скрыть Controls ({p0})",
+  ],
+  "Toggle controls": ["Toggle controls", "Показать или скрыть Controls"],
+  Напишите: ["Contact", "Напишите"],
+  "указав номер заказа.": [
+    "and include your order number.",
+    "указав номер заказа.",
+  ],
+  "Last Tab": ["Last Tab", "Последняя вкладка"],
+  "Move Control Up": ["Move Control Up", "Переместить Control вверх"],
+  "Move Control Down": ["Move Control Down", "Переместить Control вниз"],
+  "Invalid audio export request.": [
+    "Invalid audio export request.",
+    "Некорректный запрос на экспорт аудио.",
+  ],
+  "Invalid filename.": ["Invalid filename.", "Некорректное имя файла."],
+  "Invalid account request.": [
+    "Invalid account request.",
+    "Некорректный запрос к аккаунту.",
+  ],
+  "Invalid assistant request.": [
+    "Invalid assistant request.",
+    "Некорректный запрос к помощнику.",
+  ],
+  "Invalid request ID.": [
+    "Invalid request ID.",
+    "Некорректный идентификатор запроса.",
+  ],
+  "An assistant request is already running.": [
+    "An assistant request is already running.",
+    "Помощник уже обрабатывает запрос.",
+  ],
+  "Invalid workspace request.": [
+    "Invalid workspace request.",
+    "Некорректный запрос к рабочей области.",
+  ],
+  "The project changed before reading panel settings.": [
+    "The project changed before reading panel settings.",
+    "Проект изменился до чтения настроек панели.",
+  ],
+  "The project changed before saving panel settings.": [
+    "The project changed before saving panel settings.",
+    "Проект изменился до сохранения настроек панели.",
+  ],
+  "Only HTTP and HTTPS links can be opened.": [
+    "Only HTTP and HTTPS links can be opened.",
+    "Можно открывать только ссылки HTTP и HTTPS.",
+  ],
+  "Expected a path inside the project.": [
+    "Expected a path inside the project.",
+    "Укажите путь внутри проекта.",
+  ],
+  "This path is not available in the project.": [
+    "This path is not available in the project.",
+    "Этот путь недоступен в проекте.",
+  ],
+  "Symbolic links are not supported in this prototype.": [
+    "Symbolic links are not supported in this prototype.",
+    "Символические ссылки пока не поддерживаются.",
+  ],
+  "Open a .strudel or .js file.": [
+    "Open a .strudel or .js file.",
+    "Откройте файл .strudel или .js.",
+  ],
+  "Invalid file contents.": [
+    "Invalid file contents.",
+    "Некорректное содержимое файла.",
+  ],
+  "This file changed on disk. Your edits are kept in the editor. Copy them before reopening the file.":
+    [
+      "This file changed on disk. Your edits are kept in the editor. Copy them before reopening the file.",
+      "Файл изменился на диске. Ваши правки сохранены в редакторе. Скопируйте их перед повторным открытием файла.",
+    ],
+  "Invalid panel settings file.": [
+    "Invalid panel settings file.",
+    "Некорректный файл настроек панели.",
+  ],
+  "Invalid panel settings. Restore .wien-controls.json before changing panel settings.":
+    [
+      "Invalid panel settings. Restore .wien-controls.json before changing panel settings.",
+      "Некорректные настройки панели. Восстановите .wien-controls.json перед изменением настроек.",
+    ],
+  "Panel settings are too large.": [
+    "Panel settings are too large.",
+    "Настройки панели занимают слишком много места.",
+  ],
+  "Enter a name without slashes or surrounding spaces.": [
+    "Enter a name without slashes or surrounding spaces.",
+    "Введите имя без косых черт и пробелов по краям.",
+  ],
+  "The project root cannot be moved.": [
+    "The project root cannot be moved.",
+    "Нельзя переместить корневую папку проекта.",
+  ],
+  "The project root cannot be deleted.": [
+    "The project root cannot be deleted.",
+    "Нельзя удалить корневую папку проекта.",
+  ],
+  "Invalid recovery snapshot.": [
+    "Invalid recovery snapshot.",
+    "Некорректная копия для восстановления.",
+  ],
+  "Invalid version file path.": [
+    "Invalid version file path.",
+    "Некорректный путь к файлу версии.",
+  ],
+  "The project changed while its recovery snapshot was being created.": [
+    "The project changed while its recovery snapshot was being created.",
+    "Проект изменился во время создания копии для восстановления.",
+  ],
+  "The recovery directory must be outside the project.": [
+    "The recovery directory must be outside the project.",
+    "Папка восстановления должна находиться вне проекта.",
+  ],
+  "Version not found on the current branch.": [
+    "Version not found on the current branch.",
+    "Версия не найдена в текущей ветке.",
+  ],
+  "Detached HEAD is not supported.": [
+    "Detached HEAD is not supported.",
+    "Режим detached HEAD не поддерживается.",
+  ],
+  "Recovery verification failed.": [
+    "Recovery verification failed.",
+    "Проверка восстановления не пройдена.",
+  ],
+  "Linked worktrees are not supported.": [
+    "Linked worktrees are not supported.",
+    "Связанные рабочие деревья Git не поддерживаются.",
+  ],
+  "This repository has an operation in progress.": [
+    "This repository has an operation in progress.",
+    "В этом репозитории уже выполняется операция.",
+  ],
+  "Enter a version message.": [
+    "Enter a version message.",
+    "Введите описание версии.",
+  ],
+  "Return to the working state before saving a version.": [
+    "Return to the working state before saving a version.",
+    "Вернитесь к рабочему состоянию перед сохранением версии.",
+  ],
+  "The project has not been compiled.": [
+    "The project has not been compiled.",
+    "Проект ещё не скомпилирован.",
+  ],
+  "Evaluation cancelled.": ["Evaluation cancelled.", "Выполнение отменено."],
+  "Playback cancelled.": ["Playback cancelled.", "Воспроизведение отменено."],
+  "Invalid account response.": [
+    "Invalid account response.",
+    "Некорректный ответ сервера аккаунтов.",
+  ],
+  "Cannot reach the account server. Check the backend address and connection.":
+    [
+      "Cannot reach the account server. Check the backend address and connection.",
+      "Не удалось связаться с сервером аккаунтов. Проверьте адрес сервера и подключение.",
+    ],
+  "Cloudflare blocked this request. The server's bot protection needs to allow the desktop app.":
+    [
+      "Cloudflare blocked this request. The server's bot protection needs to allow the desktop app.",
+      "Cloudflare заблокировал запрос. Защита сервера от ботов должна разрешать доступ настольному приложению.",
+    ],
+  "The account request failed. Try again later.": [
+    "The account request failed. Try again later.",
+    "Не удалось выполнить запрос к аккаунту. Попробуйте позже.",
+  ],
+  "Cannot reach the assistant. Start just run-server and try again.": [
+    "Cannot reach the assistant. Start just run-server and try again.",
+    "Не удалось связаться с помощником. Запустите just run-server и попробуйте снова.",
+  ],
+  "The assistant could not finish. Your file is unchanged. Try again.": [
+    "The assistant could not finish. Your file is unchanged. Try again.",
+    "Помощник не смог завершить работу. Файл не изменён. Попробуйте снова.",
+  ],
+  "Choose between 1 and 512 cycles.": [
+    "Choose between 1 and 512 cycles.",
+    "Выберите от 1 до 512 циклов.",
+  ],
+  "Choose an effect tail between 0 and 30 seconds.": [
+    "Choose an effect tail between 0 and 30 seconds.",
+    "Выберите хвост эффектов от 0 до 30 секунд.",
+  ],
+  "The pattern must have a positive, constant tempo.": [
+    "The pattern must have a positive, constant tempo.",
+    "Паттерн должен иметь постоянный положительный темп.",
+  ],
+  "The export is longer than 10 minutes. Choose fewer cycles.": [
+    "The export is longer than 10 minutes. Choose fewer cycles.",
+    "Экспорт длится больше 10 минут. Уменьшите число циклов.",
+  ],
+  "Invalid audio buffer.": [
+    "Invalid audio buffer.",
+    "Некорректный аудиобуфер.",
+  ],
+  "The pattern produced invalid audio samples.": [
+    "The pattern produced invalid audio samples.",
+    "Паттерн создал некорректные аудиоданные.",
+  ],
+  "Invalid WAV file.": ["Invalid WAV file.", "Некорректный файл WAV."],
+  "Invalid WAV header.": ["Invalid WAV header.", "Некорректный заголовок WAV."],
+  "An enum array is required.": [
+    "An enum array is required.",
+    "Нужен массив вариантов перечисления.",
+  ],
+  "This customization is not supported by the control.": [
+    "This customization is not supported by the control.",
+    "Этот Control не поддерживает такую настройку.",
+  ],
+  "Specify @default only once.": [
+    "Specify @default only once.",
+    "Укажите @default только один раз.",
+  ],
+  "Specify a default value after @default.": [
+    "Specify a default value after @default.",
+    "Укажите значение по умолчанию после @default.",
+  ],
+  "Default must fit on one line.": [
+    "Default must fit on one line.",
+    "Значение по умолчанию должно помещаться в одну строку.",
+  ],
+  "Use a constant default value.": [
+    "Use a constant default value.",
+    "Используйте константное значение по умолчанию.",
+  ],
+  "Default must be a finite number.": [
+    "Default must be a finite number.",
+    "Значение по умолчанию должно быть конечным числом.",
+  ],
+  "Default must be within minimum and maximum.": [
+    "Default must be within minimum and maximum.",
+    "Значение по умолчанию должно находиться между минимумом и максимумом.",
+  ],
+  "Default must match a fixed knob position.": [
+    "Default must match a fixed knob position.",
+    "Значение по умолчанию должно совпадать с фиксированной позицией ручки.",
+  ],
+  "Default must be true or false.": [
+    "Default must be true or false.",
+    "Значение по умолчанию должно быть true или false.",
+  ],
+  "Default must be an array of enum options.": [
+    "Default must be an array of enum options.",
+    "Значение по умолчанию должно быть массивом вариантов перечисления.",
+  ],
+  "Use explicit enum options in Default.": [
+    "Use explicit enum options in Default.",
+    "Явно укажите варианты перечисления в значении по умолчанию.",
+  ],
+  "Include each default option only once.": [
+    "Include each default option only once.",
+    "Укажите каждый вариант по умолчанию только один раз.",
+  ],
+  "Circular import": ["Circular import", "Циклический импорт"],
+  "Finish editing this file to use its controls.": [
+    "Finish editing this file to use its controls.",
+    "Завершите редактирование файла, чтобы использовать его Controls.",
+  ],
+  "Use @multi for an enum array.": [
+    "Use @multi for an enum array.",
+    "Используйте @multi для массива вариантов перечисления.",
+  ],
+  "@multi requires an array.": [
+    "@multi requires an array.",
+    "Для @multi нужен массив.",
+  ],
+  "The enum must be declared above this array in the same file.": [
+    "The enum must be declared above this array in the same file.",
+    "Перечисление должно быть объявлено выше массива в том же файле.",
+  ],
+  "Every array element must refer to a field of the same enum.": [
+    "Every array element must refer to a field of the same enum.",
+    "Каждый элемент массива должен ссылаться на поле одного и того же перечисления.",
+  ],
+  "Select each enum option only once.": [
+    "Select each enum option only once.",
+    "Выберите каждый вариант перечисления только один раз.",
+  ],
+  "Control annotations require a finite numeric constant.": [
+    "Control annotations require a finite numeric constant.",
+    "Для аннотаций Control нужна конечная числовая константа.",
+  ],
+  "Value must be a finite number.": [
+    "Value must be a finite number.",
+    "Значение должно быть конечным числом.",
+  ],
+  "Multiple declarations use this name.": [
+    "Multiple declarations use this name.",
+    "Это имя используется в нескольких объявлениях.",
+  ],
+  "Control groups cannot contain other groups.": [
+    "Control groups cannot contain other groups.",
+    "Группы Controls не могут содержать другие группы.",
+  ],
+  "Include each control only once.": [
+    "Include each control only once.",
+    "Включите каждый Control только один раз.",
+  ],
+  "A control can belong to only one group; the first group takes precedence.": [
+    "A control can belong to only one group; the first group takes precedence.",
+    "Control может принадлежать только одной группе; используется первая группа.",
+  ],
+  "This control has changed. Reopen its settings.": [
+    "This control has changed. Reopen its settings.",
+    "Этот Control изменился. Откройте его настройки заново.",
+  ],
+  "Control declaration not found.": [
+    "Control declaration not found.",
+    "Объявление Control не найдено.",
+  ],
+  "Control settings changed in the source. Reopen the settings and try again.":
+    [
+      "Control settings changed in the source. Reopen the settings and try again.",
+      "Настройки Control изменились в исходном коде. Откройте настройки заново и попробуйте ещё раз.",
+    ],
+  "Could not safely update this control's annotations.": [
+    "Could not safely update this control's annotations.",
+    "Не удалось безопасно обновить аннотации этого Control.",
+  ],
+  "The default example project is missing or empty.": [
+    "The default example project is missing or empty.",
+    "Проект примера по умолчанию отсутствует или пуст.",
+  ],
+  "Example project not found.": [
+    "Example project not found.",
+    "Проект примера не найден.",
+  ],
+  "Missing default export keyword.": [
+    "Missing default export keyword.",
+    "Отсутствует ключевое слово default в экспорте.",
+  ],
+  "Unsupported exported binding.": [
+    "Unsupported exported binding.",
+    "Неподдерживаемое экспортируемое объявление.",
+  ],
+  "Use @multi EnumName with an optional order=First,Second.": [
+    "Use @multi EnumName with an optional order=First,Second.",
+    "Используйте @multi EnumName с необязательным параметром order=First,Second.",
+  ],
+  'Use enum keys in order, e.g. order=Echo,"Soft chorus",Crush.': [
+    'Use enum keys in order, e.g. order=Echo,"Soft chorus",Crush.',
+    'Укажите ключи перечисления в нужном порядке, например order=Echo,"Soft chorus",Crush.',
+  ],
+  "Invalid subscription catalog.": [
+    "Invalid subscription catalog.",
+    "Некорректный каталог тарифов.",
+  ],
+  "Slider expects finite numbers: min, max, value.": [
+    "Slider expects finite numbers: min, max, value.",
+    "Для ползунка нужны конечные числа: min, max, value.",
+  ],
+  "Slider min must be less than max, with a finite span.": [
+    "Slider min must be less than max, with a finite span.",
+    "Минимум ползунка должен быть меньше максимума, а диапазон — конечным.",
+  ],
+  "Slider value must be finite.": [
+    "Slider value must be finite.",
+    "Значение ползунка должно быть конечным числом.",
+  ],
+  "Slider value must be within min and max.": [
+    "Slider value must be within min and max.",
+    "Значение ползунка должно находиться между минимумом и максимумом.",
+  ],
+  "Invalid storefront": ["Invalid storefront", "Некорректные данные витрины"],
+  "Use a relative name without dots, slashes or surrounding spaces.": [
+    "Use a relative name without dots, slashes or surrounding spaces.",
+    "Используйте относительное имя без точек, косых черт и пробелов по краям.",
+  ],
+  "Cannot open browser storage. Allow site storage to save projects.": [
+    "Cannot open browser storage. Allow site storage to save projects.",
+    "Не удалось открыть хранилище браузера. Разрешите сайту хранить данные для сохранения проектов.",
+  ],
+  "This project changed in another tab. Your edits are kept in the editor; reload the project before retrying.":
+    [
+      "This project changed in another tab. Your edits are kept in the editor; reload the project before retrying.",
+      "Проект изменился в другой вкладке. Ваши правки сохранены в редакторе; перезагрузите проект перед повторной попыткой.",
+    ],
+  "Could not save to browser storage. Export your project and check available space.":
+    [
+      "Could not save to browser storage. Export your project and check available space.",
+      "Не удалось сохранить данные в браузере. Экспортируйте проект и проверьте свободное место.",
+    ],
+  "This file changed in another tab. Your edits are kept in the editor. Copy them before reopening the file.":
+    [
+      "This file changed in another tab. Your edits are kept in the editor. Copy them before reopening the file.",
+      "Файл изменился в другой вкладке. Ваши правки сохранены в редакторе. Скопируйте их перед повторным открытием файла.",
+    ],
+  "Project recovered": ["Project recovered", "Проект восстановлен"],
+  "The working state was restored.": [
+    "The working state was restored.",
+    "Рабочее состояние восстановлено.",
+  ],
+  "Open a music project": [
+    "Open a music project",
+    "Открыть музыкальный проект",
+  ],
+  "Choose another project name": [
+    "Choose another project name",
+    "Выберите другое имя проекта",
+  ],
+  "Create a music project": [
+    "Create a music project",
+    "Создать музыкальный проект",
+  ],
+  "Create project": ["Create project", "Создать проект"],
+  "WAV audio": ["WAV audio", "Аудио WAV"],
+  "Wien could not start": ["Wien could not start", "Не удалось запустить Wien"],
+  "circular import.": ["circular import.", "циклический импорт."],
+  "module was not loaded.": ["module was not loaded.", "модуль не загружен."],
+  "unable to allocate export binding.": [
+    "unable to allocate export binding.",
+    "не удалось создать экспортируемое объявление.",
+  ],
+  "re-exports are not supported; import and export a local binding.": [
+    "re-exports are not supported; import and export a local binding.",
+    "реэкспорт не поддерживается; импортируйте значение и экспортируйте локальное объявление.",
+  ],
+  "export * is not supported; use explicit imports and exports.": [
+    "export * is not supported; use explicit imports and exports.",
+    "export * не поддерживается; явно укажите импорты и экспорты.",
+  ],
+  "imported snippets must use patterns instead of $: tracks.": [
+    "imported snippets must use patterns instead of $: tracks.",
+    "импортируемые сниппеты должны использовать паттерны вместо дорожек $:.",
+  ],
+  "this snippet has no exports.": [
+    "this snippet has no exports.",
+    "в этом сниппете нет экспортов.",
+  ],
+  "export a default pattern to preview this module.": [
+    "export a default pattern to preview this module.",
+    "экспортируйте паттерн по умолчанию для прослушивания модуля.",
+  ],
+  "use a relative .strudel or .js import.": [
+    "use a relative .strudel or .js import.",
+    "используйте относительный импорт .strudel или .js.",
+  ],
+  "import leaves the project.": [
+    "import leaves the project.",
+    "импорт выходит за пределы проекта.",
+  ],
+  "invalid import path.": [
+    "invalid import path.",
+    "некорректный путь импорта.",
+  ],
+  "include the .strudel or .js extension.": [
+    "include the .strudel or .js extension.",
+    "укажите расширение .strudel или .js.",
+  ],
+  "end the snippet with a pattern expression to export it.": [
+    "end the snippet with a pattern expression to export it.",
+    "завершите сниппет выражением паттерна, чтобы экспортировать его.",
+  ],
+  "combine $: tracks with stack(...) before exporting.": [
+    "combine $: tracks with stack(...) before exporting.",
+    "объедините дорожки $: с помощью stack(...) перед экспортом.",
+  ],
+  "remove re-exports manually before disabling exports.": [
+    "remove re-exports manually before disabling exports.",
+    "удалите реэкспорты вручную перед отключением экспортов.",
+  ],
+  "Use an option from {name}.": [
+    "Use an option from {name}.",
+    "Используйте вариант из {name}.",
+  ],
+  "Unknown default option in {name}.": [
+    "Unknown default option in {name}.",
+    "Неизвестный вариант по умолчанию в {name}.",
+  ],
+  "Missing snippet: {name}": [
+    "Missing snippet: {name}",
+    "Сниппет не найден: {name}",
+  ],
+  "Circular import: {name}": [
+    "Circular import: {name}",
+    "Циклический импорт: {name}",
+  ],
+  "{name} has no {option} option.": [
+    "{name} has no {option} option.",
+    "В {name} нет варианта {option}.",
+  ],
+  "{name} has no {option} export.": [
+    "{name} has no {option} export.",
+    "В {name} нет экспорта {option}.",
+  ],
+  "Files changed during the interrupted version view were preserved at {path}.":
+    [
+      "Files changed during the interrupted version view were preserved at {path}.",
+      "Файлы, изменённые во время прерванного просмотра версии, сохранены в {path}.",
+    ],
 };

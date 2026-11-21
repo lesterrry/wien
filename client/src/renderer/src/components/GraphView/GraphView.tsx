@@ -351,8 +351,8 @@ export function GraphView({
             <Panel position="bottom-right" className={styles.details}>
               <strong>{selectedNode.path}</strong>
               {[...new Set(selectedNode.issues)].map((issue) => (
-                <p key={issue} className={styles.warning}>
-                  {issue}
+                <p key={t(issue)} className={styles.warning}>
+                  {t(issue)}
                 </p>
               ))}
             </Panel>

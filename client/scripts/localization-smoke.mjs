@@ -98,6 +98,19 @@ try {
     'const cutoff = 1200\nnote("c4").s("sine").lpf(cutoff)\n// localization smoke',
   );
   const source = await editor.textContent();
+  const controlsToggle = page.getByRole("button", {
+    name: "Показать или скрыть Controls",
+    exact: true,
+  });
+  if ((await controlsToggle.getAttribute("aria-expanded")) !== "true")
+    await controlsToggle.click();
+  await expect(page.getByPlaceholder("Найти Control или файл…")).toBeVisible();
+  await expect(
+    page.getByText("Нажмите на название Control, чтобы перейти к объявлению", {
+      exact: true,
+    }),
+  ).toBeVisible();
+
   await page.evaluate(() => {
     window.__localeEditor = document.querySelector(
       '.cm-content[contenteditable="true"]',
@@ -108,6 +121,15 @@ try {
     .fill("glass");
   await language(page, "EN").click();
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(
+    page.getByPlaceholder("Search controls or files…"),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Click control title to go to its declaration", {
+      exact: true,
+    }),
+  ).toBeVisible();
+
   await expect(
     page.getByRole("textbox", { name: "Find a snippet", exact: true }),
   ).toHaveValue("glass");

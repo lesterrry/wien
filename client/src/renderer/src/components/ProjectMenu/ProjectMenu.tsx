@@ -91,11 +91,25 @@ export function ProjectMenu({
               <div>
                 <strong>{user.plan.name}</strong>
                 <span>
-                  {user.plan.initial_assist_requests !== null
-                    ? t("{p0} assist requests left", {
-                        p0: user.assist_requests_remaining,
-                      })
-                    : t("Subscription active")}
+                  {user.plan.initial_assist_requests === null
+                    ? t("Subscription active")
+                    : user.plan.is_default
+                      ? t("{p0} assist requests left", {
+                          p0: user.assist_requests_remaining,
+                        })
+                      : t("{p0}% of assist requests left", {
+                          p0:
+                            user.plan.initial_assist_requests > 0
+                              ? Math.min(
+                                  100,
+                                  Math.round(
+                                    (user.assist_requests_remaining /
+                                      user.plan.initial_assist_requests) *
+                                      100,
+                                  ),
+                                )
+                              : 0,
+                        })}
                 </span>
               </div>
               <button

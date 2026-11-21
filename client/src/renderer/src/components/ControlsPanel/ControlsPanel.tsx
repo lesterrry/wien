@@ -332,14 +332,14 @@ export function ControlsPanel({
           <div className={styles.groupBody}>
             {group.error && (
               <p role="alert" className={styles.issue}>
-                {group.error}
+                {t(group.error)}
               </p>
             )}
             {group.issues
               ?.filter((issue) => matches(group.path, issue.name))
               .map((issue) => (
                 <p key={issue.name} role="alert" className={styles.issue}>
-                  <strong>{issue.name}</strong>: {issue.message}
+                  <strong>{issue.name}</strong>: {t(issue.message)}
                 </p>
               ))}
             {Object.entries(errors).map(([key, message]) => {
@@ -351,7 +351,7 @@ export function ControlsPanel({
                 return null;
               return (
                 <p key={key} role="alert" className={styles.issue}>
-                  <strong>{name}</strong>: {message}
+                  <strong>{name}</strong>: {t(message)}
                   <button
                     type="button"
                     disabled={disabled}
@@ -491,12 +491,13 @@ export function ControlsPanel({
             <div key={group.id}>
               {group.error && (
                 <p role="alert" className={styles.issue}>
-                  {group.path}: {group.error}
+                  {group.path}: {t(group.error)}
                 </p>
               )}
               {group.issues?.map((issue) => (
                 <p key={issue.name} role="alert" className={styles.issue}>
-                  {group.path} · <strong>{issue.name}</strong>: {issue.message}
+                  {group.path} · <strong>{issue.name}</strong>:{" "}
+                  {t(issue.message)}
                 </p>
               ))}
             </div>

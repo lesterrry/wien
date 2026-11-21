@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { translateDiagnostic } from "./diagnostics";
 import { messages } from "./messages";
 
 export type Locale = "en" | "ru";
@@ -54,7 +55,9 @@ export function t(
   values?: Record<string, string | number>,
   language = locale,
 ) {
-  const translation = messages[source]?.[language === "en" ? 0 : 1] ?? source;
+  const translation =
+    messages[source]?.[language === "en" ? 0 : 1] ??
+    translateDiagnostic(source, language);
   return values
     ? translation.replace(/\{(\w+)\}/g, (placeholder, key: string) =>
         Object.hasOwn(values, key) ? String(values[key]) : placeholder,

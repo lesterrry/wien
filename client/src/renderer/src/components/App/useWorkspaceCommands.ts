@@ -6,12 +6,15 @@ import {
 } from "../../../../shared/commands";
 import { shortcutEnvironment } from "../../commands";
 
+import { useLocale } from "../../i18n";
+
 const api = window.workspace;
 
 export function useWorkspaceCommands(
   onCommand: (command: CommandId) => void,
   getState: (available: boolean) => CommandState,
 ) {
+  const locale = useLocale();
   const [menuState, setMenuState] = useState<CommandState>({});
   const lastMenuState = useRef("");
   const commandHandler = useRef(onCommand);
@@ -51,10 +54,10 @@ export function useWorkspaceCommands(
       if (window.document.activeElement?.closest("[data-app-menu]")) return;
       const available = !window.document.querySelector("dialog[open]");
       const state = stateHandler.current(available);
-      const serialized = JSON.stringify(state);
+      const serialized = JSON.stringify([state, locale]);
       if (lastMenuState.current === serialized) return;
       lastMenuState.current = serialized;
-      api.updateMenuState?.(state);
+      api.updateMenuState?.(state, locale);
       setMenuState(state);
     };
     syncMenu();
