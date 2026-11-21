@@ -112,4 +112,4 @@ per 15 minutes, plus 240 expensive auth attempts globally per 15 minutes and two
 concurrent password hashing operations per server. These initial limits are for
 small-scale use; they do not replace per-client abuse controls for public growth.
 
-Payment configuration and test checkout setup: [server/PAYMENTS.md](../server/PAYMENTS.md). Payments remain disabled unless explicitly configured.
+Payment configuration and test/live checkout setup: [server/PAYMENTS.md](../server/PAYMENTS.md). The checked-in configuration uses live mode and requires production passwords and active receipt settings; see the live launch steps before deployment.

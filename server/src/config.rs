@@ -118,7 +118,6 @@ mod tests {
             "",
             "provider = 'unknown'",
             "provider = 42",
-            "provider = 'aitunnel'\n[payments]\nmode = 'live'",
             "provider = 'aitunnel'\n[payments]\nmode = 'typo'",
             "provider = 'aitunnel'\n[payments]\ntest_users = 'one,two'",
             "provider = 'aitunnel'\n[payments]\npassword1 = 'test-only-secret'",

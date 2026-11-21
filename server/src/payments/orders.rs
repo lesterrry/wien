@@ -65,7 +65,7 @@ impl Row {
             .filter(|c| {
                 allowed
                     && self.status == "pending"
-                    && self.is_test
+                    && self.is_test == c.is_test()
                     && self.merchant_login == c.merchant_login
             })
             .map(|c| c.checkout_url(self.invoice_id, &self.id, self.price_minor, &self.plan_name));
@@ -195,9 +195,9 @@ impl Payments {
                 "Условия тарифа изменились. Откройте тарифы заново и подтвердите актуальные условия.",
             ));
         }
-        let row=sqlx::query_as::<_,Row>("INSERT INTO payment_orders(user_id,request_id,merchant_login,is_test,plan_id,plan_name,price_minor,currency,request_limit,audio_enabled,document_version) VALUES($1::uuid,$2::uuid,$3,true,$4,$5,$6,'RUB',$7,$8,$9) RETURNING id::text,invoice_id,user_id::text,merchant_login,plan_id,plan_name,price_minor,currency,request_limit,audio_enabled,document_version,status,is_test,created_at,paid_at,period_ends_at")
+        let row=sqlx::query_as::<_,Row>("INSERT INTO payment_orders(user_id,request_id,merchant_login,is_test,plan_id,plan_name,price_minor,currency,request_limit,audio_enabled,document_version) VALUES($1::uuid,$2::uuid,$3,$10,$4,$5,$6,'RUB',$7,$8,$9) RETURNING id::text,invoice_id,user_id::text,merchant_login,plan_id,plan_name,price_minor,currency,request_limit,audio_enabled,document_version,status,is_test,created_at,paid_at,period_ends_at")
             .bind(user).bind(&request.request_id).bind(&config.merchant_login).bind(&plan.id).bind(plan.name_ru.as_deref().unwrap_or(&plan.name))
-            .bind(plan.price_minor).bind(request.request_limit).bind(plan.audio_enabled).bind(&document_version).fetch_one(&mut *tx).await?;
+            .bind(plan.price_minor).bind(request.request_limit).bind(plan.audio_enabled).bind(&document_version).bind(config.is_test()).fetch_one(&mut *tx).await?;
         tx.commit().await?;
         Ok(row.view(self, true))
     }
@@ -241,7 +241,7 @@ impl Payments {
         .bind(&notification.order_id)
         .fetch_one(&mut *tx)
         .await?;
-        if !row.is_test
+        if row.is_test != config.is_test()
             || row.merchant_login != config.merchant_login
             || row.price_minor != notification.amount_minor
             || row.user_id != user

@@ -11,7 +11,7 @@ use tower::ServiceExt;
 use wien_server::{
     auth,
     payments::{self, Payments},
-    robokassa::TestConfig,
+    robokassa::Config,
     subscriptions::Reservation,
 };
 const TOKEN: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -29,7 +29,8 @@ async fn setup(pool: &PgPool, enabled: bool) -> Router {
         sqlx::query("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES($1,$2::uuid,now()+interval '1 day')").bind(Sha256::digest(token).to_vec()).bind(id).execute(pool).await.unwrap();
     }
     let config = enabled.then(|| {
-        TestConfig::new(
+        Config::new(
+            wien_server::payments::Mode::Test,
             "WienTest".into(),
             "local-test-first-password".into(),
             PASSWORD2.into(),
@@ -95,17 +96,22 @@ async fn create(app: &Router, pool: &PgPool, n: u32) -> Value {
 fn form(order: &Value, amount: &str, password: &str) -> String {
     let id = order["id"].as_str().unwrap();
     let invoice = order["invoice_id"].as_str().unwrap();
+    let mode = if order["is_test"] == true {
+        "test"
+    } else {
+        "live"
+    };
     let signature = format!(
         "{:x}",
         Sha256::digest(format!(
-            "{amount}:{invoice}:{password}:Shp_mode=test:Shp_order={id}"
+            "{amount}:{invoice}:{password}:Shp_mode={mode}:Shp_order={id}"
         ))
     );
     url::form_urlencoded::Serializer::new(String::new())
         .extend_pairs([
             ("OutSum", amount),
             ("InvId", invoice),
-            ("Shp_mode", "test"),
+            ("Shp_mode", mode),
             ("Shp_order", id),
             ("SignatureValue", &signature),
         ])
@@ -151,7 +157,8 @@ async fn disabled_and_ownership_and_cookie_origin_are_enforced(pool: PgPool) {
         notify(&app, "".into()).await.0,
         StatusCode::SERVICE_UNAVAILABLE
     );
-    let config = TestConfig::new(
+    let config = Config::new(
+        wien_server::payments::Mode::Test,
         "WienTest".into(),
         "local-test-first-password".into(),
         PASSWORD2.into(),
@@ -568,4 +575,100 @@ async fn migration_preserves_existing_manually_granted_periods(pool: PgPool) {
         .unwrap();
     let next:(i32,i32,bool)=sqlx::query_as("SELECT assist_requests_remaining,period_request_limit,period_audio_enabled FROM subscriptions").fetch_one(&pool).await.unwrap();
     assert_eq!(next, (1, 1, false));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL in DATABASE_URL; CI runs this explicitly"]
+async fn live_orders_allow_all_accounts_and_isolate_historical_test_orders(pool: PgPool) {
+    let test_app = setup(&pool, true).await;
+    let old = create(&test_app, &pool, 1).await;
+    let config = Config::new(
+        payments::Mode::Live,
+        "WienTest".into(),
+        "local-live-first-password".into(),
+        "local-live-second-password".into(),
+        Default::default(),
+    )
+    .unwrap();
+    let state = Payments::new(pool.clone(), Some(config));
+    assert_eq!(state.mode(), payments::Mode::Live);
+    let app = payments::router(state);
+    let (_, history) = api(&app, "GET", "/v1/payments/orders", Value::Null, TOKEN).await;
+    assert_eq!(history[0]["is_test"], true);
+    assert_eq!(history[0]["checkout_url"], Value::Null);
+    assert_eq!(
+        notify(&app, form(&old, "399.000000", PASSWORD2)).await.0,
+        StatusCode::BAD_REQUEST
+    );
+    // Even a correctly signed live notification cannot pay a historical test order.
+    let mut forged = old.clone();
+    forged["is_test"] = json!(false);
+    assert_eq!(
+        notify(
+            &app,
+            form(&forged, "399.000000", "local-live-second-password")
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(quota(&pool).await, 10);
+    api(
+        &app,
+        "POST",
+        &format!("/v1/payments/orders/{}/cancel", old["id"].as_str().unwrap()),
+        Value::Null,
+        TOKEN,
+    )
+    .await;
+    let order = create(&app, &pool, 2).await;
+    assert_eq!(order["is_test"], false);
+    assert!(!order["checkout_url"].as_str().unwrap().contains("IsTest"));
+    assert!(order["checkout_url"].as_str().unwrap().contains("Receipt="));
+    // The account excluded from the test allowlist can buy in live mode.
+    let (status, other) = api(
+        &app,
+        "POST",
+        "/v1/payments/orders",
+        purchase(&pool, 3).await,
+        OTHER,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{other}");
+    assert_eq!(other["is_test"], false);
+    for body in [
+        form(&order, "399.000000", PASSWORD2),
+        form(&order, "1.00", "local-live-second-password"),
+    ] {
+        assert_eq!(notify(&app, body).await.0, StatusCode::BAD_REQUEST);
+    }
+    let body = form(&order, "399.000000", "local-live-second-password");
+    let (a, b) = tokio::join!(notify(&app, body.clone()), notify(&app, body.clone()));
+    assert_eq!(
+        a,
+        (
+            StatusCode::OK,
+            format!("OK{}", order["invoice_id"].as_str().unwrap())
+        )
+    );
+    assert_eq!(a, b);
+    assert_eq!(quota(&pool).await, 500);
+    sqlx::query(
+        "UPDATE subscriptions SET assist_requests_remaining=499 WHERE payment_order_id=$1::uuid",
+    )
+    .bind(order["id"].as_str().unwrap())
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert_eq!(notify(&app, body).await.0, StatusCode::OK);
+    assert_eq!(quota(&pool).await, 499);
+    assert_eq!(
+        notify(
+            &test_app,
+            form(&order, "399.000000", "local-live-second-password")
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
 }

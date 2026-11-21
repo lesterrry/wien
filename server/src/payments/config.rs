@@ -1,5 +1,5 @@
 use super::Mode;
-use crate::robokassa::TestConfig;
+use crate::robokassa::Config as RobokassaConfig;
 use serde::Deserialize;
 
 /// Public payment settings live in TOML. Only provider passwords come from the environment.
@@ -11,23 +11,31 @@ pub struct Config {
     pub test_users: Vec<String>,
 }
 impl Config {
-    pub fn build(&self) -> Result<Option<TestConfig>, &'static str> {
+    pub fn build(&self) -> Result<Option<RobokassaConfig>, &'static str> {
         self.build_with(|key| {
-            std::env::var(key).map_err(|_| "Missing Robokassa test passwords in environment.")
+            std::env::var(key).map_err(|_| "Missing Robokassa passwords in environment.")
         })
     }
 
     fn build_with(
         &self,
         secret: impl Fn(&str) -> Result<String, &'static str>,
-    ) -> Result<Option<TestConfig>, &'static str> {
+    ) -> Result<Option<RobokassaConfig>, &'static str> {
         match self.mode {
             Mode::Disabled => Ok(None),
-            Mode::Test => Ok(Some(TestConfig::new(
+            Mode::Test => Ok(Some(RobokassaConfig::new(
+                Mode::Test,
                 self.merchant_login.clone(),
                 secret("ROBOKASSA_TEST_PASSWORD1")?,
                 secret("ROBOKASSA_TEST_PASSWORD2")?,
                 self.test_users.iter().cloned().collect(),
+            )?)),
+            Mode::Live => Ok(Some(RobokassaConfig::new(
+                Mode::Live,
+                self.merchant_login.clone(),
+                secret("ROBOKASSA_PASSWORD1")?,
+                secret("ROBOKASSA_PASSWORD2")?,
+                Default::default(),
             )?)),
         }
     }
@@ -79,5 +87,23 @@ mod tests {
                     .is_err()
             );
         }
+    }
+
+    #[test]
+    fn live_requires_only_production_passwords_and_no_allowlist() {
+        let config: Config = toml::from_str("mode='live'\nmerchant_login='wien'").unwrap();
+        let built = config
+            .build_with(|key| match key {
+                "ROBOKASSA_PASSWORD1" => Ok("first-live-secret".into()),
+                "ROBOKASSA_PASSWORD2" => Ok("second-live-secret".into()),
+                _ => panic!("must not fall back to test passwords"),
+            })
+            .unwrap()
+            .unwrap();
+        assert_eq!(built.mode, Mode::Live);
+        assert!(built.test_users.is_empty());
+        assert!(config.build_with(|_| Err("missing live password")).is_err());
+        assert!(config.build_with(|_| Ok(String::new())).is_err());
+        assert!(config.build_with(|_| Ok("same-password".into())).is_err());
     }
 }

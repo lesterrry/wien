@@ -1,23 +1,27 @@
 //! Robokassa protocol only; order ownership and fulfillment live in payments.
+use crate::payments::Mode;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashSet};
 use subtle::ConstantTimeEq;
 use url::Url;
 
-pub struct TestConfig {
+pub struct Config {
+    pub mode: Mode,
     pub merchant_login: String,
     password1: String,
     password2: String,
     pub test_users: HashSet<String>,
 }
-impl TestConfig {
+impl Config {
     pub fn new(
+        mode: Mode,
         merchant_login: String,
         password1: String,
         password2: String,
         test_users: HashSet<String>,
     ) -> Result<Self, &'static str> {
-        if merchant_login.is_empty()
+        if mode == Mode::Disabled
+            || merchant_login.is_empty()
             || merchant_login.len() > 100
             || !merchant_login
                 .bytes()
@@ -28,25 +32,50 @@ impl TestConfig {
             || [&password1, &password2]
                 .iter()
                 .any(|s| s.len() > 256 || s.contains(':') || s.chars().any(char::is_control))
-            || test_users.is_empty()
+            || (mode == Mode::Test && test_users.is_empty())
             || test_users.iter().any(|s| !crate::users::valid_username(s))
         {
             return Err(
-                "Invalid Robokassa test configuration. Set merchant login, distinct test passwords (8+ characters), and test usernames.",
+                "Invalid Robokassa configuration. Set an enabled mode, merchant login, distinct passwords (8+ characters), and test usernames in test mode.",
             );
         }
         Ok(Self {
+            mode,
             merchant_login,
             password1,
             password2,
             test_users,
         })
     }
+    pub fn is_test(&self) -> bool {
+        self.mode == Mode::Test
+    }
+    fn mode_name(&self) -> &'static str {
+        if self.is_test() { "test" } else { "live" }
+    }
     pub fn checkout_url(&self, invoice: i64, id: &str, amount_minor: i64, name: &str) -> String {
         let amount = format!("{}.{:02}", amount_minor / 100, amount_minor % 100);
         let invoice = invoice.to_string();
+        let mode = self.mode_name();
+        let description = format!("Wien: {name}, один месяц");
+        // Robokassa signs the URL-encoded Receipt, then URL-encodes it again in the query.
+        // Embed the decimal amount directly, without converting money through f64.
+        let receipt = (!self.is_test()).then(|| {
+            let name = serde_json::to_string(&description.chars().take(128).collect::<String>())
+                .expect("receipt name");
+            let receipt = format!(
+                r#"{{"items":[{{"name":{name},"quantity":1,"sum":{amount},"tax":"none"}}]}}"#
+            );
+            url::form_urlencoded::byte_serialize(receipt.as_bytes())
+                .collect::<String>()
+                .replace('+', "%20")
+        });
+        let receipt_part = receipt
+            .as_ref()
+            .map(|r| format!(":{r}"))
+            .unwrap_or_default();
         let signature = hash(&format!(
-            "{}:{amount}:{invoice}:{}:Shp_mode=test:Shp_order={id}",
+            "{}:{amount}:{invoice}{receipt_part}:{}:Shp_mode={mode}:Shp_order={id}",
             self.merchant_login, self.password1
         ));
         let mut url =
@@ -55,13 +84,18 @@ impl TestConfig {
             ("MerchantLogin", self.merchant_login.as_str()),
             ("OutSum", amount.as_str()),
             ("InvId", invoice.as_str()),
-            ("Description", format!("Wien: {name}, один месяц").as_str()),
+            ("Description", description.as_str()),
             ("Culture", "ru"),
-            ("IsTest", "1"),
             ("SignatureValue", signature.as_str()),
-            ("Shp_mode", "test"),
+            ("Shp_mode", mode),
             ("Shp_order", id),
         ]);
+        if self.is_test() {
+            url.query_pairs_mut().append_pair("IsTest", "1");
+        }
+        if let Some(receipt) = receipt {
+            url.query_pairs_mut().append_pair("Receipt", &receipt);
+        }
         url.to_string()
     }
     pub fn verify(&self, fields: Vec<(String, String)>) -> Result<Notification, &'static str> {
@@ -80,7 +114,7 @@ impl TestConfig {
         if values
             .keys()
             .any(|k| k.starts_with("Shp_") && k != "Shp_mode" && k != "Shp_order")
-            || get("Shp_mode")? != "test"
+            || get("Shp_mode")? != self.mode_name()
         {
             return Err("Unexpected callback parameters");
         }
@@ -101,8 +135,9 @@ impl TestConfig {
             .filter(|v| *v > 0)
             .ok_or("Invalid invoice")?;
         let signature = get("SignatureValue")?;
+        let mode = self.mode_name();
         let expected = hash(&format!(
-            "{amount}:{invoice}:{}:Shp_mode=test:Shp_order={id}",
+            "{amount}:{invoice}:{}:Shp_mode={mode}:Shp_order={id}",
             self.password2
         ));
         if signature.len() != 64

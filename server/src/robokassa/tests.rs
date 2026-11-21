@@ -1,6 +1,7 @@
 use super::*;
-fn config() -> TestConfig {
-    TestConfig::new(
+fn config() -> Config {
+    Config::new(
+        Mode::Test,
         "demo".into(),
         "test-password-one".into(),
         "test-password-two".into(),
@@ -66,5 +67,76 @@ fn callback_uses_raw_amount_for_signature_and_exact_minor_units() {
         "1.0000000",
     ] {
         assert!(amount_minor(invalid).is_none(), "{invalid}");
+    }
+}
+
+fn live_config() -> Config {
+    Config::new(
+        Mode::Live,
+        "demo".into(),
+        "live-password-one".into(),
+        "live-password-two".into(),
+        Default::default(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn live_checkout_signs_encoded_receipt_and_omits_test_flag() {
+    let url = live_config().checkout_url(42, ID, 39999, "Плюс & \"музыка\"");
+    let fields: BTreeMap<_, _> = Url::parse(&url)
+        .unwrap()
+        .query_pairs()
+        .map(|(k, v)| (k.into_owned(), v.into_owned()))
+        .collect();
+    assert!(!fields.contains_key("IsTest"));
+    assert_eq!(fields["Shp_mode"], "live");
+    assert_eq!(fields["OutSum"], "399.99");
+    let encoded = &fields["Receipt"];
+    assert!(encoded.starts_with("%7B"));
+    let decoded = url::form_urlencoded::parse(format!("receipt={encoded}").as_bytes())
+        .next()
+        .unwrap()
+        .1
+        .into_owned();
+    assert!(decoded.contains("\"sum\":399.99"));
+    let receipt: serde_json::Value = serde_json::from_str(&decoded).unwrap();
+    assert_eq!(
+        receipt["items"][0]["name"],
+        "Wien: Плюс & \"музыка\", один месяц"
+    );
+    assert_eq!(receipt["items"][0]["tax"], "none");
+    assert_eq!(
+        fields["SignatureValue"],
+        hash(&format!(
+            "demo:399.99:42:{encoded}:live-password-one:Shp_mode=live:Shp_order={ID}"
+        ))
+    );
+    assert!(!url.contains("password"));
+}
+
+#[test]
+fn callbacks_cannot_cross_modes_or_use_test_secrets_for_live() {
+    for (mode, password, live_ok, test_ok) in [
+        ("live", "live-password-two", true, false),
+        ("live", "test-password-two", false, false),
+        ("test", "test-password-two", false, true),
+        ("test", "live-password-two", false, false),
+    ] {
+        let signature = hash(&format!(
+            "399.000000:42:{password}:Shp_mode={mode}:Shp_order={ID}"
+        ));
+        let fields = vec![
+            ("OutSum", "399.000000"),
+            ("InvId", "42"),
+            ("SignatureValue", signature.as_str()),
+            ("Shp_mode", mode),
+            ("Shp_order", ID),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.into(), v.into()))
+        .collect::<Vec<_>>();
+        assert_eq!(live_config().verify(fields.clone()).is_ok(), live_ok);
+        assert_eq!(config().verify(fields).is_ok(), test_ok);
     }
 }

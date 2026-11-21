@@ -19,30 +19,30 @@ pub enum Mode {
     #[default]
     Disabled,
     Test,
+    Live,
 }
 #[derive(Clone)]
 pub struct Payments {
     pub pool: PgPool,
-    pub config: Option<Arc<crate::robokassa::TestConfig>>,
+    pub config: Option<Arc<crate::robokassa::Config>>,
 }
 impl Payments {
-    pub fn new(pool: PgPool, config: Option<crate::robokassa::TestConfig>) -> Self {
+    pub fn new(pool: PgPool, config: Option<crate::robokassa::Config>) -> Self {
         Self {
             pool,
             config: config.map(Arc::new),
         }
     }
     pub fn mode(&self) -> Mode {
-        if self.config.is_some() {
-            Mode::Test
-        } else {
-            Mode::Disabled
-        }
+        self.config.as_ref().map_or(Mode::Disabled, |c| c.mode)
     }
     async fn allowed(&self, user: &str) -> Result<bool, Error> {
         let Some(config) = &self.config else {
             return Ok(false);
         };
+        if config.mode == Mode::Live {
+            return Ok(true);
+        }
         let username: String = sqlx::query_scalar("SELECT username FROM users WHERE id=$1::uuid")
             .bind(user)
             .fetch_one(&self.pool)

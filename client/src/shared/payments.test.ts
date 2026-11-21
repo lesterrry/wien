@@ -48,7 +48,8 @@ test("payment parser preserves invoice precision and rejects unsafe destinations
   assert.deepEqual(parsePaymentConfig({ mode: "disabled" }), {
     mode: "disabled",
   });
-  assert.throws(() => parsePaymentConfig({ mode: "live" }));
+  assert.deepEqual(parsePaymentConfig({ mode: "live" }), { mode: "live" });
+  assert.throws(() => parsePaymentConfig({ mode: "unknown" }));
 });
 test("payments use authenticated backend requests and keep provider navigation separate", async () => {
   const token = "a".repeat(64);
@@ -105,4 +106,30 @@ test("browser payment requests use cookie auth; stale terms have an actionable e
     }),
     /Условия тарифа изменились/,
   );
+});
+
+test("live checkout accepts only a matching live order and rejects ambiguous modes", () => {
+  const live = {
+    ...order,
+    is_test: false,
+    checkout_url: order.checkout_url.replace(
+      "IsTest=1&Shp_mode=test",
+      "Shp_mode=live",
+    ),
+  };
+  assert.deepEqual(parsePaymentOrder(live), live);
+  assert.deepEqual(parsePaymentOrder({ ...live, checkout_url: null }), {
+    ...live,
+    checkout_url: null,
+  });
+  for (const checkout_url of [
+    order.checkout_url,
+    `${live.checkout_url}&IsTest=1`,
+    `${live.checkout_url}&IsTest=0`,
+    `${live.checkout_url}&Shp_mode=test`,
+    `${live.checkout_url}&InvId=1`,
+  ])
+    assert.throws(() => parsePaymentOrder({ ...live, checkout_url }));
+  assert.throws(() => parsePaymentOrder({ ...live, is_test: true }));
+  assert.throws(() => parsePaymentOrder({ ...live, is_test: "false" }));
 });

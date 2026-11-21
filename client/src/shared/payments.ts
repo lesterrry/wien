@@ -1,5 +1,5 @@
 export interface PaymentConfig {
-  mode: "disabled" | "test";
+  mode: "disabled" | "test" | "live";
 }
 export interface PaymentRequest {
   request_id: string;
@@ -18,7 +18,7 @@ export interface PaymentOrder {
   request_limit: number;
   document_version: string;
   status: "pending" | "cancelled" | "paid" | "paid_review";
-  is_test: true;
+  is_test: boolean;
   created_at: string;
   paid_at: string | null;
   period_ends_at: string | null;
@@ -34,7 +34,9 @@ export function parsePaymentConfig(value: unknown): PaymentConfig {
     !value ||
     typeof value !== "object" ||
     !("mode" in value) ||
-    (value.mode !== "disabled" && value.mode !== "test")
+    (value.mode !== "disabled" &&
+      value.mode !== "test" &&
+      value.mode !== "live")
   )
     throw new Error("Не удалось проверить доступность оплаты.");
   return { mode: value.mode };
@@ -60,7 +62,7 @@ export function parsePaymentOrder(value: unknown): PaymentOrder {
     !integer("price_minor") ||
     !integer("request_limit") ||
     row.currency !== "RUB" ||
-    row.is_test !== true ||
+    typeof row.is_test !== "boolean" ||
     !["pending", "cancelled", "paid", "paid_review"].includes(
       row.status as string,
     ) ||
@@ -82,10 +84,15 @@ export function parsePaymentOrder(value: unknown): PaymentOrder {
       url.username ||
       url.password ||
       url.hash ||
-      url.searchParams.get("IsTest") !== "1" ||
+      (row.is_test
+        ? url.searchParams.get("IsTest") !== "1"
+        : url.searchParams.has("IsTest")) ||
       url.searchParams.get("Shp_order") !== row.id ||
-      url.searchParams.get("Shp_mode") !== "test" ||
-      url.searchParams.get("InvId") !== row.invoice_id
+      url.searchParams.get("Shp_mode") !== (row.is_test ? "test" : "live") ||
+      url.searchParams.get("InvId") !== row.invoice_id ||
+      ["IsTest", "Shp_mode", "Shp_order", "InvId"].some(
+        (key) => url.searchParams.getAll(key).length > 1,
+      )
     )
       throw new Error("Некорректная ссылка оплаты.");
   }

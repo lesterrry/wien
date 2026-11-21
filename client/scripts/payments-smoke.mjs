@@ -73,11 +73,11 @@ const server = http.createServer(async (req, res) => {
           request_limit: 500,
           document_version: storefront.terms.document_version,
           status: "pending",
-          is_test: true,
+          is_test: mode === "test",
           created_at: new Date().toISOString(),
           paid_at: null,
           period_ends_at: null,
-          checkout_url: `https://auth.robokassa.ru/Merchant/Index.aspx?IsTest=1&Shp_mode=test&Shp_order=${id}&InvId=${invoice}`,
+          checkout_url: `https://auth.robokassa.ru/Merchant/Index.aspx?${mode === "test" ? "IsTest=1&" : ""}Shp_mode=${mode}&Shp_order=${id}&InvId=${invoice}`,
         };
         orders.push(order);
         requests.set(body.request_id, order);
@@ -136,7 +136,11 @@ try {
     providerVisits++;
     assert.equal(
       new URL(route.request().url()).searchParams.get("IsTest"),
-      "1",
+      mode === "test" ? "1" : null,
+    );
+    assert.equal(
+      new URL(route.request().url()).searchParams.get("Shp_mode"),
+      mode,
     );
     return route.fulfill({
       contentType: "text/html",
@@ -367,7 +371,7 @@ try {
   );
   // A guest chooses the plan once; signing in resumes creation of that order.
   signedIn = false;
-  mode = "test";
+  mode = "live";
   await page.goto(origin);
   await open();
   await selectPlus();
@@ -385,9 +389,14 @@ try {
     dialog.getByRole("button", { name: /Оплатить 399/ }),
   ).toBeDisabled();
   assert.equal(orders.length, 3);
+  assert.equal(orders[2].is_test, false);
+  await dialog.getByRole("checkbox").check();
+  await dialog.getByRole("button", { name: /Оплатить 399/ }).click();
+  await expect(page).toHaveURL(/https:\/\/auth\.robokassa\.ru\//);
+  assert.equal(providerVisits, 2);
   assert.deepEqual(errors, []);
   console.log(
-    `PASS: consent, retry, test checkout, history, cancellation, stale terms, return/login, polling, profile refresh, review, disabled mode, mobile. Artifacts: ${artifacts}`,
+    `PASS: consent, retry, test/live checkout, history, cancellation, stale terms, return/login, polling, profile refresh, review, disabled mode, mobile. Artifacts: ${artifacts}`,
   );
 } finally {
   await browser.close();
