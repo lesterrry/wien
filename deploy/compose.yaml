@@ -44,6 +44,8 @@ services:
       POSTGRES_USER: wien
       POSTGRES_DB: wien
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD on the VPS}
+    ports:
+      - "127.0.0.1:5432:5432"
     volumes:
       - users-data:/var/lib/postgresql
     healthcheck:

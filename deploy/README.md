@@ -98,8 +98,13 @@ URL-safe hex `POSTGRES_PASSWORD` to `/opt/wien/.env` (0600), saving a private ba
 It preserves an existing password and does not restart services.
 Keep the password persistent: changing the environment does not rotate an existing
 PostgreSQL user's password. PostgreSQL 18 stores its files under `/var/lib/postgresql`
-in this volume and has no published host port. The same DB survives image releases
+in this volume and publishes port 5432 only on the VPS loopback address. The same DB survives image releases
 and rollback. Back it up independently of release archives.
+
+For DBeaver, keep the SSH tunnel to the VPS enabled and use `127.0.0.1:5432`
+on the Main tab, database and user `wien`, and the existing database password.
+This address stays stable when Docker containers are recreated; do not use a
+container IP. PostgreSQL is not published on the VPS public network interfaces.
 
 The server applies embedded SQLx migrations before accepting requests and fails
 startup if the database or migration is unavailable. `/ready` checks PostgreSQL
