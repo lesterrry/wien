@@ -27,11 +27,6 @@ const price = (plan: SubscriptionPlan) =>
     minimumFractionDigits: 0,
     maximumFractionDigits: plan.currency_minor_units,
   }).format(plan.price_minor / 10 ** plan.currency_minor_units);
-function allowance(plan: SubscriptionPlan) {
-  if (plan.initial_assist_requests === null)
-    return t("Без ограничения запросов");
-  return `${plan.initial_assist_requests.toLocaleString(formatLocale())} ${t("requests")} ${plan.billing_period === "month" ? t("в месяц") : plan.billing_period === "year" ? t("в год") : t("однократно")}`;
-}
 
 export function SubscriptionPlans({
   exhausted,
@@ -174,6 +169,7 @@ export function SubscriptionPlans({
             consent={consent}
             onConsent={onConsent}
             config={store.payments}
+            plans={store.plans}
             key={userId || "guest"}
             userId={userId}
             onNavigate={navigate}
@@ -205,6 +201,7 @@ export function SubscriptionPlans({
               consent={consent}
               onConsent={onConsent}
               config={store.payments}
+              plans={store.plans}
               key={`${userId}:${plan.id}:${plan.price_minor}:${plan.initial_assist_requests}:${store.terms.document_version}`}
               userId={userId}
               purchase={purchase}
@@ -250,7 +247,6 @@ export function SubscriptionPlans({
                         </span>
                       )}
                     </div>
-                    <p className={styles.allowance}>{allowance(item)}</p>
                     <p>
                       {getLocale() === "ru"
                         ? item.description_ru || item.description

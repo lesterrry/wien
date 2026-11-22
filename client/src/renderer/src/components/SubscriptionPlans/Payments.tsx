@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { SubscriptionPlan } from "../../../../shared/account";
 import type {
   PaymentConfig,
   PaymentOrder,
@@ -30,6 +31,7 @@ const states = {
 };
 export function Payments({
   config,
+  plans,
   userId,
   purchase,
   returnOrderId,
@@ -41,6 +43,7 @@ export function Payments({
   onConsent,
 }: {
   config: PaymentConfig;
+  plans: SubscriptionPlan[];
   userId?: string;
   purchase?: PaymentRequest;
   returnOrderId?: string;
@@ -51,7 +54,15 @@ export function Payments({
   consent: Record<string, boolean>;
   onConsent: (id: string, checked: boolean) => void;
 }) {
-  useLocale();
+  const locale = useLocale();
+  const descriptions = new Map(
+    plans.map((plan) => [
+      plan.id,
+      locale === "ru"
+        ? plan.description_ru || plan.description
+        : plan.description,
+    ]),
+  );
   const [orders, setOrders] = useState<PaymentOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -233,12 +244,9 @@ export function Payments({
           <h3>
             {order.plan_name} · {t("один месяц")}
           </h3>
-          <p>
-            {t(
-              "{count} запросов к ИИ. Продление вручную, без автоматических списаний.",
-              { count: order.request_limit.toLocaleString(formatLocale()) },
-            )}
-          </p>
+          {descriptions.get(order.plan_id) && (
+            <p>{descriptions.get(order.plan_id)}</p>
+          )}
           <div className={styles.total}>
             <span>{t(order.status === "pending" ? "К оплате" : "Итого")}</span>
             <strong>{amount(order)}</strong>

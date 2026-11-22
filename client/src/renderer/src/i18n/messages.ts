@@ -18,10 +18,6 @@ export const messages: Record<string, readonly [en: string, ru: string]> = {
     "Choose a plan to make another purchase.",
     "Для новой покупки выберите тариф.",
   ],
-  "{count} запросов к ИИ. Продление вручную, без автоматических списаний.": [
-    "{count} AI requests. Manual renewal, no automatic charges.",
-    "{count} запросов к ИИ. Продление вручную, без автоматических списаний.",
-  ],
   "Оплата для этого аккаунта пока недоступна.": [
     "Payments are not available for this account yet.",
     "Оплата для этого аккаунта пока недоступна.",

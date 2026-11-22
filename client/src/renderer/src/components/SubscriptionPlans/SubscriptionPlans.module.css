@@ -67,11 +67,6 @@
   font-weight: 400;
   letter-spacing: 0;
 }
-.dialog .allowance {
-  font-size: 15px;
-  font-weight: 550;
-  color: var(--color-primary);
-}
 .pay {
   composes: primaryButton from "../../styles/common.module.css";
   width: 100%;

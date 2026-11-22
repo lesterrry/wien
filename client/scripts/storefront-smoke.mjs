@@ -109,7 +109,7 @@ try {
       name: `Тариф ${tier}`,
       exact: true,
     });
-    await expect(card).toContainText(count);
+    await expect(card).not.toContainText(count);
     await expect(card).toContainText(price);
   }
   await expect(dialog).not.toContainText(storefront.seller.name);
@@ -197,7 +197,7 @@ try {
   ];
   await open();
   await expect(dialog.getByRole("region")).toHaveCount(1);
-  await expect(dialog.getByRole("region")).toContainText("777 запросов");
+  await expect(dialog.getByRole("region")).not.toContainText("777 запросов");
   await expect(dialog.getByRole("region")).toContainText("123,45");
   await dialog.getByRole("button", { name: "Закрыть диалог" }).click();
   fail = true;
